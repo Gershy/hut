@@ -504,6 +504,11 @@ global.rooms['chess2'] = async foundation => {
             
             // Create Match for this Pair
             
+            // Indicate Players are in Match (updates "status" prop!)
+            let pw = qw.m('c2.playerStatus').m('c2.player');
+            let pb = qb.m('c2.playerStatus').m('c2.player');
+            for (let p of [ pw, pb ]) p.setValue({ status: 'match' });
+            
             // Get Players from PlayerStatus({ type: 'queue' }) Records
             gsc(`CREATE MATCH (white:${pw.getValue('term')} vs black:${pb.getValue('term')})`);
             let match = hut.addRecord('c2.match', [ chess2 ], { ms });
@@ -516,11 +521,6 @@ global.rooms['chess2'] = async foundation => {
             for (let [ colour, pieces ] of activePieceDef)
               for (let [ type, col, row ] of pieces)
                 hut.addRecord('c2.piece', [ match ], { colour, type, col, row, wait: 0, moves: 0 });
-            
-            // Indicate Players are in Match (updates "status" prop!)
-            let pw = qw.m('c2.playerStatus').m('c2.player');
-            let pb = qb.m('c2.playerStatus').m('c2.player');
-            for (let p of [ pw, pb ]) p.setValue({ status: 'match' });
             
             // Add Players to Match
             let mpw = hut.addRecord('c2.matchPlayer', [ match, pw.status ], { colour: 'white' });
