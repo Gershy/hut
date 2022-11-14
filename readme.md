@@ -35,7 +35,7 @@ A Hut partakes in a shared experience. A Hut may define the rules of how an expe
 
 <!-- `````` -->
 
-This is a minimal example to get started with Hut.
+*This is a minimal example to get started with Hut!*
 
 You are now using a developer tool which simulates multiple users using the "test1" app.
 (To view the "test1" app as a single user simply navigate in a separate tab to `http://localhost`!)
@@ -43,4 +43,4 @@ By default four users are shown. Click the "+" and "-" buttons in any user's vie
 
 This is probably the worst webapp ever, but it demonstrates the central aim of Hut: **facilitating shared experiences!**
 
-This example involved a very minor amount of configuration, and ran an out-of-the-box Hut. The following examples will iteratively increase our understanding of both configuration, and the code that forms a Hut.
+This example involved a very minor amount of configuration, and ran [an out-of-the-box Hut](room/test1/test1.js). The following examples will iteratively increase our understanding of both configuration, and the code that forms a Hut.
