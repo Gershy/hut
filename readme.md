@@ -25,15 +25,15 @@ A Hut partakes in a shared experience. A Hut may define the rules of how an expe
     > cd /
     > git clone git@github.com:Gershy/hut.git
     ```
-    ``
 4. Install nodejs (min version 17.0.0 - [I recommend you use nvm!](https://heynode.com/tutorial/install-nodejs-locally-nvm/))
 5. Run:
     ```
     > cd /hut
     > node hut.js test1 "deploy.maturity=dev"
     ```
-    ``
 6. In a browser, navigate to: `http://localhost/html.multi`
+
+<!-- `````` -->
 
 This is a minimal example to get started with Hut.
 
