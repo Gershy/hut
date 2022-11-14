@@ -19,18 +19,25 @@ A Hut partakes in a shared experience. A Hut may define the rules of how an expe
 ### How in sweet heck do I use Hut???
 
 1. Settle down.
-2. Clone the Hut repo into, e.g., `/hut`
+2. Clone the Hut repo into, e.g., `/hut`:
     ```
     > cd /
     > git clone git@github.com:Gershy/hut.git
-    ```
+    ``` ``
 3. Install nodejs (min version 17.0.0)
 4. Run:
     ```
     > cd /hut
     > node hut.js test1 "deploy.maturity=dev"
-    ```
+    ``` ``
 5. In a browser, navigate to: `http://localhost/html.multi`
 
-This opens a developer tool which simulates multiple users using the "test1" app, which comes included with Hut. By default four users are shown. This is probably the worst webapp ever, but it demonstrates the central aim of Hut: **facilitating shared experiences**. Click the "+" and "-" buttons in any user's view; the state of the counter is synced for all users.
+This is a minimal example to get started with Hut.
 
+You are now using a developer tool which simulates multiple users using the "test1" app.
+(To view the "test1" app as a single user simply navigate in a separate tab to `http://localhost`!)
+By default four users are shown. Click the "+" and "-" buttons in any user's view - the state of the counter is synced for all users!
+
+This is probably the worst webapp ever, but it demonstrates the central aim of Hut: **facilitating shared experiences!**
+
+This example involved a very minor amount of configuration, and ran an out-of-the-box Hut. The following examples will iteratively increase our understanding of both configuration, and the code that forms a Hut.
