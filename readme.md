@@ -20,12 +20,16 @@ A Hut partakes in a shared experience. A Hut may define the rules of how an expe
 
 1. Settle down.
 2. Clone the Hut repo into, e.g., `/hut`:
-    `> cd /
-    > git clone git@github.com:Gershy/hut.git`
+    `
+    > cd /
+    > git clone git@github.com:Gershy/hut.git
+    `
 3. Install nodejs (min version 17.0.0)
 4. Run:
-    `> cd /hut
-    > node hut.js test1 "deploy.maturity=dev"`
+    `
+    > cd /hut
+    > node hut.js test1 "deploy.maturity=dev"
+    `
 5. In a browser, navigate to: `http://localhost/html.multi`
 
 This is a minimal example to get started with Hut.
