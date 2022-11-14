@@ -25,7 +25,7 @@ A Hut partakes in a shared experience. A Hut may define the rules of how an expe
     > cd /
     > git clone git@github.com:Gershy/hut.git
     ```
-4. Install nodejs (min version 17.0.0)
+4. Install nodejs (min version 17.0.0, [I recommend you use nvm!](https://heynode.com/tutorial/install-nodejs-locally-nvm/))
 5. Run:
     ```
     > cd /hut
