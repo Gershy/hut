@@ -27,9 +27,9 @@ global.rooms['chess2'] = async foundation => {
       { form: 'Gap', horz: '0.75vmin', vert: '0.5vmin' }
     ],
     textFwd: (text, textSize=textSize1, align='fwd') => lay.text(text, textSize, align),
-    link: (text, protocol, uri) => [
+    link: (text, protocol, uri, textSize=textSize1) => [
       { form: 'Keep', protocol, uri, keepText: '(Hut also by Gershom Maes)' },
-      { form: 'Decal', text: { colour: '#c4d2ff' } }
+      { form: 'Decal', text: { colour: '#c4d2ff', size: textSize } }
     ],
     gap: (amt='1em') => [{ form: 'Geom', h: amt }],
     button: (text, pressFn, textSize=textSize1) => [
