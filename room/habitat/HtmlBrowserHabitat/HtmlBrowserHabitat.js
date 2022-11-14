@@ -106,12 +106,12 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
               body::before {
                 content: ''; display: block; position: absolute;
                 left: 0; right: 0; top: 0; bottom: 0;
-                box-shadow: inset 0 0 calc(0.8vmin + 0.5vmax) 0 rgba(255, 255, 255, 0.75);
+                box-shadow: inset 0 0 calc(0.8vmin + 0.5vmax) 2px #fffa;
                 z-index: 1000;
                 pointer-events: none;
                 transition: box-shadow 100ms linear;
               }
-              body.focus::before { box-shadow: inset 0 0 0 0 rgba(255, 255, 255, 1); }
+              body.focus::before { box-shadow: inset 0 0 0 0 #fffa; }
               
               /* Normalize */
               html > body * { position: relative; }
@@ -225,9 +225,9 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       
       reply(String.multiline(`
         @keyframes focusControl {
-          0%   { box-shadow: inset 0 0   0    0 currentColor; }
-          20%  { box-shadow: inset 0 0 12px 4px currentColor; }
-          100% { box-shadow: inset 0 0  2px 1px currentColor; }
+          0%   { box-shadow: inset 0 0    0   0 currentColor; }
+          20%  { box-shadow: inset 0 0 20px 1px currentColor; }
+          100% { box-shadow: inset 0 0  1px 1px currentColor; }
         }
         @keyframes focusContent {
           0%   { text-shadow: 0 0  0px currentColor; }

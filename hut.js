@@ -85,36 +85,51 @@ Object.assign(global, {
 require('./setup/clearing.js');
 require('./setup/foundationNodejs.js');
 
-let { FoundationNodejs } = global;
-
-let rawConf = process.argv.slice(-1)[0].trim();
-if (rawConf === __filename) rawConf = '{}';
+let conf = null;
 
 try {
   
-  if (/^[{['"]/.test(rawConf)) rawConf = eval(rawConf = `(${rawConf})`);
-  
-  if (isForm(rawConf, String)) rawConf = rawConf ? { 'hoist.room': rawConf } : {};
-  if (!isForm(rawConf, Object)) throw Error(`Arguments should be Object (got ${getFormName(rawConf)})`);
+  let { argv } = process;
+  conf = ({}).gain(...argv.slice(argv.indexOf(__filename) + 1).map(v => {
+    
+    v = v.trim();
+    if (/^[{['"]/.test(v)) v = eval(`(${v})`);
+    
+    if (!v) return skip;
+    
+    // Consider string values without "=" as the single hoist room name,
+    // while strings containing "=" represent key-value pairs
+    if (isForm(v, String)) v = v.has('=')
+      ? v.split(/[ ;,&]+/g).toObj(v => v.cut('=')) // Key-value pairs
+      : { 'hoist.room': v };                      // Room name
+    
+    if (!isForm(v, Object)) throw Error(`Couldn't process an argument: "${v}"`);
+    
+    return v;
+    
+  }));
   
 } catch (err) {
   
-  err.propagate(msg => String.baseline(`
-    | 
-    | Note that only the final commandline argument is considered as input to Hut. In this case, that is:
+  gsc(String.baseline(`
+    | A commandline argument could not be processed. Note that any commandline argument beginning with "{" or quotes must represent a valid javascript value.
+    | The following value was invalid:
+    |   | 
     |   | "${process.argv.slice(-1)[0]}"
+    |   | 
     | Hut couldn't resolve any meaningful arguments based on this commandline input.
     | 
-    | Reason for failure: ${msg}
-    | 
+    | A more specific error description: ${err.message}
   `));
+  process.exit(0);
   
 }
 
+let { FoundationNodejs } = global;
 let foundation = FoundationNodejs();
 
 Promise.resolve()
-  .then(() => foundation.configure(rawConf))
+  .then(() => foundation.configure(conf))
   .then(conf => foundation.hoist())
   .fail(err => {
     console.error(foundation.formatError(err.mod(msg => `${msg} (FATAL)`)));
