@@ -208,7 +208,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
           let encoder = zlib[`create${encode[0].upper()}${encode.slice(1)}`](); // Transforms, e.g., "delate", "gzip" into "createDeflate", "createGzip"
           await Promise( (g, b) => stream.pipeline(pipe, encoder, res, err => err ? b(err) : g()) )
             .fail(err => {
-              gsc(`Error piping ${keep.desc()} to Response`, err);
+              console.log(`Error piping ${keep.desc()} to Response`, err);
               res.end();
               err.propagate(msg => ({ msg: `Failed to stream ${keep.desc()} (${msg})`, encode }));
             });
@@ -229,7 +229,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
     } catch (err) {
       
-      gsc(`Failed to respond with ${getFormName(keep ?? msg)}: ${keep ? keep.desc() : msg?.slice?.(0, 100)}`);
+      console.log(`Failed to respond with ${getFormName(keep ?? msg)}: ${keep ? keep.desc() : msg?.slice?.(0, 100)}`);
       try { res.writeHead(500); } catch (err) {}
       try { res.end(); } catch (err) {}
       
@@ -364,7 +364,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       for (let intercept of tmp.intercepts) if (intercept(req.gain({ body }), res)) return;
       
       try         { body = processBody(body); }
-      catch (err) { gsc('Error processing http body', err); return res.writeHead(400).end('Invalid body'); }
+      catch (err) { console.log('Error processing http body', err); return res.writeHead(400).end('Invalid body'); }
       
       let headers = req.headers;
       let cookie = headers.cookie
@@ -374,7 +374,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         ?? {};
       let cookieKeys = cookie.toArr((v, k) => k);
       try         { cookie = processCookie(cookie); }
-      catch (err) { gsc('Error processing http cookie', err); return res.writeHead(400).end('Invalid cookie'); }
+      catch (err) { console.log('Error processing http cookie', err); return res.writeHead(400).end('Invalid cookie'); }
       
       let [ , path, query='', fragment='' ] = req.url.match(/^([/][^?#]*)([?][^#]+)?([#].*)?$/);
       path = path.slice(1);

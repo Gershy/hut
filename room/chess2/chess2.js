@@ -432,26 +432,16 @@ global.rooms['chess2'] = async foundation => {
       dep.scp(hut, 'hut.owned/par', (owned, dep) => {
         
         let kidHut = owned.m('kid');
-        let timer = dep(TimerSrc({ ms: enterMs }));
-        timer.route(() => {
-          
-          let termTmp = termBank.hold();
-          let player = hut.addRecord('c2.player', [ chess2, kidHut ], { term: termTmp.term, status: 'chill' });
-          player.endWith(termTmp);
-          
-          // Add a "status" property to the Player
-          player.status = hut.addRecord('c2.playerStatus', [ player ], { type: 'chill', ms: Date.now() });
-          
-          // Update the single PlayerStatus based on changes to "status"
-          player.getValuePropSrc('status').route(status => {
-            
-            if (status === player.status.getValue('type')) return;
-            
-            player.status.end();
-            player.status = hut.addRecord('c2.playerStatus', [ player ], { type: status, ms: Date.now() });
-            
-          });
-          
+        
+        let playerRh = dep(kidHut.rh('c2.player'));
+        let timerSrc = dep(TimerSrc({ ms: 1000 })).route(() => kidHut.end());
+        
+        gsc(`${kidHut.desc()} has 1 second to create player`);
+        timerSrc.route(() => gsc(`${kidHut.desc()} FAILED to create player!`));
+        playerRh.route(() => gsc(`${kidHut.desc()} created player!`));
+        playerRh.route(() => {
+          timerSrc.end();
+          playerRh.end();
         });
         
       });
@@ -515,6 +505,7 @@ global.rooms['chess2'] = async foundation => {
             // Create Match for this Pair
             
             // Get Players from PlayerStatus({ type: 'queue' }) Records
+            gsc(`CREATE MATCH (white:${pw.getValue('term')} vs black:${pb.getValue('term')})`);
             let match = hut.addRecord('c2.match', [ chess2 ], { ms });
             match.endWith(() => { gsc(`MATCH ENDED (white:${pw.getValue('term')} vs black:${pb.getValue('term')})`); });
             
@@ -569,11 +560,38 @@ global.rooms['chess2'] = async foundation => {
       
       let mainReal = real.addReal('c2.main', [{ form: 'Geom', w: '100vmin', h: '100vmin' }]);
       let nodePlayerless = (dep, real) => {
+        
+        let createPlayerAct = dep(hut.enableAction('c2.createPlayer', () => {
+          
+          /// {ABOVE=
+          let termTmp = termBank.hold();
+          let player = hut.addRecord('c2.player', [ chess2, hut ], { term: termTmp.term, status: 'chill' });
+          player.endWith(termTmp);
+          
+          // Add a "status" property to the Player
+          player.status = hut.addRecord('c2.playerStatus', [ player ], { type: 'chill', ms: Date.now() });
+          
+          // Update the single PlayerStatus based on changes to "status"
+          player.getValuePropSrc('status').route(status => {
+            
+            if (status === player.status.getValue('type')) return;
+            player.status.end();
+            player.status = hut.addRecord('c2.playerStatus', [ player ], { type: status, ms: Date.now() });
+            
+          });
+          /// =ABOVE}
+          
+        }));
+        
+        /// {BELOW=
+        createPlayerAct.act();
         dep(real.addReal('c2.pane', [
           { form: 'Geom', w: '80%', h: '80%', anchor: 'cen' },
           { form: 'Text', textSize: textSize2, text: 'Entering chess2...' },
           { form: 'Decal', colour: 'rgba(120, 120, 170, 1)' }
         ]));
+        /// =BELOW}
+        
       };
       let nodeChill = (dep, real, { player, status, changeStatusAct }) => {
         
