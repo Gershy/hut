@@ -51,7 +51,7 @@ global.rooms['internal.real.htmlBrowser.TextInput'] = async foundation => {
       // a `textInputSrc` needed to be created
       
       let domNode = real.domNode;
-      if (domNode.querySelector(':scope > input.textInput')) throw Error(`Looks like a TextInput was already applied...`);
+      if (domNode.querySelector(':scope > .textInput')) throw Error(`Looks like a TextInput was already applied...`);
       
       let textInputSrc = this.getParam(real, 'textInputSrc');
       let gotExternalInputSrc = textInputSrc && textInputSrc.onn();
@@ -136,12 +136,12 @@ global.rooms['internal.real.htmlBrowser.TextInput'] = async foundation => {
       // Note that defining the height in em units automatically takes
       // the text size into account, so simply `1em` avoids additional
       // multiplication by the text size
-      domNode.style.fontSize = this.getParam(real, 'textSize') || '100%';
+      domNode.style.fontSize = this.getParam(real, 'textSize') ?? '100%';
       
       if (this.align) domNode.style.textAlign = { fwd: 'left', bak: 'right', mid: 'center' }[this.align];
       if (this.gap) Object.assign(domNode.style, { boxSizing: 'border-box', padding: this.gap });
       
-      let inputElem = domNode.querySelector(`:scope > ${this.multiline ? 'textarea' : 'input'}`);
+      let inputElem = domNode.querySelector(`:scope > ${this.multiline ? 'textarea' : 'input'}.textInput`);
       let prompt = this.getParam(real, 'prompt');
       if (prompt) inputElem.setAttribute('placeholder', prompt);
       

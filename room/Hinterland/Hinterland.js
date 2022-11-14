@@ -12,10 +12,10 @@ global.rooms['Hinterland'] = async foundation => {
     init(prefix, roomName, params={}) {
       
       let { habitats=[], recordForms={} } = params;
-      let { parFn=null, kidFn=null, nature=parFn || Function.stub, psyche=kidFn || Function.stub } = params;
+      let { above=Function.stub, below=Function.stub } = params;
       if (!habitats.count()) throw Error(`Hinterland requires at least 1 habitat`);
       
-      Object.assign(this, { prefix, roomName, habitats, recordForms, nature, psyche });
+      Object.assign(this, { prefix, roomName, habitats, recordForms, above, below });
       
     },
     
@@ -134,8 +134,8 @@ global.rooms['Hinterland'] = async foundation => {
       // Wait for the AppRecord to register as a HolderRec on `hut`
       let mainScope = Scope(loftRh, { processArgs: rhFromRecWithRhArgs, frameFn: resolveHrecs }, (loftRec, dep) => {
         
-        // The AppRecord is ready; apply `this.nature`
-        this.nature(hut, loftRec, real, dep);
+        // The AppRecord is ready; apply `this.above`
+        this.above(hut, loftRec, real, dep);
         
         // Now KidHuts may access the AppRecord via the Hinterland; use
         // the default (0, Infinity, {}) relHandler - otherwise some
@@ -147,7 +147,7 @@ global.rooms['Hinterland'] = async foundation => {
           
           // Records throughout `scp` get followed by `owned`
           dep.scp(loftRh, { frameFn: resolveHrecsAndFollowRecs.bind(null, kidHut) }, (loftRec, dep) => {
-            this.psyche(kidHut, loftRec, real, dep);
+            this.below(kidHut, loftRec, real, dep);
           });
           
         });
@@ -161,8 +161,8 @@ global.rooms['Hinterland'] = async foundation => {
       // As soon as Below syncs the root Rec it's good to go
       let kidScope = Scope(loftRh, { processArgs: rhFromRecWithRhArgs, frameFn: resolveHrecs }, async (loftRec, dep) => {
         
-        await this.psyche(hut, loftRec, real, dep);
-        await real.tech.informInitialized(); // Let the RealTech know the psyche initialized!
+        await this.below(hut, loftRec, real, dep);
+        await real.tech.informInitialized(); // Let the RealTech know the below initialized!
         
       });
       

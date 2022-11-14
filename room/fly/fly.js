@@ -153,7 +153,7 @@ global.rooms['fly'] = async foundation => {
         
       }
     },
-    nature: async (hut, flyRec, real, dep) => {
+    above: async (hut, flyRec, real, dep) => {
       
       /// {ABOVE=
       
@@ -295,7 +295,7 @@ global.rooms['fly'] = async foundation => {
       /// =ABOVE}
       
     },
-    psyche: async (hut, flyRec, real, dep) => {
+    below: async (hut, flyRec, real, dep) => {
       
       let lay = await real.tech.getLayoutForms(
         'Art,Axis1d,Decal,Geom,Press,Scroll,Size,Text,TextInput,Image'.split(',')

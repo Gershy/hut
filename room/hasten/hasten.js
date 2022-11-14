@@ -46,10 +46,10 @@ global.rooms['hasten'] = async foundation => {
       'hst.entity': ({ form }) => hstForms[form]
     },
     habitats: [ HtmlBrowserHabitat() ],
-    nature: async (hut, rec, real, dep) => {
+    above: async (hut, rec, real, dep) => {
       
     },
-    psyche: async (hut, rec, real, dep) => {
+    below: async (hut, rec, real, dep) => {
       
       /// {BELOW=
       

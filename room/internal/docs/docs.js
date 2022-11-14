@@ -12,44 +12,10 @@ Real.prototype.mod -> Real.prototype.modify
 real.resizeSrc; triggers on ANY resize, including by animation, if
 adjusting to new window size, etc.
 
-"parFn" -> "nature"
-"kidFn" -> "agent" ("psyche"?? it's 6 chars!!)
 "tech" -> "media" ("RealTech" -> "RealMedia")
-
-LayoutForms should never be directly instantiated; they should be
-indicated and parameterized using raw data instead. The current method:
-    |     let r = real.addReal('example', [
-    |       Geom({  ...  }),
-    |       Axis1d({  ...  })
-    |     ]);
-    |     r.addLayout(Decals({ ... }));
-should become:
-    |     real.addReal('example', [
-    |       { form: 'Geom', ... },
-    |       { form: 'Axis1d', ... }
-    |     ]);
-    |     r.addLayout({ form: 'Decals', ... });
-and any loading of LayoutForms can happen behind the scenes entirely
-(this is a really nice boost to elegance!) If we can delay loading any
-unloaded LayoutForms until the end of the current tick, all LayoutForm
-loading requests which occurred in the current tick can be performed at
-once, in bulk!
 
 Art "animationFn" -> "artFn"
 Axis1d "order" -> "axisOrder"
-"Decal" -> "Refine" (refine any features, including non-visual ones)
-
-Padding around text:
-- Padding is only separate from dimensions for elements with indirectly
-  determined dimensions; e.g. there is no point defining padding for a
-  rectangle with fixed dimensions since the padding may as well be
-  incorporated into those dimensions - but for things like text, images,
-  etc. there is no number set anywhere to determine the size of the Real
-  which can be increased to provide for padding! In these cases we need
-  something like a separate "GeomWrapper" thing (or, have Geom support
-  both "fixed" and "offset" dimensions? And only one should be set for
-  a given element? [e.g. "fixed" for the rectangle, "offset" for text])
-
 */
 
 global.rooms['internal.docs'] = async foundation => {
@@ -195,12 +161,12 @@ global.rooms['internal.docs'] = async foundation => {
   return Hinterland('docs', 'internal.docs', {
     
     habitats: [ HtmlBrowserHabitat() ],
-    nature: async (hut, docsRec, real, dep) => {
+    above: async (hut, docsRec, real, dep) => {
       
       // let allTopicTerms = await foundation.seek('keep', 'fileSystem', [ 'room', 'internal', 'docs', 'topic' ]).getContent();
       
     },
-    psyche: async (hut, docsRec, real, dep) => {
+    below: async (hut, docsRec, real, dep) => {
       
       let mainReal = dep(real.addReal('main', [
         { form: 'Geom',  w: '100%', h: '100%' },

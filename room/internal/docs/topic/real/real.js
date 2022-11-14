@@ -34,8 +34,8 @@ global.rooms['internal.docs.topic.real'] = foundation => decorator => {
   
   decorator.code(String.baseline(`
     | Hinterland('ex', 'example', {
-    |   nature: async ({ real }) => { ... },
-    |   psyche: async ({ real }) => { ... }
+    |   above: async ({ real }) => { ... },
+    |   below: async ({ real }) => { ... }
     | });
   `));
   decorator.gap(1);

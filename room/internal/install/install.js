@@ -9,7 +9,7 @@ global.rooms['internal.install'] = async foundation => {
   return Hinterland('stl', 'internal.install', {
     debug,
     habitats: [ HtmlBrowserHabitat() ],
-    nature: async (hut, install, real, dep) => {
+    above: async (hut, install, real, dep) => {
       
       /// {ABOVE=
       // Make sure to use the non-admin fileSystem to control access
@@ -47,7 +47,7 @@ global.rooms['internal.install'] = async foundation => {
       /// =ABOVE}
       
     },
-    psyche: async (hut, install, real, dep) => {
+    below: async (hut, install, real, dep) => {
       
       dep(real.addLayout({ form: 'Geom', w: '100%', h: '100%' })); // TODO: Why is this necessary??
       

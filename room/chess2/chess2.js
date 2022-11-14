@@ -27,6 +27,10 @@ global.rooms['chess2'] = async foundation => {
       { form: 'Gap', horz: '0.75vmin', vert: '0.5vmin' }
     ],
     textFwd: (text, textSize=textSize1, align='fwd') => lay.text(text, textSize, align),
+    link: (text, protocol, uri) => [
+      { form: 'Keep', protocol, uri, keepText: '(Hut also by Gershom Maes)' },
+      { form: 'Decal', text: { colour: '#c4d2ff' } }
+    ],
     gap: (amt='1em') => [{ form: 'Geom', h: amt }],
     button: (text, pressFn, textSize=textSize1) => [
       { form: 'Gap', horz: '1.5vmin', vert: '1vmin' },
@@ -259,7 +263,7 @@ global.rooms['chess2'] = async foundation => {
   
   return Hinterland('c2', 'chess2', {
     habitats: [ HtmlBrowserHabitat() ],
-    nature: async (hut, chess2, real, dep) => {
+    above: async (hut, chess2, real, dep) => {
       
       /// {ABOVE=
       
@@ -284,6 +288,7 @@ global.rooms['chess2'] = async foundation => {
         'Decal',
         'Gap',
         'Geom',
+        'Keep',
         'Press',
         'Text',
         'TextInput',
@@ -553,7 +558,7 @@ global.rooms['chess2'] = async foundation => {
       /// =ABOVE}
       
     },
-    psyche: async (hut, chess2, real, dep) => {
+    below: async (hut, chess2, real, dep) => {
       
       // Async delay may cause players to see the uprighting rotation.
       // We can initiate loading these rooms immediately, and hope they
@@ -593,8 +598,7 @@ global.rooms['chess2'] = async foundation => {
         
         let learnReal = dep(real.addReal('learn', [
           { form: 'Geom', w: '100%', h: '100%' },
-          { form: 'Axis1d', axis: 'y', dir: '+', mode: 'stack' },
-          { form: 'Press', pressFn: () => changeStatusAct.act({ status: 'chill' }) }
+          { form: 'Axis1d', axis: 'y', dir: '+', mode: 'stack' }
         ]));
         
         learnReal.addReal('item', lay.gap('3em'));
@@ -613,9 +617,10 @@ global.rooms['chess2'] = async foundation => {
         learnReal.addReal('item', lay.textFwd('- Failing to submit a move within the time limit results in passing'));
         learnReal.addReal('item', lay.textFwd('- If both players pass simultaneously the game ends in a draw'));
         learnReal.addReal('item', lay.gap());
-        learnReal.addReal('item', lay.text('Chess2 (and Hut) by Gershom Maes'));
+        learnReal.addReal('item', lay.text('Chess2 by Gershom Maes'));
+        learnReal.addReal('item', lay.link('(Hut also by Gershom Maes)', 'https', 'github.com/Gershy/hut'));
         learnReal.addReal('item', lay.gap());
-        learnReal.addReal('item', lay.text('Click anywhere to go back'));
+        learnReal.addReal('item', lay.button('Click to go back', () => changeStatusAct.act({ status: 'chill' })));
         learnReal.addReal('item', lay.gap('3em'));
         
       };

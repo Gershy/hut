@@ -50,7 +50,7 @@ global.rooms['Hut'] = async foundation => {
   //   - Manager, Bank, Hut, and Rec-representing-Hut (ok maybe Bank and
   //     Manager can be merged together into one Form)
   //   - Make the Manager, Hut, and Rec-representing-Hut all available
-  //     to the nature/psyche function
+  //     to the above/below function
   //     - (Oh lord, is it even necessary to have a Rec which represents
   //       the Hut? I know its membership in Groups allows Recs to end
   //       when the Hut ends, but doesn't `hut.endWith(rec)` work too?

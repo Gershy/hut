@@ -30,10 +30,6 @@ global.rooms['internal.real.htmlBrowser.Text'] = async foundation => {
     
     render: function(real, domNode) {
       
-      domNode.style.gain({
-        display: 'flex', flexDirection: 'column', justifyContent: 'center',
-        overflow: 'hidden', textOverflow: 'ellipsis'
-      });
       
       // Apply text
       let span = domNode.querySelector(':scope > span._text');
@@ -46,9 +42,21 @@ global.rooms['internal.real.htmlBrowser.Text'] = async foundation => {
       if (this.style.has('bold'))   span.style.fontWeight = 'bold';
       if (this.style.has('italic')) span.style.fontStyle = 'italic';
       
-      // Apply text alignment; best results occur when flex and classic "text-align" props are used
-      domNode.style.alignItems = { fwd: 'flex-start', bak: 'flex-end', mid: 'center', all: 'stretch' }[this.align || 'mid'];
-      domNode.style.textAlign = { fwd: 'left', bak: 'right', mid: 'center', all: 'justify' }[this.align || 'mid'];
+      Object.assign(domNode.style, {
+        
+        //display: 'flex',
+        //flexDirection: 'column',
+        //justifyContent: 'center',
+        //overflow: 'hidden',
+        //textOverflow: 'ellipsis',
+        
+        // Apply text alignment; best results occur when flex and classic "text-align" props are used
+        //alignItems: { fwd: 'flex-start', bak: 'flex-end', mid: 'center', all: 'stretch' }[this.align || 'mid'],
+        textAlign: { fwd: 'left', bak: 'right', mid: 'center', all: 'justify' }[this.align || 'mid']
+        
+      });
+      domNode.style.gain({ display: 'flex', flexDirection: 'column', justifyContent: 'center', overflow: 'hidden', textOverflow: 'ellipsis' });
+      
       
     }
     

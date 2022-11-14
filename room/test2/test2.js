@@ -10,7 +10,7 @@ global.rooms['test2'] = async foundation => {
   return Hinterland('test2', 'test2', {
     
     habitats: [ HtmlBrowserHabitat() ],
-    nature: async (hut, appRec, real, dep) => {
+    above: async (hut, appRec, real, dep) => {
       
       /// {ABOVE=
       hut.addKnownRealDependencies([ 'Geom', 'Axis1d', 'Decal', 'Text', 'Press' ]);
@@ -27,7 +27,7 @@ global.rooms['test2'] = async foundation => {
       });
       
     },
-    psyche: async (hut, appRec, real, dep) => {
+    below: async (hut, appRec, real, dep) => {
       
       let mainReal = dep(real.addReal('main', [
         { form: 'Geom', w: '100%', h: '100%' },

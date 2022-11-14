@@ -97,7 +97,7 @@ global.rooms['collabowrite'] = async foundation => {
   
   return Hinterland('cw', 'collabowrite', {
     habitats: [ HtmlBrowserHabitat() ],
-    nature: async (hut, cw, real, dep) => {
+    above: async (hut, cw, real, dep) => {
       
       /// {ABOVE=
       
@@ -294,7 +294,7 @@ global.rooms['collabowrite'] = async foundation => {
       /// =ABOVE}
       
     },
-    psyche: async (hut, cw, real, dep) => {
+    below: async (hut, cw, real, dep) => {
       
       /// {BELOW=
       /// {DEBUG=

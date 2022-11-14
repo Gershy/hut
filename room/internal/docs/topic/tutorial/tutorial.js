@@ -121,15 +121,15 @@ global.rooms['internal.docs.topic.tutorial'] = foundation => decorator => {
   decorator.code(`
     | {
     |   habitats: [],
-    |   nature: async () => {},
-    |   psyche: async () => {}
+    |   above: async () => {},
+    |   below: async () => {}
     | }
   `);
   decorator.text(`
     | These three properties conclude the initialization of the Hinterland.
     | - "habitats" define which mediums of communication will be supported by the "counter" app. For example, are users able to use "counter" with a browser? With a smartphone? With a wearable device? Or a terminal, with ascii graphics?
-    | - The "nature" function defines behaviour that is outside of any single user's control - much the way that in real life, nature is outside of any individual's direct control.
-    | - The "psyche" function defines behavour that can be directly invoked by a single user. Consider a democratic-style voting application written with Hut. Psyches have direct control over who they mark on their ballot - but only Nature has control over the final victor; the election of the winner is behaviour outside of any single user's capabilities.
+    | - The "above" function defines behaviour that is outside of any single user's control - much the way that in real life, nature is outside of any individual's direct control.
+    | - The "below" function defines behavour that can be directly invoked by a single user. Consider a democratic-style voting application written with Hut. Psyches have direct control over who they mark on their ballot - but only Nature has control over the final victor; the election of the winner is behaviour outside of any single user's capabilities.
     | 
     | Let's fill out all three of these properties so that they're no longer empty. Modify "counter.js" so it looks like so:
   `);
@@ -146,10 +146,10 @@ global.rooms['internal.docs.topic.tutorial'] = foundation => decorator => {
     |     
     |     habitats: [ HtmlBrowserHabitat(), AndroidHabitat(), TerminalAsciiHabitat() ],
     |     
-    |     nature: async () => {
+    |     above: async () => {
     |       foundation.debug('Nature!');
     |     },
-    |     psyche: async () => {
+    |     below: async () => {
     |       foundation.debug('Psyche!');
     |     }
     |     
