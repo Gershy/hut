@@ -2,7 +2,7 @@
 
 module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   
-  let { subcon=Function.stub } = opts;
+  let { subcon=Function.stub, errSubcon=Function.stub } = opts;
   let { msFn=Date.now, getKey } = opts;
   if (!getKey) throw Error(String.baseline(`
     | Must provide "getKey":
@@ -239,7 +239,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         tmp.src.send(makeSoktSession(key, req, socket, buff));
       } catch (err) {
         
-        gsc('Error getting session key', query, err);
+        errSubcon('Error getting session key', query, err);
         
         let date = (new Date()).toUTCString();
         tmp.httpServer.subcon(() => ({

@@ -34,7 +34,7 @@ let httpResponseCodes = Object.plain({
 
 module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   
-  let { subcon=Function.stub } = opts;
+  let { subcon=Function.stub, errSubcon=Function.stub } = opts;
   let { heartbeatMs=60 * 1000, doCaching=true } = opts;
   let { msFn=Date.now, processCookie=Function.stub, processBody=Function.stub, getKeyedMessage } = opts;
   let { getCacheSecs=v=>(60 * 60 * 24 * 5) } = opts; // Cache for 5 days by default
@@ -208,7 +208,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
           let encoder = zlib[`create${encode[0].upper()}${encode.slice(1)}`](); // Transforms, e.g., "delate", "gzip" into "createDeflate", "createGzip"
           await Promise( (g, b) => stream.pipeline(pipe, encoder, res, err => err ? b(err) : g()) )
             .fail(err => {
-              console.log(`Error piping ${keep.desc()} to Response`, err);
+              errSubcon(`Error piping ${keep.desc()} to Response`, err);
               res.end();
               err.propagate(msg => ({ msg: `Failed to stream ${keep.desc()} (${msg})`, encode }));
             });
@@ -229,7 +229,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
     } catch (err) {
       
-      console.log(`Failed to respond with ${getFormName(keep ?? msg)}: ${keep ? keep.desc() : msg?.slice?.(0, 100)}`);
+      errSubcon(`Failed to respond with ${getFormName(keep ?? msg)}: ${keep ? keep.desc() : msg?.slice?.(0, 100)}`);
       try { res.writeHead(500); } catch (err) {}
       try { res.end(); } catch (err) {}
       
@@ -364,7 +364,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       for (let intercept of tmp.intercepts) if (intercept(req.gain({ body }), res)) return;
       
       try         { body = processBody(body); }
-      catch (err) { console.log('Error processing http body', err); return res.writeHead(400).end('Invalid body'); }
+      catch (err) { errSubcon('Error processing http body', err); return res.writeHead(400).end('Invalid body'); }
       
       let headers = req.headers;
       let cookie = headers.cookie
@@ -374,7 +374,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         ?? {};
       let cookieKeys = cookie.toArr((v, k) => k);
       try         { cookie = processCookie(cookie); }
-      catch (err) { console.log('Error processing http cookie', err); return res.writeHead(400).end('Invalid cookie'); }
+      catch (err) { errSubcon('Error processing http cookie', err); return res.writeHead(400).end('Invalid cookie'); }
       
       let [ , path, query='', fragment='' ] = req.url.match(/^([/][^?#]*)([?][^#]+)?([#].*)?$/);
       path = path.slice(1);
@@ -388,7 +388,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         
       } catch (err) {
         
-        gsc('Error getting session Key+Msg (clearing cookies and redirecting...)', err);
+        errSubcon('Error getting session Key+Msg (clearing cookies and redirecting...)', err);
         return res.writeHead(302, {
           'Set-Cookie': cookieKeys.map(k => `${k}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;`),
           'Location': '/'

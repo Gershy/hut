@@ -521,9 +521,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       enabled: false
     },
     
-    'warning': {
-      enabled: true
-    }
+    'warning': { enabled: true, format: () => '' }
     
   },
   $odeToThePioneer: String.multiline(`
@@ -1863,6 +1861,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         compression,
         
         subcon: this.subcon('network.http.raw'),
+        errSubcon: this.subcon('warning'),
         
         msFn: () => this.getMs(),
         heartbeatMs: 60 * 1000,
