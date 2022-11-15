@@ -8,6 +8,15 @@ if (!global.gsc) global.gsc = console.log;
 if (!global.rooms) { global.rooms = {}; gsc(`Notice: defaulted global.rooms`); }
 /// =ASSERT}
 
+global.mm = {};
+global.mmm = (term, val) => {
+  if (!global.mm.has(term)) global.mm[term] = 0;
+  global.mm[term] += val;
+};
+setInterval(() => {
+  console.log(global.mm.toArr((v, k) => `METRIC/${(k + ':').padTail(20)} ${v}`).join('\n'));
+}, 3000);
+
 Object.assign(global, {
   AsyncFunction: (async () => {}).constructor,
   GeneratorFunction: (function*(){})().constructor,
@@ -768,6 +777,8 @@ Object.assign(global, {
     
     init(fn) {
       
+      mmm('endables', +1);
+      
       // Allow Endable.prototype.cleanup to be masked
       if (fn) Object.defineProperty(this, 'cleanup', { value: fn, enumerable: true, writable: true, configurable: true });
       
@@ -829,7 +840,7 @@ Object.assign(global, {
       
       Object.defineProperty(this, 'onn', Form.turnOffDefProp);
       debugUtil.globalEndableRegistry.rem(this);
-      this.cleanup();
+      this.cleanup(); mmm('endables', -1);
       return true;
       
     }

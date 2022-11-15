@@ -283,7 +283,7 @@ global.rooms['record'] = async foundation => {
       manager.types[name] = this;
       
     },
-    getPfx() { let ind = this.name.indexOf('.'); return this.name.slice(0, ind); },
+    getPfx() { return this.name.cut('.')[0] },
     
     updateTypeTerms(typeTerms /* { term1: type1, term2: type2 ... } */) {
       
@@ -629,6 +629,8 @@ global.rooms['record'] = async foundation => {
       
       // Create `hrec` and ensure that if `rec` ends, `hrec` ends too
       let hrec = Tmp({ rec, desc: () => `HandledRecord(${rec.desc()})` });
+      
+      mmm('hrecs', +1);
       this.hrecs.set(rec.uid, hrec);
       let recEndHrecRoute = rec.route(() => hrec.end());
       
@@ -636,7 +638,7 @@ global.rooms['record'] = async foundation => {
         
         // Remove the Record; inform the AuditSrc; sever the relation
         // that `rec` ends `hrec`
-        this.hrecs.rem(rec.uid);
+        this.hrecs.rem(rec.uid); mmm('hrecs', -1);
         this.auditSrc && this.auditSrc.mod({ add: -1, delta: [ rec ] });
         recEndHrecRoute.end();
         
@@ -656,7 +658,8 @@ global.rooms['record'] = async foundation => {
     ready() { return Promise(rsv => this.activeSignal.route(rsv)); },
     
     async getRecs() {
-      await Promise(rsv => this.activeSignal.route(rsv));
+      let route = null;
+      try { await Promise(rsv => route = this.activeSignal.route(rsv)); } finally { route.end(); }
       return this.hrecs.toArr(hrec => hrec.rec);
     },
     async getRec() {
@@ -676,7 +679,10 @@ global.rooms['record'] = async foundation => {
     
     cleanup() {
       
+      mmm('relHandlers', -1);
       delete this.rec.relHandlers[this.key];
+      
+      for (let hrec of this.hrecs) hrec.end();
       this.hrecs = Map.stub;
       this.activeSignal.end();
       
@@ -721,7 +727,7 @@ global.rooms['record'] = async foundation => {
         type, uid, group,
         valueSrc: MemSrc.Prm1(value),
         volatile,
-        relHandlers: {},
+        relHandlers: {}, // TODO: Convert to plain object
         
         endWithMemRoutes: group.mems.toArr(mem => mem.route(() => this.end())),
         bankedPrm: null
@@ -972,6 +978,7 @@ global.rooms['record'] = async foundation => {
       
       if (!this.relHandlers.has(key)) {
         
+        mmm('relHandler', +1);
         this.relHandlers[key] = RelHandler(this.type.manager, {
           key, rec: this, type, term,
           offset, limit, fixed,

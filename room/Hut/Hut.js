@@ -166,7 +166,7 @@ global.rooms['Hut'] = async foundation => {
             if (version < this.syncHearVersion) throw Error(`Duplicated sync (version: ${version}; current version: ${this.syncHearVersion})`);
             
             // Add this newly arrived sync to the buffer
-            this.bufferedSyncs.set(version, content);
+            this.bufferedSyncs.set(version, content); mmm('bufferSync', +1);
             
             // Now perform as many pending syncs as possible; these must
             // be sequential, and beginning with the very next expected
@@ -175,7 +175,7 @@ global.rooms['Hut'] = async foundation => {
             while (this.bufferedSyncs.has(this.syncHearVersion)) {
               
               let sync = this.bufferedSyncs.get(this.syncHearVersion);
-              this.bufferedSyncs.rem(this.syncHearVersion);
+              this.bufferedSyncs.rem(this.syncHearVersion); mmm('bufferSync', -1);
               this.syncHearVersion++;
               bank.syncSer(this, sync);
               
@@ -274,8 +274,9 @@ global.rooms['Hut'] = async foundation => {
         let Hut = this.Form;
         let hut = Hut({ uid: hutId, parHut: this, isHere: false, isManager: false, isRec: true });
         
+        mmm('roadedHuts', +1);
         this.roadedHuts.set(hutId, { hut, roads: Map(/* Server => Road */) });
-        hut.endWith(() => this.roadedHuts.rem(hutId));
+        hut.endWith(() => mmm('roadedHuts', -1) || this.roadedHuts.rem(hutId));
         
         this.getRecMan().addRecord({ type: 'hut.owned', group: { par: this, kid: hut }, uid: `!owned@${this.uid}@${hut.uid}` });
         
@@ -289,8 +290,10 @@ global.rooms['Hut'] = async foundation => {
         
         // Map Server->Road for this RoadedHut
         let { roads, hut } = roadedHut;
+        
+        mmm('roads', +1);
         roads.set(server, road);
-        road.endWith(() => roads.rem(server));
+        road.endWith(() => mmm('roads', -1) || roads.rem(server));
         
         // Subcon output
         if (subcon.enabled) {
@@ -913,6 +916,11 @@ global.rooms['Hut'] = async foundation => {
     cleanup() {
       
       forms.Record.cleanup.call(this);
+      
+      if (this.roadedHuts) {
+        for (let [ uid, { hut, roads } ] of this.roadedHuts) for (let [ server, road ] of roads) road.end();
+        this.roadedHuts = Map.stub;
+      }
       
       /// {ABOVE=
       
