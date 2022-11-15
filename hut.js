@@ -90,10 +90,11 @@ let conf = null;
 try {
   
   let { argv } = process;
+  let looksLikeData = /^[{['"]/;
   conf = ({}).gain(...argv.slice(argv.indexOf(__filename) + 1).map(v => {
     
     v = v.trim();
-    if (/^[{['"]/.test(v)) v = eval(`(${v})`);
+    if (looksLikeData.test(v)) v = eval(`(${v})`);
     
     if (!v) return skip;
     
@@ -101,7 +102,7 @@ try {
     // while strings containing "=" represent key-value pairs
     if (isForm(v, String)) v = v.has('=')
       ? v.split(/[ ;,&]+/g).toObj(v => v.cut('=')) // Key-value pairs
-      : { 'hoist.room': v };                      // Room name
+      : { 'hoist.room': v };                       // Room name
     
     if (!isForm(v, Object)) throw Error(`Couldn't process an argument: "${v}"`);
     
@@ -126,7 +127,7 @@ try {
 }
 
 let { FoundationNodejs } = global;
-let foundation = FoundationNodejs();
+let foundation = global.foundation = FoundationNodejs();
 
 Promise.resolve()
   .then(() => foundation.configure(conf))

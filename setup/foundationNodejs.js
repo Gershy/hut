@@ -852,25 +852,19 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
   async createReal(opts={}) {
     
     let FakeReal = form({ name: 'FakeReal', has: { Tmp }, props: (forms, Form) => ({
-      
       init({ name, tech }) {
         
         forms.Tmp.init.call(this);
-        
         Object.assign(this, {
           name, tech,
           fakeLayout: null,
-          params: { textInputSrc: {
-            mod: Function.stub,
-            route: fn => fn(''),
-            send: Function.stub
-          }}
+          params: { textInputSrc: { mod: Function.stub, route: fn => fn(''), send: Function.stub }}
         });
         
       },
       loaded: Promise.resolve(),
       setTree() {},
-      addReal(real) { return isForm(real, String) ? Form({ name: real, tech: this.tech }) : real; },
+      addReal(real) { return this; },
       mod() {},
       addLayout: lay => Tmp({ layout: { src: Src.stub, route: Function.stub } }),
       getLayout() { return this.fakeLayout || (this.fakeLayout = primaryFakeReal.getLayoutForm('FakeBoi')()); },
@@ -878,25 +872,22 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       getTech: () => fakeRealTech,
       addNavOption() { return { activate: () => {} }; },
       render() {}
-      
     })});
+    
+    let FakeLayout = form({ name: 'FakeLayout', has: { Src }, props: (forms, Form) => ({
+      init() { forms.Src.init.call(this); this.keysSrc = Src.stub; },
+      isInnerLayout() { return false; },
+      setText(){},
+      addReal(){},
+      src: Src.stub
+    })});
+    let fakeLayout = FakeLayout();
     
     let layouts = {};
     let fakeRealTech = {
       render: Function.stub,
       informNavigation: Function.stub,
-      getLayoutForm: name => {
-        if (!layouts.has(name)) {
-          layouts[name] = form({ name: `Fake${name}`, has: { Src }, props: (forms, Form) => ({
-            init() { forms.Src.init.call(this); this.keysSrc = Src.stub; },
-            isInnerLayout() { return false; },
-            setText(){},
-            addReal(){},
-            src: Src.stub
-          })});
-        }
-        return layouts[name];
-      },
+      getLayoutForm: name => fakeLayout,
       getLayoutForms: names => names.toObj(name => [ name, primaryFakeReal.getLayoutForm(name) ]),
       render: Function.stub
     };
@@ -1190,7 +1181,15 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
     }});
     
     schema('network.heartbeat', { fn: parVal });
-    schema('network.heartbeat.ms', { fn: val => val || 30 * 1000 });
+    schema('network.heartbeat.ms', { fn: val => {
+      
+      if (val === null) val = 60 * 1000;
+      if (isForm(val, String)) val = parseInt(val, 10);
+      if (!isForm(val, Number)) throw Error(`Heartbeat value must be Number`);
+      if (val < 1000) throw Error('Heartbeat should not be faster than 1hz');
+      return val;
+      
+    }});
     schema('network.dns', { fn: (dnsList, conf) => {
       
       if (dnsList === null) dnsList = '1.1.1.1+1.0.0.1' // TODO: CloudFlare best default choice??
@@ -1816,7 +1815,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
             src: { ...anonHut, parHut: hut, desc: () => `AnonHut(${session.knownNetAddrs.toArr(v=>v).join(', ')})` },
             road: session, reply: replyable(), ms, msg
           });
-        });
+        }, 'prm');
         
       } else {
         
@@ -1836,7 +1835,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
           if (msg.command === 'bp') return; // Don't process "bp" ("bank poll") commands
           let reply = (msg.trn === 'sync') ? replyable() : null;
           hut.hear({ src: srcHut, road: session, reply, ms, msg });
-        });
+        }, 'prm');
         
       }
       
@@ -1864,8 +1863,8 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         errSubcon: this.subcon('warning'),
         
         msFn: () => this.getMs(),
-        heartbeatMs: 60 * 1000,
-        doCaching: this.seek('conf', 'deploy', 'maturity').val !== 'dev',
+        heartbeatMs: this.conf('network.heartbeat.ms'),
+        doCaching: this.conf('deploy.maturity') !== 'dev',
         processCookie: cookie => {
           
           // Only permissible cookie key is "hut"; if present, the value

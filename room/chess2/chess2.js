@@ -311,8 +311,8 @@ global.rooms['chess2'] = async foundation => {
             [ 'rook',     0, 0 ],
             [ 'knight',   1, 0 ],
             [ 'bishop',   2, 0 ],
-            [ 'queen',    4, 0 ],
-            [ 'king',     3, 0 ],
+            [ 'queen',    3, 0 ],
+            [ 'king',     4, 0 ],
             [ 'bishop',   5, 0 ],
             [ 'knight',   6, 0 ],
             [ 'rook',     7, 0 ],
@@ -329,8 +329,8 @@ global.rooms['chess2'] = async foundation => {
             [ 'rook',     0, 7 ],
             [ 'knight',   1, 7 ],
             [ 'bishop',   2, 7 ],
-            [ 'queen',    4, 7 ],
-            [ 'king',     3, 7 ],
+            [ 'queen',    3, 7 ],
+            [ 'king',     4, 7 ],
             [ 'bishop',   5, 7 ],
             [ 'knight',   6, 7 ],
             [ 'rook',     7, 7 ],
@@ -782,7 +782,7 @@ global.rooms['chess2'] = async foundation => {
         }
         
         // Render pieces
-        let pieceControls = MemSrc.TmpM();
+        let pieceControls = dep(MemSrc.TmpM());
         dep.scp(match, 'c2.piece', (piece, dep) => {
           
           let pieceReal = dep(boardReal.addReal('c2.piece', tileCoord(0, 0), [
@@ -813,7 +813,7 @@ global.rooms['chess2'] = async foundation => {
           }));
           dep(() => pieceReal.mod({ scale: 4, opacity: 0 })); // Ghostly explosion upon capture
           
-          let pieceControl = Tmp({ piece, pieceReal });
+          let pieceControl = dep(Tmp({ piece, pieceReal }));
           pieceControls.mod(pieceControl);
           
         });

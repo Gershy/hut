@@ -515,7 +515,7 @@ global.rooms['record'] = async foundation => {
         // If the Infinite RelHandler is available for this relation it
         // already computed an exhaustive list of relevant Records! Note
         // there's a good chance that `this` is the Infinite RelHandler
-        let precompRh = this.rec.relHandlers[`${this.type.name}/${this.term}/0:Infinity`] || null;
+        let precompRh = this.rec.relHandlers[`${this.type.name}/${this.term}/0:Infinity`] ?? null;
         if (precompRh && precompRh.off()) precompRh = null;              // Can't use it if it's off
         if (precompRh && precompRh.activeSignal.onn()) precompRh = null; // Can't use it if it's mid-selection
         
@@ -679,7 +679,7 @@ global.rooms['record'] = async foundation => {
     
     cleanup() {
       
-      if (this.rec.relHandlers.has(this.key)) mmm('relHandlers', -1);
+      if (this.rec.relHandlers[this.key]) mmm('relHandlers', -1);
       delete this.rec.relHandlers[this.key];
       
       for (let [ uid, hrec ] of this.hrecs) hrec.end();
@@ -727,7 +727,7 @@ global.rooms['record'] = async foundation => {
         type, uid, group,
         valueSrc: MemSrc.Prm1(value),
         volatile,
-        relHandlers: {}, // TODO: Convert to plain object
+        relHandlers: Object.plain({}),
         
         endWithMemRoutes: group.mems.toArr(mem => mem.route(() => this.end())),
         bankedPrm: null
@@ -773,7 +773,9 @@ global.rooms['record'] = async foundation => {
           // Now that this Record has been Banked we can inform all
           // Members of their new Holder, `this`. Note we only inform
           // Members with an active RelHandler handling `this`!
-          for (let [ term, mem ] of this.group.mems) for (let [ , rh ] of mem.relHandlers) {
+          for (let [ term, mem ] of this.group.mems) for (let k in mem.relHandlers) {
+            
+            let rh = mem.relHandlers[k];
             
             // Skip RelHandlers that aren't for our Type
             if (rh.type !== this.type) continue;
@@ -853,7 +855,7 @@ global.rooms['record'] = async foundation => {
       for (let [ k, rec ] of this.group.mems) yield* rec.iterateAll(seen);
       
       // Yield active Holder tree
-      for (let [ k, relHandler ] of this.relHandlers) for (let [ uid, hrec ] of relHandler.hrecs) {
+      for (let k in this.relHandlers) for (let [ uid, hrec ] of this.relHandlers[k].hrecs) {
         
         yield* hrec.rec.iterateAll(seen);
         
@@ -942,9 +944,9 @@ global.rooms['record'] = async foundation => {
       
       // If `fixed === false`, `key` is a value that definitely isn't
       // yet set in `this.relHandlers`. Note that we need to hold a
-      // reference even to un-fixed RelHandlers, because in order to
-      // correctly propagate newly created Records to their Members we
-      // iterate all RelHandlers of all Members in memory.
+      // reference even to "unfixed"/"dynamic" RelHandlers, as in order
+      // to correctly propagate newly created Records to their Members
+      // we must iterate all RelHandlers of all Members in memory.
       // 
       // Note that both Type and Term need to be included in the unique
       // key. If only Term were provided, the following:
@@ -976,9 +978,9 @@ global.rooms['record'] = async foundation => {
         ? `${type.name}/${term}/${offset}:${limit}`
         : `${type.name}/${term}/u:${Math.random().toString(16).slice(2)}`;
       
-      if (!this.relHandlers.has(key)) {
+      if (!this.relHandlers[key]) {
         
-        mmm('relHandler', +1);
+        mmm('relHandlers', +1);
         this.relHandlers[key] = RelHandler(this.type.manager, {
           key, rec: this, type, term,
           offset, limit, fixed,
@@ -1139,10 +1141,19 @@ global.rooms['record'] = async foundation => {
       // cleanup produced from MemSrc.Prm1.prototype.end, I've decided
       // not to call `this.valueSrc.end`
       
+      for (let endWithMemRoute of this.endWithMemRoutes) endWithMemRoute.end();
+      
+      // Note that it's good to end `this.valueSrc`, but even Ended,
+      // `this` may be passed around to some code that doesn't expect
+      // `this.valueSrc.val === skip` (`MemSrc.Prm1.prototype.cleanup`
+      // sets this) - so end the value Src, but replace the value!
+      let val = this.valueSrc.val;
+      this.valueSrc.end();
+      this.valueSrc.val = val;
+      
       let origRhs = this.relHandlers;
       this.relHandlers = Object.stub;
-      for (let [ term, rh ] of origRhs) rh.end();
-      for (let endWithMemRoute of this.endWithMemRoutes) endWithMemRoute.end();
+      for (let rh of Object.values(origRhs)) rh.end();
       
     }
     

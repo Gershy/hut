@@ -54,11 +54,12 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   
   let makeHttpSession = (key, req) => {
     
+    //let session = HttpSession({ key, req });
+
     let session = Tmp({
       
       key,
       currentCost: () => session.queueRes.length ? 0.5 : 0.75,
-      talk: () => 0 && gsc(`${session.key} has ${session.queueRes.length} banked Response(s)`),
       
       timeout: null,
       knownNetAddrs: req ? Set([ req.connection.remoteAddress ]) : Set(),
@@ -75,21 +76,23 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     if (session.key !== null) session.hear.route(() => {
       clearTimeout(session.timeout);
       session.timeout = setTimeout(() => session.end(), heartbeatMs);
-    });
+    }, 'prm');
     
     // Trying to send a Message with the Session either uses a queued
     // Response Object to send the message immediately, or queues the
     // Message, waiting for a Response to become available
     session.tell.route(msg => {
-      let pkg = session.queueRes.shift(); session.talk();
+      let pkg = session.queueRes.shift();
       if (pkg) { pkg.used = true; respond(pkg, msg); }
       else     { session.queueMsg.push(msg); }
-    });
+    }, 'prm');
     
+    mmm('httpSessions', +1);
     session.endWith(() => {
+      mmm('httpSessions', -1);
       for (let pkg of session.queueRes) { pkg.used = true; pkg.res.writeHead(400).end(); }
-      session.queueRes = [];
-      session.talk();
+      session.queueRes = Array.stub;
+      session.queueMsg = Array.stub;
     });
     
     return session;
@@ -252,6 +255,8 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     if (tmp.server) return;
     
     let sessions = Map();
+    
+    mmm('servers', +1);
     
     tmp.closing = false;
     tmp.sockets = Set();
@@ -453,10 +458,10 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
       // Need to queue `res`, and unqueue it if it ends!
       let pkg = { used: false, headers, res };
-      session.queueRes.add(pkg); session.talk();
+      session.queueRes.add(pkg);
       
       // Note that `pkg.used` indicates `pkg` was already unqueued!
-      let abortFn = () => pkg.used || (session.queueRes.rem(pkg), session.talk());
+      let abortFn = () => pkg.used || session.queueRes.rem(pkg);
       req.once('close', abortFn);
       res.once('close', abortFn);
       
@@ -487,6 +492,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     for (let socket of tmp.sockets || []) socket.destroy();
     tmp.sockets = null;
     
+    mmm('servers', -1);
     await Promise((rsv, rjc) => server.close(err => err ? rjc(err) : rsv()));
     
   };

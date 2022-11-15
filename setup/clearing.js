@@ -8,14 +8,24 @@ if (!global.gsc) global.gsc = console.log;
 if (!global.rooms) { global.rooms = {}; gsc(`Notice: defaulted global.rooms`); }
 /// =ASSERT}
 
-global.mm = {};
-global.mmm = (term, val) => {
-  if (!global.mm.has(term)) global.mm[term] = 0;
-  global.mm[term] += val;
-};
-setInterval(() => {
-  console.log(global.mm.toArr((v, k) => `METRIC/${(k + ':').padTail(20)} ${v}`).join('\n'), '\n');
-}, 3000);
+{ // mmmmmmmmmmmmmmmmmmm
+  let mm = {};
+  global.mmm = (term, val) => {
+    if (!mm.has(term)) mm[term] = 0;
+    mm[term] += val;
+  };
+  global.mmm = v => v;
+  if (0) setInterval(() => {
+    
+    let pairs = mm
+      .toArr((v, k) => v < 30 ? skip : [ k + ': ', v ])
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([ k, v ]) => `${k.padTail(20)}${v}`);
+    
+    console.log('METRIC---\n' + pairs.map(p => `  METRIC/${p}`).join('\n'));
+    
+  }, 3000);
+}
 
 Object.assign(global, {
   AsyncFunction: (async () => {}).constructor,
@@ -777,7 +787,13 @@ Object.assign(global, {
     
     init(fn) {
       
-      mmm('endables', +1);
+      this['~mmm'] = global.foundation ? this.Form.name + ':: ' + global.foundation.formatError(Error('trace'))
+        .split('\n')
+        .slice(6)
+        .map(ln => ln.replace(/^[^a-zA-Z0-9]+/, ''))
+        .join(' / ') : this.Form.name;
+      
+      mmm(this['~mmm'], +1);
       
       // Allow Endable.prototype.cleanup to be masked
       if (fn) Object.defineProperty(this, 'cleanup', { value: fn, enumerable: true, writable: true, configurable: true });
@@ -840,7 +856,7 @@ Object.assign(global, {
       
       Object.defineProperty(this, 'onn', Form.turnOffDefProp);
       debugUtil.globalEndableRegistry.rem(this);
-      this.cleanup(); mmm('endables', -1);
+      this.cleanup(); mmm(this['~mmm'], -1);
       return true;
       
     }

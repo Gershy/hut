@@ -44,3 +44,5 @@ By default four users are shown. Click the "+" and "-" buttons in any user's vie
 This is probably the worst webapp ever, but it demonstrates the central aim of Hut: **facilitating shared experiences!**
 
 This example involved a very minor amount of configuration, and ran [out-of-the-box source code](room/test1/test1.js). The following examples will iteratively increase our understanding of both configuration, and the code that forms a Hut.
+
+*This readme is not complete yet!*

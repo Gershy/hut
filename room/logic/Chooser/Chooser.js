@@ -118,6 +118,8 @@ global.rooms['logic.Chooser'] = async foundation => {
     },
     cleanup() {
       
+      for (let [ name, tmp1 ] of this.srcs) tmp1.end();
+      
       this.maybeEndTmp(this.activeSrcName);
       if (this.srcRoute) {
         this.srcRoute.end();

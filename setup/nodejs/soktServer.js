@@ -19,6 +19,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     // received for some interval of time (which also means clients
     // should send heartbeats!)
     
+    mmm('soktSessions', +1);
     let session = Tmp({
       key,
       currentCost: () => 0.3,
@@ -26,7 +27,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       tell: Src(),
       hear: Src()
     });
-    session.endWith(() => socket.end());
+    session.endWith(() => mmm('soktSessions', -1) || socket.end());
     
     // Logic to track socket state and parse messages from binary
     let curOp = null;
@@ -228,6 +229,8 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
     }
     
+    mmm('servers', +1);
+    
     tmp.httpServer.server.on('upgrade', (req, socket, buff) => {
       
       if (req.headers['upgrade'] !== 'websocket') return req.writeHead(400).end();
@@ -280,6 +283,8 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     tmp.httpServer = null;
     
     if (!tmp.reusedServer) await Promise((rsv, rjc) => server.close(err => err ? rjc(err) : rsv()));
+    
+    mmm('servers', -1);
     
   };
   
