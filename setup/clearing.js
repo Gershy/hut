@@ -14,7 +14,7 @@ global.mmm = (term, val) => {
   global.mm[term] += val;
 };
 setInterval(() => {
-  console.log(global.mm.toArr((v, k) => `METRIC/${(k + ':').padTail(20)} ${v}`).join('\n'));
+  console.log(global.mm.toArr((v, k) => `METRIC/${(k + ':').padTail(20)} ${v}`).join('\n'), '\n');
 }, 3000);
 
 Object.assign(global, {

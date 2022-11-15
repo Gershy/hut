@@ -679,10 +679,10 @@ global.rooms['record'] = async foundation => {
     
     cleanup() {
       
-      mmm('relHandlers', -1);
+      if (this.rec.relHandlers.has(this.key)) mmm('relHandlers', -1);
       delete this.rec.relHandlers[this.key];
       
-      for (let hrec of this.hrecs) hrec.end();
+      for (let [ uid, hrec ] of this.hrecs) hrec.end();
       this.hrecs = Map.stub;
       this.activeSignal.end();
       
