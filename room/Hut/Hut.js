@@ -269,16 +269,15 @@ global.rooms['Hut'] = async foundation => {
       // Generate a stock `hutId` if `null` provided
       if (hutId === null) hutId = this.getHutUid();
       
+      let newHut = null;
       if (!this.roadedHuts.has(hutId)) {
         
         let Hut = this.Form;
-        let hut = Hut({ uid: hutId, parHut: this, isHere: false, isManager: false, isRec: true });
+        let hut = newHut = Hut({ uid: hutId, parHut: this, isHere: false, isManager: false, isRec: true });
         
         mmm('roadedHuts', +1);
         this.roadedHuts.set(hutId, { hut, roads: Map(/* Server => Road */) });
         hut.endWith(() => mmm('roadedHuts', -1) || this.roadedHuts.rem(hutId));
-        
-        this.getRecMan().addRecord({ type: 'hut.owned', group: { par: this, kid: hut }, uid: `!owned@${this.uid}@${hut.uid}` });
         
         subcon({ type: 'join', hut: hut.desc() });
         hut.endWith(() => subcon({ type: 'exit', hut: hut.desc() }));
@@ -306,6 +305,11 @@ global.rooms['Hut'] = async foundation => {
         road.endWith(() => roads.size || hut.end());
         
       }
+      
+      // Do this last so that Roads are all in place before the new Hut
+      // propagates to any Holders
+      if (newHut) this.getRecMan().addRecord({ type: 'hut.owned', group: { par: this, kid: newHut }, uid: `!owned@${this.uid}@${newHut.uid}` });
+      
       return roadedHut;
       
     },
@@ -324,6 +328,16 @@ global.rooms['Hut'] = async foundation => {
       }
       
       return road;
+      
+    },
+    getKnownNetAddrs() {
+      
+      if (!this.parHut) return Set.stub;
+      
+      let roadedHut = this.parHut.roadedHuts.get(this.uid);
+      
+      let addrs = roadedHut.roads.toArr(road => road.knownNetAddrs.toArr(v => v)).flat(1);
+      return Set(addrs);
       
     },
     /// =ABOVE}
@@ -816,7 +830,7 @@ global.rooms['Hut'] = async foundation => {
       if (this.throttleSyncPrm) return;
       
       let err = Error('trace');
-      let prm = this.throttleSyncPrm = foundation.soon(() => {
+      let prm = this.throttleSyncPrm = foundation.soon().then(() => {
         
         // Can cancel scheduled sync by setting `this.throttleSyncPrm`
         // to another value
@@ -917,16 +931,12 @@ global.rooms['Hut'] = async foundation => {
       
       forms.Record.cleanup.call(this);
       
-      if (this.roadedHuts) {
-        for (let [ uid, { hut, roads } ] of this.roadedHuts) for (let [ server, road ] of roads) road.end();
-        this.roadedHuts = Map.stub;
-      }
-      
       /// {ABOVE=
+      for (let [ uid, { hut, roads } ] of this.roadedHuts ?? []) for (let [ server, road ] of roads) road.end();
+      this.roadedHuts = Map.stub;
       
       this.pendingSync = Object.freeze({ add: Object.stub, upd: Object.stub, rem: Object.stub });
       if (this.isHere) this.ownedHutRh.end();
-      
       /// =ABOVE}
       
     }

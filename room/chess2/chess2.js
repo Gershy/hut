@@ -18,21 +18,23 @@ global.rooms['chess2'] = async foundation => {
   let moveMs = (isDev ? 10 : 60) * 1000;
   let enterMs = (isDev ? 0.1 : 2) * 1000;
   let matchmakeMs = (isDev ? 1 : 5) * 1000;
-  let textSize1 = 'calc(90% + 0.8vmin)';
-  let textSize2 = 'calc(100% + 0.95vmin)';
+  let tsM2 = 'calc(67% + 0.75vmin)';
+  let tsM1 = 'calc(72% + 0.80vmin)';
+  let ts00 = 'calc(80% + 0.85vmin)';
+  let tsP1 = 'calc(90% + 1.00vmin)';
   let lay = {
-    text: (text, textSize=textSize1, align='mid') => [
+    text: (text, textSize=ts00, align='mid') => [
       { form: 'Geom', w: 'calc(100% - 7vmin)' },
       { form: 'Text', textSize, align, text },
       { form: 'Gap', horz: '0.75vmin', vert: '0.5vmin' }
     ],
-    textFwd: (text, textSize=textSize1, align='fwd') => lay.text(text, textSize, align),
-    link: (text, protocol, uri, textSize=textSize1) => [
-      { form: 'Keep', protocol, uri, keepText: '(Hut also by Gershom Maes)' },
-      { form: 'Decal', text: { colour: '#c4d2ff', size: textSize } }
+    textFwd: (text, textSize=ts00, align='fwd') => lay.text(text, textSize, align),
+    link: (keepText, uri, { textSize=ts00, protocol=null, mode='separate' }={}) => [
+      { form: 'Keep', protocol, uri, keepText, mode },
+      { form: 'Decal', text: { colour: '#c4d2ff', size: '4px' } }
     ],
     gap: (amt='1em') => [{ form: 'Geom', h: amt }],
-    button: (text, pressFn, textSize=textSize1) => [
+    button: (text, pressFn, textSize=ts00) => [
       { form: 'Gap', horz: '1.5vmin', vert: '1vmin' },
       { form: 'Text', textSize, text },
       { form: 'Decal', colour: '#bcbcd29c', border: { ext: '2px', colour: '#00000020' } },
@@ -41,7 +43,7 @@ global.rooms['chess2'] = async foundation => {
     input: (prompt, textInputSrc) => [
       { form: 'Gap', vert: '1vmin' },
       { form: 'Geom', w: '10em' },
-      { form: 'TextInput', textSize: textSize1, textInputSrc, prompt: 'Code?' },
+      { form: 'TextInput', textSize: ts00, textInputSrc, prompt: 'Code?' },
       { form: 'Decal', colour: '#a0a0ff30' }
     ]
   };
@@ -438,12 +440,13 @@ global.rooms['chess2'] = async foundation => {
         let kidHut = owned.m('kid');
         
         let playerRh = dep(kidHut.rh('c2.player'));
-        let timerSrc = dep(TimerSrc({ ms: 1000 }));
+        let timerSrc = dep(TimerSrc({ ms: 1500 }));
         
-        gsc(`${kidHut.desc()} has 1 sec to create player`);
-        timerSrc.route(() => gsc(`${kidHut.desc()} FAILED to create player!`));
+        let desc = kidHut.desc() + ' @ ' + kidHut.getKnownNetAddrs().toArr(v => v).join('+');
+        
+        timerSrc.route(() => gsc(`${desc} FAILED to create player!`));
         timerSrc.route(() => kidHut.end());
-        playerRh.route(() => gsc(`${kidHut.desc()} created player!`));
+        playerRh.route(hrec => gsc(`${desc} created player! (${hrec.rec.getValue('term')})`));
         playerRh.route(() => { timerSrc.end(); playerRh.end(); });
         
       });
@@ -586,12 +589,14 @@ global.rooms['chess2'] = async foundation => {
         }));
         
         /// {BELOW=
-        createPlayerAct.act();
-        dep(real.addReal('c2.pane', [
+        dep(TimerSrc({ ms: 500 })).route(() => createPlayerAct.act());
+        let paneReal = dep(real.addReal('c2.pane', [
           { form: 'Geom', w: '80%', h: '80%', anchor: 'cen' },
-          { form: 'Text', textSize: textSize2, text: 'Entering chess2...' },
+          { form: 'Axis1d', axis: 'y', mode: 'compactCenter' },
           { form: 'Decal', colour: 'rgba(120, 120, 170, 1)' }
         ]));
+        paneReal.addReal('c2.title', lay.text('Entering Chess2...', tsP1));
+        paneReal.addReal('c2.title', lay.link('(Stuck? Try clicking here...)', '/?hutId=reset', { mode: 'replace', textSize: tsM2 }));
         /// =BELOW}
         
       };
@@ -601,7 +606,7 @@ global.rooms['chess2'] = async foundation => {
           { form: 'Geom', w: '100%', h: '100%' },
           { form: 'Axis1d', axis: 'y', dir: '+', mode: 'compactCenter' }
         ]));
-        chillReal.addReal('info', lay.text('You\'re playing Chess2!' ));
+        chillReal.addReal('info', lay.text('You\'re playing Chess2!', tsP1));
         chillReal.addReal('info', lay.text(`Opponents will know you as "${player.getValue('term')}"`));
         let numPlayersReal = chillReal.addReal('info', lay.text());
         let numMatchesReal = chillReal.addReal('info', lay.text());
@@ -626,7 +631,7 @@ global.rooms['chess2'] = async foundation => {
         ]));
         
         learnReal.addReal('item', lay.gap('3em'));
-        learnReal.addReal('item', lay.text('How to Play Chess2', textSize2));
+        learnReal.addReal('item', lay.text('How to Play Chess2', tsP1));
         learnReal.addReal('item', lay.gap());
         learnReal.addReal('item', lay.textFwd('Finally, chess with no imbalance - just black and white matched evenly in a battle of strategy and wits!'));
         learnReal.addReal('item', lay.gap());
@@ -642,7 +647,7 @@ global.rooms['chess2'] = async foundation => {
         learnReal.addReal('item', lay.textFwd('- If both players pass simultaneously the game ends in a draw'));
         learnReal.addReal('item', lay.gap());
         learnReal.addReal('item', lay.text('Chess2 by Gershom Maes'));
-        learnReal.addReal('item', lay.link('(Hut also by Gershom Maes)', 'https', 'github.com/Gershy/hut'));
+        learnReal.addReal('item', lay.link('(Hut also by Gershom Maes)', 'https://github.com/Gershy/hut', ts00, { protocol: 'https' }));
         learnReal.addReal('item', lay.gap());
         learnReal.addReal('item', lay.button('Click to go back', () => changeStatusAct.act({ status: 'chill' })));
         learnReal.addReal('item', lay.gap('3em'));
@@ -655,7 +660,7 @@ global.rooms['chess2'] = async foundation => {
           { form: 'Axis1d', axis: 'y', mode: 'compactCenter' },
         ]));
         
-        queueReal.addReal('title', lay.text('Play an Opponent', textSize2));
+        queueReal.addReal('title', lay.text('Play an Opponent', tsP1));
         let numQueuedReal = queueReal.addReal('item', lay.text(''));
         let numQueuedSrc = dep(chess2.getValuePropSrc('numQueued'));
         dep(numQueuedSrc.route(num => {
@@ -819,7 +824,7 @@ global.rooms['chess2'] = async foundation => {
         });
         
         // Render based on the current Outcome
-        let outcomeChooser = Chooser(match.rh('c2.outcome'));
+        let outcomeChooser = dep(Chooser(match.rh('c2.outcome')));
         dep.scp(outcomeChooser.srcs.onn, (outcome, dep) => {
           
           let outcomeReal = dep(boardReal.addReal('c2.outcome', [
@@ -838,7 +843,7 @@ global.rooms['chess2'] = async foundation => {
           let outcomeText = (outcome.getValue('winner') === null)
             ? 'Stalemate!'
             : `Checkmate:\nYou ${(outcome.getValue('winner') === myColour) ? 'WIN' : 'LOSE'}!`
-          contentReal.addReal('c2.text', lay.text(outcomeText, textSize2));
+          contentReal.addReal('c2.text', lay.text(outcomeText, tsP1));
           contentReal.addReal('c2.text', lay.text('Click anywhere to play again...'));
           
         });
@@ -853,7 +858,7 @@ global.rooms['chess2'] = async foundation => {
           ]));
           let passReal = dep(myPlayerHolderReal.addReal('c2.pass', [
             { form: 'Geom', shape: 'circle', anchor: 'br', z: 1, w: '10%', h: '100%' },
-            { form: 'Text', textSize: textSize1, text: 'Pass' },
+            { form: 'Text', textSize: ts00, text: 'Pass' },
             { form: 'Decal', colour: '#ffffff20' }
           ]));
           
@@ -868,7 +873,7 @@ global.rooms['chess2'] = async foundation => {
             
           });
           
-          let roundMoveChooser = Chooser(matchPlayer.rh('c2.roundMove'));
+          let roundMoveChooser = dep(Chooser(matchPlayer.rh('c2.roundMove')));
           dep.scp(roundMoveChooser.srcs.off, (noRoundMove, dep) => {
             
             let submitMoveAct = dep(hut.enableAction('c2.submitMove', async move => {

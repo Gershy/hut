@@ -27,6 +27,7 @@ let httpResponseCodes = Object.plain({
   200: 'Ok',
   201: 'Created',
   202: 'Accepted',
+  204: 'No Content',
   302: 'Found',
   400: 'Bad Request',
   500: 'Internal Server Error'
@@ -87,10 +88,8 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       else     { session.queueMsg.push(msg); }
     }, 'prm');
     
-    mmm('httpSessions', +1);
     session.endWith(() => {
-      mmm('httpSessions', -1);
-      for (let pkg of session.queueRes) { pkg.used = true; pkg.res.writeHead(400).end(); }
+      for (let pkg of session.queueRes) { pkg.used = true; pkg.res.writeHead(204).end(); }
       session.queueRes = Array.stub;
       session.queueMsg = Array.stub;
     });
@@ -302,11 +301,13 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         
         if ([ 'synced', 'error' ].has(subcon.mode)) {
           
-          let orig = res.end;
           res.explicitBody = null;
+          
+          let orig = res.end;
           res.end = (...args) => {
             
             let { body: resBody='', encode='unencoded' } = res.explicitBody ?? { body: args[0] };
+            delete res.explicitBody;
             
             subcon({
               type: 'synced',
@@ -341,11 +342,14 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
             headers: req.headers.map(v => isForm(v, Array) ? v : [ v ]),
             body
           });
-          let orig = res.end;
+          
           res.explicitBody = null;
+          
+          let orig = res.end;
           res.end = (...args) => {
             
             let { body='', encode='unencoded' } = res.explicitBody ?? { body: args[0] };
+            delete res.explicitBody;
             
             subcon({
               type: 'res',
@@ -466,10 +470,10 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       res.once('close', abortFn);
       
       // Don't hold too many Responses for this Session
-      while (session.queueRes.length > 3) { // TODO: Parameterize "maxBankedResponses"?
+      while (session.queueRes.length > 2) { // TODO: Parameterize "maxBankedResponses"?
         let pkg = session.queueRes.shift();
         pkg.used = true;
-        pkg.res.writeHead(200).end();
+        pkg.res.writeHead(204).end();
       }
       
     });

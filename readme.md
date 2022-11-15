@@ -13,7 +13,6 @@ A Hut partakes in a shared experience. A Hut may define the rules of how an expe
 - **Persistence for free:** Never think about data persistence - simply tell Hut something like: "run my app using storage block A", and your app's state is automatically resumed and persisted!
 - **SSL for free:** Hut includes an [acme](https://letsencrypt.org/2019/03/11/acme-protocol-ietf-standard.html) implementation - you'll never have to think about certifying ("padlocking") the domains used with Hut
 - **Observability for free:** Huts have a "subconscious", a stream of data representing decisions being made and resource availability. Hut comes with a built-in "therapist", which is a tool for analyzing this subconscious
-- **SEO for free:** You'll never need to touch html (or anything apart from javascript) when building with Hut; behind the scenes Hut renders html for you, handling seo in the process
 - **User Analytics for free:** Minimal configuration enables analytics on your userbase
 
 ### How in sweet heck do I use Hut???
@@ -37,9 +36,11 @@ A Hut partakes in a shared experience. A Hut may define the rules of how an expe
 
 *This is a minimal example to get started with Hut!*
 
-You are now using a developer tool which simulates multiple users using the "test1" app.
-(To view the "test1" app as a single user simply navigate in a separate tab to `http://localhost`!)
-By default four users are shown. Click the "+" and "-" buttons in any user's view - the state of the counter is synced for all users!
+You are now using a developer tool which simulates multiple users using
+the "test1" app (to view the "test1" app normally simply navigate in a
+separate tab to `http://localhost`). By default four users are shown.
+Click the "+" and "-" buttons in any user's view - you'll see the state
+of the counter is synced for all users!
 
 This is probably the worst webapp ever, but it demonstrates the central aim of Hut: **facilitating shared experiences!**
 

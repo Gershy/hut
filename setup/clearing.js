@@ -8,23 +8,31 @@ if (!global.gsc) global.gsc = console.log;
 if (!global.rooms) { global.rooms = {}; gsc(`Notice: defaulted global.rooms`); }
 /// =ASSERT}
 
-{ // mmmmmmmmmmmmmmmmmmm
+if (!global.window) { // mmmmmmmmmmmmmmmmmmm
+  
   let mm = {};
   global.mmm = (term, val) => {
     if (!mm.has(term)) mm[term] = 0;
     mm[term] += val;
   };
-  global.mmm = v => v;
-  if (0) setInterval(() => {
+  setInterval(() => {
     
     let pairs = mm
-      .toArr((v, k) => v < 30 ? skip : [ k + ': ', v ])
+      .toArr((v, k) => (v < 50) ? skip : [ k + ': ', v ])
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([ k, v ]) => `${k.padTail(20)}${v}`);
     
-    console.log('METRIC---\n' + pairs.map(p => `  METRIC/${p}`).join('\n'));
+    if (pairs.length) console.log('METRIC\n' + pairs.map(p => `  METRIC/${p}`).join('\n'));
+    else              console.log('METRIC:none');
     
   }, 3000);
+  
+  //global.mmm = v => v;
+  
+} else {
+  
+  global.mmm = v => v;
+  
 }
 
 Object.assign(global, {
@@ -787,13 +795,7 @@ Object.assign(global, {
     
     init(fn) {
       
-      this['~mmm'] = global.foundation ? this.Form.name + ':: ' + global.foundation.formatError(Error('trace'))
-        .split('\n')
-        .slice(6)
-        .map(ln => ln.replace(/^[^a-zA-Z0-9]+/, ''))
-        .join(' / ') : this.Form.name;
-      
-      mmm(this['~mmm'], +1);
+      mmm(this.Form.name, +1);
       
       // Allow Endable.prototype.cleanup to be masked
       if (fn) Object.defineProperty(this, 'cleanup', { value: fn, enumerable: true, writable: true, configurable: true });
@@ -856,7 +858,7 @@ Object.assign(global, {
       
       Object.defineProperty(this, 'onn', Form.turnOffDefProp);
       debugUtil.globalEndableRegistry.rem(this);
-      this.cleanup(); mmm(this['~mmm'], -1);
+      this.cleanup(); mmm(this.Form.name, -1);
       return true;
       
     }

@@ -193,7 +193,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       // scheme, which in the case of Hut isn't an issue)
       socket.write(Buffer.concat([ metaBuff, dataBuff ]), 'utf8');
       
-    });
+    }, 'prm');
     
     return session;
     

@@ -11,7 +11,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
     
     /// {ABOVE=
     let { multiUserSim=null } = moreOpts;
-    if (multiUserSim === null) multiUserSim = foundation.seek('conf', 'deploy', 'maturity').val === 'dev';
+    if (multiUserSim === null) multiUserSim = foundation.conf('deploy.maturity') === 'dev';
     /// =ABOVE}
     
     Object.assign(this, {
@@ -144,8 +144,8 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
                 // page load due to limited parsing options within a
                 // string), shipped, and unencoded client-side
                 
-                ...foundation.getBelowConfArgs(),
                 hutId: src.uid,
+                ...foundation.getBelowConfArgs(),
                 ageMs: foundation.getMs(),
                 utcMs: Date.now(),
                 syncTell: initSyncTell

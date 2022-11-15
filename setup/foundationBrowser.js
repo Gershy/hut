@@ -124,6 +124,7 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
     //   calls to `this.getMs`, which are driven by `performance.now`,
     //   have their origin at this exact moment
     // - Add on the current age of ABOVE
+    
     Object.assign(this, { hutId, aboveOffsetMs: latencyMs - performance.now() + ageMs });
     
   },
@@ -165,7 +166,6 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
   },
   
   // Sandbox
-  soon(fn) { return fn ? Promise.resolve().then(fn) : Promise.resolve(); },
   getMs() { return performance.now() + this.aboveOffsetMs; },
   getUrl(arg /* { command, query } */, { fixed=false }={}) {
     
@@ -405,7 +405,7 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
   },
   createHttpServer({ hut, netIden, host, port }) {
     
-    let heartbeatMs = this.seek('conf', 'heartbeatMs').val;
+    let heartbeatMs = this.conf('heartbeatMs');
     heartbeatMs = Math.max(heartbeatMs * 0.9, heartbeatMs - 3000);
     
     let server = Tmp({
@@ -432,34 +432,39 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
         
         renewTimeout();
         
-        msg = { trn: 'async', hutId: this.hutId, command: 'bp', ...msg }; // TODO: Would be nice to wrap `msg` to avoid property collisions
-        
         server.activeReqs++;
         try {
           
           let res = await fetch('/', {
             method: 'post'.upper(),
             headers: { 'Content-Type': 'application/json; charset=utf-8' },
-            body: valToJson(msg),
+            body: valToJson({ trn: 'async', hutId: this.hutId, command: 'bp', ...msg }), // TODO: Would be nice to wrap `msg` to avoid property collisions
             signal: server.abort.signal,
             redirect: 'error'
           });
-        
+          
+          if (res.status > 400) throw Error(`Bad request (${res.status})`);
+          
           // Process response as a Tell
           let ms = this.getMs();
-          let data = await res.json();
+          let data = (res.status === 204) ? null : await res.json();
           if (data !== null) session.hear.send({ ms, reply: null, msg: data });
           
         } catch (err) {
           
           route.end();
-          if (!err.message.has('abort')) throw err;
+          if (err?.message.has('abort')) gsc(`Http fetch aborted (ignore; presumably unloading!)`);
+          else {
+            gsc(`Error with http fetch (refreshing)`, err);
+            this.restart();
+          }
+          
           
         }
         server.activeReqs--;
         
         // Ensure at least 1 banked poll is always available
-        if (server.activeReqs < 1) session.tell.send('');
+        if (server.activeReqs < 1) this.soon().then(() => session.tell.send(''), 100);
         
       });
       session.endWith(route);

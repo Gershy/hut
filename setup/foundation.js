@@ -38,7 +38,7 @@ global.Foundation = form({ name: 'Foundation', pars: { Endable, Slots }, props: 
   initDateMs: Date.now(), // Marks when the class was defined, not when the instance was instantiated
   getMs() { return Date.now() - this.initDateMs; },
   getUid() { return (Number.int64 * Math.random()).encodeStr(String.base62, 10); }, // Avg. string length is 10.95
-  soon: C.noFn('soon', (fn=null) => { /* Promise */ }),
+  soon() { return Promise.resolve(); },
   getRawUrl({ path='', command=path, ...query }) {
     
     // Returns a url without any consideration of caching

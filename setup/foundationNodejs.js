@@ -254,7 +254,11 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
     'dev': { // Installed at `global.gsc` during `FoundationNodejs(...).configure`
       enabled: true,
       format: (f, p, ...args) => {
-        return args.map(arg => hasForm(arg, Error) ? f.formatError(arg) : f.formatAnyValue(arg)).join('\n');
+        let { depth=10 } = p;
+        return args.map(arg => {
+          if (hasForm(arg, Error)) return f.formatError(arg);
+          else                     return f.formatAnyValue(arg, { depth });
+        }).join('\n');
       }
     },
     
@@ -521,7 +525,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       enabled: false
     },
     
-    'warning': { enabled: true, format: () => '' }
+    'warning': { enabled: true, format: () => skip }
     
   },
   $odeToThePioneer: String.multiline(`
@@ -643,13 +647,8 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
             
             if (val === Array.stub) return '[ ... ]';
             
-            //let withAnsi = (val && val.Form)
-            //  ? (val.desc ? val.desc() : `${getFormName(val)}(...)`)
-            //  : require('util').inspect(val, { colors: true, depth: 10 }).replace(/\n\s*/g, ' ');
             let withAnsi = val?.Form
-              ? (val.desc instanceof Function
-                ? val.desc()
-                : getFormName(val))
+              ? (val.desc instanceof Function ? val.desc() : getFormName(val))
               : require('util').inspect(val, { colors: true, depth: 10 }).replace(/\n\s*/g, ' ');
             
             // Limiting length of the resulting string is a bit non-trivial
@@ -802,8 +801,6 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
     let conf = this.seek('conf');
     return {
       
-      // dns: conf.seek('dns').val,
-      
       // Note Above -> Below mapping:
       // - conf/"network.heartbeat.ms" -> conf/"heartbeatMs"
       // - conf/"deploy.maturity" -> conf/"maturity"
@@ -825,8 +822,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
   
   // Sandbox
   getMs: require('perf_hooks').performance.now,
-  soon(fn=null) { return fn ? setImmediate(fn) : Promise(r => setImmediate(r)); },
-  formatAnyValue(val) { return require('util').inspect(val, { colors: true, depth: 10 }); },
+  formatAnyValue(val, { depth=10 }={}) { return require('util').inspect(val, { colors: true, depth }); },
   
   // Services
   createKeep(opts={}) { return Form.KeepNodejs(); },
@@ -1738,6 +1734,12 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       
       return thenAll(args, args => {
         
+        let depth = 10;
+        if (isForm(args[0], String) && /^[!][!][0-9]+$/.test(args[0])) {
+          depth = parseInt(args[0].slice(2), 10);
+          args = args.slice(1);
+        }
+        
         // TODO: Put metadata like current time into that logged json??
         let now = Date.nowStr();
         if (q) q = q.then(async pipe => {
@@ -1754,12 +1756,14 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         // args to a single String
         let formattedArgs = args;
         if (data.has('format')) {
-          let formatted = data.format(this, data, ...args);
+          if (args.has('ROADS')) console.log({ ...data, depth });
+          let formatted = data.format(this, { ...data, depth }, ...args);
           if (!formatted) return;
           formattedArgs = formatted.split(/\r?\n/);
         } else {
           formattedArgs = args.map(v => {
-            if (!isForm(v, String)) v = this.formatAnyValue(v);
+            console.log({ depth });
+            if (!isForm(v, String)) v = this.formatAnyValue(v, { depth });
             return v.split(/\r?\n/);
           }).flat();
         }
@@ -1822,6 +1826,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         // At this point `session.key` is either the preexisting hid of
         // a Hut, or a never-before-seen hid that we can be certain is
         // authenticated to be used as the hid of a new Hut
+        gsc('GET ROADED HUT');
         let srcHut = hut.getRoadedHut(server, session, session.key).hut;
         if (!srcHut) return session.end();
         
@@ -1949,6 +1954,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         compression,
         
         subcon: this.subcon('network.sokt.raw'),
+        errSubcon: this.subcon('warning'),
         
         msFn: () => this.getMs(),
         getKey: ({ query: { trn='async', hutId=null } }) => {

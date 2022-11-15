@@ -430,6 +430,12 @@ global.rooms['record'] = async foundation => {
       forms.Endable.init.call(this);
       forms.Src.init.call(this);
       
+      // this.mzz = 'RelHandler/' + foundation.formatError(Error('trace'))
+      //   .split('\n')
+      //   .slice(3)
+      //   .map(ln => ln.replace(/^[^a-zA-Z0-9]+/, ''))
+      //   .join(' / ');
+      
       /// {BELOW=
       
       // Below receives a pre-processed list of Hrecs; there's never a
@@ -679,7 +685,7 @@ global.rooms['record'] = async foundation => {
     
     cleanup() {
       
-      if (this.rec.relHandlers[this.key]) mmm('relHandlers', -1);
+      if (this.rec.relHandlers[this.key]) mmm('relHandler', -1);
       delete this.rec.relHandlers[this.key];
       
       for (let [ uid, hrec ] of this.hrecs) hrec.end();
@@ -980,12 +986,13 @@ global.rooms['record'] = async foundation => {
       
       if (!this.relHandlers[key]) {
         
-        mmm('relHandlers', +1);
         this.relHandlers[key] = RelHandler(this.type.manager, {
           key, rec: this, type, term,
           offset, limit, fixed,
           ...opts
         });
+        
+        mmm('relHandler', +1);
         
       } else {
         

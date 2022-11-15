@@ -3,15 +3,18 @@ global.rooms['internal.real.htmlBrowser.Keep'] = async foundation => {
   let Layout = await foundation.getRoom('internal.real.generic.Layout');
   
   return form({ name: 'Keep', has: { Layout }, props: (forms, Form) => ({
-    init: function({ protocol=null, uri, keepText=null }={}) {
+    init: function({ protocol=null, uri, keepText=null, mode='separate' }={}) {
       
       // Note that a url is essentially a (protocol, uri)
       
       // Setting `protocol === null` will allow the client's agent to
       // determine the protocol to use to access `uri`
       
+      if (!isForm(mode, String)) throw Error(`Mode must be String (got ${getFormName(mode)})`);
+      if (![ 'separate', 'replace' ].has(mode)) throw Error(`Mode must be "separate" or "replace" (got ${mode})`);
+      
       if (!uri) throw Error(`Must provide "uri"`);
-      Object.assign(this, { protocol, uri, keepText });
+      Object.assign(this, { protocol, uri, keepText, mode });
       
     },
     install: function(real) {
@@ -23,7 +26,7 @@ global.rooms['internal.real.htmlBrowser.Keep'] = async foundation => {
       
       let anchor = document.createElement('a');
       anchor.classList.add('keep');
-      anchor.setAttribute('target', '_blank');
+      anchor.setAttribute('target', (this.mode === 'separate') ? '_blank' : '_self');
       
       Object.assign(anchor.style, { fontSize: '100%', textAlign: 'inherit', fontFamily: 'inherit', color: 'inherit' });
       
