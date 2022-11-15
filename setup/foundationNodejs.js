@@ -521,7 +521,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       enabled: false
     },
     
-    'warning': { enabled: true, format: () => '' }
+    'warning': { enabled: true } //, format: () => '' }
     
   },
   $odeToThePioneer: String.multiline(`

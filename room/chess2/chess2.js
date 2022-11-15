@@ -418,7 +418,7 @@ global.rooms['chess2'] = async foundation => {
       // implementing this functionality I would need a way to detect
       // Record-End events (maybe via RelHandler(...).getAuditSrc()??)
       // to apply decrements
-      chess2.setValue({ numPlayers: 0, numQueued: 0 });
+      chess2.setValue({ numPlayers: 0, numQueued: 0, numMatches: 0 });
       dep.scp(chess2, 'c2.player', (player, dep) => {
         chess2.setValue(val => void val.numPlayers++);
         dep(() => chess2.setValue(val => void val.numPlayers--));
@@ -427,6 +427,10 @@ global.rooms['chess2'] = async foundation => {
         chess2.setValue(val => void val.numQueued++);
         dep(() => chess2.setValue(val => void val.numQueued--));
       });
+      dep.scp(chess2, 'c2.match', (match, dep) => {
+        chess2.setValue(val => void val.numMatches++);
+        dep(() => chess2.setValue(val => void val.numMatches--));
+      });
       
       // Create Player Records for each Hut that joins
       dep.scp(hut, 'hut.owned/par', (owned, dep) => {
@@ -434,15 +438,13 @@ global.rooms['chess2'] = async foundation => {
         let kidHut = owned.m('kid');
         
         let playerRh = dep(kidHut.rh('c2.player'));
-        let timerSrc = dep(TimerSrc({ ms: 1000 })).route(() => kidHut.end());
+        let timerSrc = dep(TimerSrc({ ms: 1000 }));
         
-        gsc(`${kidHut.desc()} has 1 second to create player`);
+        gsc(`${kidHut.desc()} has 1 sec to create player`);
         timerSrc.route(() => gsc(`${kidHut.desc()} FAILED to create player!`));
+        timerSrc.route(() => kidHut.end());
         playerRh.route(() => gsc(`${kidHut.desc()} created player!`));
-        playerRh.route(() => {
-          timerSrc.end();
-          playerRh.end();
-        });
+        playerRh.route(() => { timerSrc.end(); playerRh.end(); });
         
       });
       
@@ -602,13 +604,17 @@ global.rooms['chess2'] = async foundation => {
         chillReal.addReal('info', lay.text('You\'re playing Chess2!' ));
         chillReal.addReal('info', lay.text(`Opponents will know you as "${player.getValue('term')}"`));
         let numPlayersReal = chillReal.addReal('info', lay.text());
+        let numMatchesReal = chillReal.addReal('info', lay.text());
         chillReal.addReal('gap', lay.gap());
         chillReal.addReal('queue', lay.button('Find a match!', () => changeStatusAct.act({ status: 'queue' })));
         chillReal.addReal('learn', lay.button('How to play', () => changeStatusAct.act({ status: 'learn' })));
         
         /// {BELOW=
         let numPlayersSrc = dep(chess2.getValuePropSrc('numPlayers'));
-        dep(numPlayersSrc.route(num => numPlayersReal.mod({ text: `Number of players online: ${num}` })));
+        dep(numPlayersSrc.route(num => numPlayersReal.mod({ text: `Players online: ${num}` })));
+        
+        let numMatchesSrc = dep(chess2.getValuePropSrc('numMatches'));
+        dep(numMatchesSrc.route(num => numMatchesReal.mod({ text: `Matches in progress: ${num}` })));
         /// =BELOW}
         
       };
@@ -768,7 +774,7 @@ global.rooms['chess2'] = async foundation => {
         let tileCoord = (col, row) => ({ x: tileVal(col), y: tileVal(7 - row) });
         
         for (let col of 8) for (let row of 8) {
-          let colour = ((col % 2) === (row % 2)) ? 'white' : 'black';
+          let colour = ((col % 2) !== (row % 2)) ? 'white' : 'black';
           boardReal.addReal('c2.tile', [
             { form: 'Geom', anchor: 'tl', w: tileVal(1), h: tileVal(1), ...tileCoord(col, row) },
             { form: 'Decal', ...tileDecals[colour] }
