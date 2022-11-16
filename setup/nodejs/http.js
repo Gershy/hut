@@ -4,10 +4,7 @@ require('../clearing.js');
 
 module.exports = {
   
-  defaultPorts: {
-    http: 80,
-    https: 443
-  },
+  defaultPorts: { http: 80, https: 443 },
   
   resolveAddr: (args={}) => {
     
@@ -17,6 +14,8 @@ module.exports = {
       
       [ addr, proto, host, port=null, path=null ] = addr
         .match(/^([a-zA-Z0-9-]+)[:][/][/]([a-zA-Z0-9.-]+)([:][0-9]+)?([/].*$)/);
+      
+      if (port) port = parseInt(port.slice(1), 10);
       
     } else {
       

@@ -85,7 +85,7 @@ if (1) { // Low-level debug
   
   let enabled = true;
   let intervalMs = 5000;
-  let showThreshold = 5;
+  let showThreshold = 300;
   let mm = {};
 
   global.mmm = (term, val) => {

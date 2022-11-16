@@ -22,6 +22,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     mmm('soktSessions', +1);
     let session = Tmp({
       key,
+      desc: () => `SoktSession(ws${secure ? 's' : ''}://${netAddr}:${port} / ${key})`,
       currentCost: () => 0.3,
       knownNetAddrs: Set([ socket.remoteAddress ]),
       tell: Src(),

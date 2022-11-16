@@ -446,8 +446,9 @@ global.rooms['chess2'] = async foundation => {
         
         timerSrc.route(() => gsc(`${desc} FAILED to create player!`), 'prm');
         timerSrc.route(() => kidHut.end(), 'prm');
-        playerRh.route(hrec => gsc(`${desc} created player! (${hrec.rec.getValue('term')})`));
-        playerRh.route(() => { timerSrc.end(); playerRh.end(); });
+        
+        dep(playerRh.route(hrec => gsc(`${desc} created player! (${hrec.rec.getValue('term')})`)));
+        dep(playerRh.route(() => { timerSrc.end(); playerRh.end(); }));
         
       });
       
@@ -607,6 +608,7 @@ global.rooms['chess2'] = async foundation => {
       };
       let nodeChill = (dep, real, { player, status, changeStatusAct }) => {
         
+        /// {BELOW=
         let chillReal = dep(real.addReal('chill', [
           { form: 'Geom', w: '100%', h: '100%' },
           { form: 'Axis1d', axis: 'y', dir: '+', mode: 'compactCenter' }
@@ -618,8 +620,9 @@ global.rooms['chess2'] = async foundation => {
         chillReal.addReal('gap', lay.gap());
         chillReal.addReal('queue', lay.button('Find a match!', () => changeStatusAct.act({ status: 'queue' })));
         chillReal.addReal('learn', lay.button('How to play', () => changeStatusAct.act({ status: 'learn' })));
+        chillReal.addReal('gap', lay.gap());
+        chillReal.addReal('item', lay.text('Sorry for any bugs! Chess2 is only getting better!', tsM2));
         
-        /// {BELOW=
         let numPlayersSrc = dep(chess2.getValuePropSrc('numPlayers'));
         dep(numPlayersSrc.route(num => numPlayersReal.mod({ text: `Players online: ${num}` })));
         
@@ -647,6 +650,7 @@ global.rooms['chess2'] = async foundation => {
         learnReal.addReal('item', lay.textFwd('- The same piece may not move twice in a row'));
         learnReal.addReal('item', lay.textFwd('- Kings are never considered to be in check'));
         learnReal.addReal('item', lay.textFwd('- Win by capturing, not checkmating, the enemy\'s king!'));
+        learnReal.addReal('item', lay.textFwd('- No en passant!'));
         learnReal.addReal('item', lay.textFwd('- Players may always choose to pass instead of play a move'));
         learnReal.addReal('item', lay.textFwd('- Failing to submit a move within the time limit results in passing'));
         learnReal.addReal('item', lay.textFwd('- If both players pass simultaneously the game ends in a draw'));

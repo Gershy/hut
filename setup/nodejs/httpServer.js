@@ -60,6 +60,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     let session = Tmp({
       
       key,
+      desc: () => `HttpSession(http${secure ? 's' : ''}://${netAddr}:${port} / ${key})`,
       currentCost: () => session.queueRes.length ? 0.5 : 0.75,
       
       timeout: null,
@@ -74,10 +75,19 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     });
     
     // Messages from the Client reset the heartbeat
-    if (session.key !== null) session.hear.route(() => {
-      clearTimeout(session.timeout);
-      session.timeout = setTimeout(() => session.end(), heartbeatMs);
-    }, 'prm');
+    if (session.key !== null) {
+      
+      session.hear.route(() => {
+        clearTimeout(session.timeout);
+        session.timeout = setTimeout(() => session.end(), heartbeatMs);
+      }, 'prm');
+      
+    } else {
+      
+      // Always end anon Sessions eventually
+      session.timeout = setTimeout(() => session.end(), 10000);
+      
+    }
     
     // Trying to send a Message with the Session either uses a queued
     // Response Object to send the message immediately, or queues the
@@ -92,6 +102,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       for (let pkg of session.queueRes) { pkg.used = true; pkg.res.writeHead(204).end(); }
       session.queueRes = Array.stub;
       session.queueMsg = Array.stub;
+      clearTimeout(session.timeout);
     });
     
     return session;

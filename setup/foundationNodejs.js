@@ -1755,7 +1755,6 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
           formattedArgs = formatted.split(/\r?\n/);
         } else {
           formattedArgs = args.map(v => {
-            console.log({ depth });
             if (!isForm(v, String)) v = this.formatAnyValue(v, { depth });
             return v.split(/\r?\n/);
           }).flat();
@@ -1799,7 +1798,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
     let anonHut = { isAfar: true, isHere: false, roadSrcs: Set.stub };
     
     // This Route directs Hears/Tells between the Session and the Hut
-    server.src.route(async session => {
+    server.src.route(session => {
       
       if (session.key === null) {
         

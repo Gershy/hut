@@ -490,7 +490,7 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
       src: Src()
     });
     
-    server.src.route(async session => {
+    server.src.route(session => {
       
       server.endWith(session);
       

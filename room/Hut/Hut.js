@@ -279,7 +279,10 @@ global.rooms['Hut'] = async foundation => {
         
         mmm('roadedHuts', +1);
         this.roadedHuts.set(hutId, { hut, roads: Map(/* Server => Road */) });
-        hut.endWith(() => mmm('roadedHuts', -1) || this.roadedHuts.rem(hutId));
+        hut.endWith(() => {
+          let { roads } = this.roadedHuts.get(hutId);
+          for (let [ , road ] of roads) road.end();
+        });
         
         subcon({ type: 'join', hut: hut.desc() });
         hut.endWith(() => subcon({ type: 'exit', hut: hut.desc() }));
@@ -936,7 +939,8 @@ global.rooms['Hut'] = async foundation => {
       forms.Record.cleanup.call(this);
       
       /// {ABOVE=
-      for (let [ uid, { hut, roads } ] of this.roadedHuts ?? []) for (let [ server, road ] of roads) road.end();
+      let roadedHuts = this.roadedHuts ?? [];
+      for (let [ uid, { hut, roads } ] of roadedHuts) for (let [ server, road ] of roads) road.end();
       this.roadedHuts = Map.stub;
       
       this.pendingSync = Object.freeze({ add: Object.stub, upd: Object.stub, rem: Object.stub });
