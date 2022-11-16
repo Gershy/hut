@@ -17,6 +17,9 @@ global.rooms['record.bank.TransientBank'] = async foundation => {
       this.recs.set(rec.uid, rec);
       rec.endWith(() => { this.recs.rem(rec.uid); rec.endedPrm = null; });
       
+      mmm('transientBankRec', +1);
+      rec.endWith(() => mmm('transientBankRec', -1));
+      
     },
     syncSer(manager, { add=[], upd=[], rem=[] }) {
       

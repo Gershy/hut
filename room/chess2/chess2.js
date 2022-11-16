@@ -18,8 +18,8 @@ global.rooms['chess2'] = async foundation => {
   let moveMs = (isDev ? 10 : 60) * 1000;
   let enterMs = (isDev ? 0.1 : 2) * 1000;
   let matchmakeMs = (isDev ? 1 : 5) * 1000;
-  let tsM2 = 'calc(67% + 0.75vmin)';
-  let tsM1 = 'calc(72% + 0.80vmin)';
+  let tsM2 = 'calc(70% + 0.78vmin)';
+  let tsM1 = 'calc(75% + 0.82vmin)';
   let ts00 = 'calc(80% + 0.85vmin)';
   let tsP1 = 'calc(90% + 1.00vmin)';
   let lay = {
@@ -444,8 +444,8 @@ global.rooms['chess2'] = async foundation => {
         
         let desc = kidHut.desc() + ' @ ' + kidHut.getKnownNetAddrs().toArr(v => v).join('+');
         
-        timerSrc.route(() => gsc(`${desc} FAILED to create player!`));
-        timerSrc.route(() => kidHut.end());
+        timerSrc.route(() => gsc(`${desc} FAILED to create player!`), 'prm');
+        timerSrc.route(() => kidHut.end(), 'prm');
         playerRh.route(hrec => gsc(`${desc} created player! (${hrec.rec.getValue('term')})`));
         playerRh.route(() => { timerSrc.end(); playerRh.end(); });
         
@@ -487,7 +487,7 @@ global.rooms['chess2'] = async foundation => {
         
         // If the timer expires perform any submitted moves
         let timerSrc = dep(TimerSrc({ ms: moveMs }));
-        timerSrc.route(() => resolveRound(moveSetSrc.tmps));
+        timerSrc.route(() => resolveRound(moveSetSrc.tmps), 'prm');
         
       }));
       
@@ -519,6 +519,9 @@ global.rooms['chess2'] = async foundation => {
             let match = hut.addRecord('c2.match', [ chess2 ], { ms });
             match.endWith(() => { gsc(`MATCH ENDED (white:${pw.getValue('term')} vs black:${pb.getValue('term')})`); });
             
+            mmm('chess2Match', +1);
+            match.endWith(() => mmm('chess2Match', -1));
+            
             // Initial Round of Match
             hut.addRecord('c2.round', [ match ], { ms: Date.now() });
             
@@ -549,7 +552,7 @@ global.rooms['chess2'] = async foundation => {
           
         }
         
-      });
+      }, 'prm');
       
       /// =ABOVE}
       
@@ -571,6 +574,8 @@ global.rooms['chess2'] = async foundation => {
           /// {ABOVE=
           let termTmp = termBank.hold();
           let player = hut.addRecord('c2.player', [ chess2, hut ], { term: termTmp.term, status: 'chill' });
+          mmm('chess2Player', +1);
+          player.endWith(() => mmm('chess2Player', -1));
           player.endWith(termTmp);
           
           // Add a "status" property to the Player
@@ -589,7 +594,7 @@ global.rooms['chess2'] = async foundation => {
         }));
         
         /// {BELOW=
-        dep(TimerSrc({ ms: 500 })).route(() => createPlayerAct.act());
+        dep(TimerSrc({ ms: 500 })).route(() => createPlayerAct.act(), 'prm');
         let paneReal = dep(real.addReal('c2.pane', [
           { form: 'Geom', w: '80%', h: '80%', anchor: 'cen' },
           { form: 'Axis1d', axis: 'y', mode: 'compactCenter' },
@@ -647,7 +652,7 @@ global.rooms['chess2'] = async foundation => {
         learnReal.addReal('item', lay.textFwd('- If both players pass simultaneously the game ends in a draw'));
         learnReal.addReal('item', lay.gap());
         learnReal.addReal('item', lay.text('Chess2 by Gershom Maes'));
-        learnReal.addReal('item', lay.link('(Hut also by Gershom Maes)', 'https://github.com/Gershy/hut', ts00, { protocol: 'https' }));
+        learnReal.addReal('item', lay.link('(Hut also by Gershom Maes)', 'github.com/Gershy/hut', { protocol: 'https' }));
         learnReal.addReal('item', lay.gap());
         learnReal.addReal('item', lay.button('Click to go back', () => changeStatusAct.act({ status: 'chill' })));
         learnReal.addReal('item', lay.gap('3em'));
@@ -712,7 +717,9 @@ global.rooms['chess2'] = async foundation => {
           
           let waitTimeReal = contentReal.addReal('item', lay.text(''));
           let waitSrc = dep(TimerSrc({ num: Infinity, ms: 150 }));
-          waitSrc.route(({ ms }) => waitTimeReal.mod({ text: `You've been waiting ${(ms / (60 * 1000)).toFixed(1)} mins...` }));
+          waitSrc.route(({ ms }) => {
+            waitTimeReal.mod({ text: `You've been waiting ${(ms / (60 * 1000)).toFixed(1)} mins...` })
+          }, 'prm');
           
           contentReal.addReal('gap', lay.gap());
           contentReal.addReal('leaveQueue', lay.button('Stop matching!', () => leaveQueueAct.act()));
@@ -750,6 +757,10 @@ global.rooms['chess2'] = async foundation => {
         
         let myPlayerHolderReal = (myColour === 'white') ? whitePlayerHolderReal : blackPlayerHolderReal;
         
+        // Get a Chooser for our MatchPlayer's Moves! (We'll need it...)
+        let roundMoveRh = dep(matchPlayer.rh('c2.roundMove'));
+        let roundMoveChooser = dep(Chooser(roundMoveRh));
+        
         dep.scp(match, 'c2.matchPlayer', (mp, dep) => {
           
           let term = mp.getValue('term');
@@ -763,8 +774,6 @@ global.rooms['chess2'] = async foundation => {
           
           // Show when we're waiting for our Opponent to move
           if (mp !== matchPlayer) {
-            let roundMoveRh = dep(matchPlayer.rh('c2.roundMove'));
-            let roundMoveChooser = dep(Chooser(roundMoveRh));
             dep.scp(roundMoveChooser.srcs.off, (noRm, dep) => playerReal.mod({ text: term }));
             dep.scp(roundMoveChooser.srcs.onn, (rm, dep) => playerReal.mod({ text: `${term} (waiting for move...)` }));
           }
@@ -871,9 +880,8 @@ global.rooms['chess2'] = async foundation => {
             
             timeBarReal.mod({ w: `${Math.round(amt * 100)}%` });
             
-          });
+          }, 'prm');
           
-          let roundMoveChooser = dep(Chooser(matchPlayer.rh('c2.roundMove')));
           dep.scp(roundMoveChooser.srcs.off, (noRoundMove, dep) => {
             
             let submitMoveAct = dep(hut.enableAction('c2.submitMove', async move => {

@@ -25,6 +25,8 @@ global.rooms['logic.Chooser'] = async foundation => {
       this.activeSrcName = names[0];
       this.srcs[this.activeSrcName].mod(Tmp({ '~chooserInternal': true }));
       
+      let err = Error('ctrace');
+      
       if (src) {
         
         if (!src.srcFlags.tmpsOnly) throw Error(`Provided ${getFormName(src)} doesn't only send Tmps`);

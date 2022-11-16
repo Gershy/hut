@@ -230,6 +230,8 @@ global.rooms['Hut'] = async foundation => {
         
       });
       
+      mmm('hut', +1);
+      
       /// {ABOVE=
       if (this.isHere) {
         this.ownedHutRh = this.relHandler('hut.owned/par'); // Get 'hut.owned' Recs where `this` is the Par
@@ -335,9 +337,8 @@ global.rooms['Hut'] = async foundation => {
       if (!this.parHut) return Set.stub;
       
       let roadedHut = this.parHut.roadedHuts.get(this.uid);
-      
-      let addrs = roadedHut.roads.toArr(road => road.knownNetAddrs.toArr(v => v)).flat(1);
-      return Set(addrs);
+      if (!roadedHut) return Set();
+      return Set(roadedHut.roads.toArr(road => road.knownNetAddrs.toArr(v => v)).flat(1));
       
     },
     /// =ABOVE}
@@ -749,6 +750,7 @@ global.rooms['Hut'] = async foundation => {
         
         if (!allFollows[rec.uid]) allFollows[rec.uid] = Object.plain(); // Reference the new Follow #1
         allFollows[rec.uid][hutUid] = followTmp;                        // Reference the new Follow #2
+        mmm('follow', +1);
         this.followedRecs.add(rec);                                     // Link the Hut to the Record
         this.toSync('add', rec);                                        // Generate an "add" sync item
         let valRoute = rec.valueSrc.route(delta => {                    // New values become "upd" syncs
@@ -758,6 +760,7 @@ global.rooms['Hut'] = async foundation => {
         followTmp.route(() => { // Cleanup when the Follow ends
           
           delete allFollows[rec.uid][hutUid];                          // Unreference #1
+          mmm('follow', -1);
           let empty = true;                                            // Check if...
           for (let k in allFollows[rec.uid]) { empty = false; break; } // ... no more huts ref this Record...
           if (empty) delete allFollows[rec.uid];                       // ... and if not clear up memory!
@@ -929,6 +932,7 @@ global.rooms['Hut'] = async foundation => {
     
     cleanup() {
       
+      mmm('hut', -1);
       forms.Record.cleanup.call(this);
       
       /// {ABOVE=

@@ -430,11 +430,6 @@ global.rooms['record'] = async foundation => {
       forms.Endable.init.call(this);
       forms.Src.init.call(this);
       
-      // this.mzz = 'RelHandler/' + foundation.formatError(Error('trace'))
-      //   .split('\n')
-      //   .slice(3)
-      //   .map(ln => ln.replace(/^[^a-zA-Z0-9]+/, ''))
-      //   .join(' / ');
       
       /// {BELOW=
       
@@ -685,7 +680,7 @@ global.rooms['record'] = async foundation => {
     
     cleanup() {
       
-      if (this.rec.relHandlers[this.key]) mmm('relHandler', -1);
+      mmm('relHandlerRef', -1);
       delete this.rec.relHandlers[this.key];
       
       for (let [ uid, hrec ] of this.hrecs) hrec.end();
@@ -739,6 +734,9 @@ global.rooms['record'] = async foundation => {
         bankedPrm: null
         
       });
+      
+      mmm('record', +1);
+      this.endWith(() => mmm('record', -1));
       
       // Apply Banking
       let err = Error('');
@@ -991,8 +989,7 @@ global.rooms['record'] = async foundation => {
           offset, limit, fixed,
           ...opts
         });
-        
-        mmm('relHandler', +1);
+        mmm('relHandlerRef', +1);
         
       } else {
         
@@ -1158,9 +1155,9 @@ global.rooms['record'] = async foundation => {
       this.valueSrc.end();
       this.valueSrc.val = val;
       
-      let origRhs = this.relHandlers;
+      let rhs = Object.values(this.relHandlers);
       this.relHandlers = Object.stub;
-      for (let rh of Object.values(origRhs)) rh.end();
+      for (let rh of rhs) rh.end();
       
     }
     

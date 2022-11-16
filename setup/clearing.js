@@ -18,7 +18,7 @@ if (!global.window) { // mmmmmmmmmmmmmmmmmmm
   setInterval(() => {
     
     let pairs = mm
-      .toArr((v, k) => (v < 50) ? skip : [ k + ': ', v ])
+      .toArr((v, k) => (v < 30) ? skip : [ k + ': ', v ])
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([ k, v ]) => `${k.padTail(20)}${v}`);
     
@@ -795,7 +795,13 @@ Object.assign(global, {
     
     init(fn) {
       
-      mmm(this.Form.name, +1);
+      // if (global.foundation) this.zzz = this.Form.name + ': ' + global.foundation.formatError(Error('trace'))
+      //   .split('\n')
+      //   .slice(4)
+      //   .map(ln => ln.replace(/^[^a-zA-Z0-9]+/, ''))
+      //   .join(' / ');
+      
+      mmm(this.zzz ?? this.Form.name, +1);
       
       // Allow Endable.prototype.cleanup to be masked
       if (fn) Object.defineProperty(this, 'cleanup', { value: fn, enumerable: true, writable: true, configurable: true });
@@ -858,7 +864,7 @@ Object.assign(global, {
       
       Object.defineProperty(this, 'onn', Form.turnOffDefProp);
       debugUtil.globalEndableRegistry.rem(this);
-      this.cleanup(); mmm(this.Form.name, -1);
+      this.cleanup(); mmm(this.zzz ?? this.Form.name, -1);
       return true;
       
     }

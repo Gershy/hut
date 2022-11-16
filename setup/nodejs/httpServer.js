@@ -470,7 +470,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       res.once('close', abortFn);
       
       // Don't hold too many Responses for this Session
-      while (session.queueRes.length > 2) { // TODO: Parameterize "maxBankedResponses"?
+      while (session.queueRes.length > 1) { // TODO: Parameterize "maxBankedResponses"?
         let pkg = session.queueRes.shift();
         pkg.used = true;
         pkg.res.writeHead(204).end();

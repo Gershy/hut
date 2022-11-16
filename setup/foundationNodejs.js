@@ -261,6 +261,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         }).join('\n');
       }
     },
+    'warning': { enabled: true },
     
     'bank': {
       desc: String.baseline(`
@@ -524,8 +525,6 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       `),
       enabled: false
     },
-    
-    'warning': { enabled: true, format: () => skip }
     
   },
   $odeToThePioneer: String.multiline(`
@@ -1756,7 +1755,6 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         // args to a single String
         let formattedArgs = args;
         if (data.has('format')) {
-          if (args.has('ROADS')) console.log({ ...data, depth });
           let formatted = data.format(this, { ...data, depth }, ...args);
           if (!formatted) return;
           formattedArgs = formatted.split(/\r?\n/);
@@ -1826,7 +1824,6 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         // At this point `session.key` is either the preexisting hid of
         // a Hut, or a never-before-seen hid that we can be certain is
         // authenticated to be used as the hid of a new Hut
-        gsc('GET ROADED HUT');
         let srcHut = hut.getRoadedHut(server, session, session.key).hut;
         if (!srcHut) return session.end();
         
