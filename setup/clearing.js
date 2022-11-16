@@ -6,34 +6,8 @@
 if (!global) throw Error(`"global" must be available`);
 if (!global.gsc) global.gsc = console.log;
 if (!global.rooms) { global.rooms = {}; gsc(`Notice: defaulted global.rooms`); }
+if (!global.mmm) global.mmm = v => v;
 /// =ASSERT}
-
-if (!global.window) { // mmmmmmmmmmmmmmmmmmm
-  
-  let mm = {};
-  global.mmm = (term, val) => {
-    if (!mm.has(term)) mm[term] = 0;
-    mm[term] += val;
-  };
-  setInterval(() => {
-    
-    let pairs = mm
-      .toArr((v, k) => (v < 30) ? skip : [ k + ': ', v ])
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([ k, v ]) => `${k.padTail(20)}${v}`);
-    
-    if (pairs.length) console.log('METRIC\n' + pairs.map(p => `  METRIC/${p}`).join('\n'));
-    else              console.log('METRIC:none');
-    
-  }, 3000);
-  
-  //global.mmm = v => v;
-  
-} else {
-  
-  global.mmm = v => v;
-  
-}
 
 Object.assign(global, {
   AsyncFunction: (async () => {}).constructor,

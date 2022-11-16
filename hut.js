@@ -81,6 +81,37 @@ Object.assign(global, {
   rooms: Object.create(null)
 });
 
+if (1) { // Low-level debug
+  
+  let enabled = true;
+  let intervalMs = 5000;
+  let showThreshold = 5;
+  let mm = {};
+
+  global.mmm = (term, val) => {
+    if (!mm.has(term)) mm[term] = 0;
+    mm[term] += val;
+  };
+  (async () => {
+    
+    while (true) {
+      
+      await new Promise(rsv => setTimeout(rsv, intervalMs));
+      
+      let pairs = mm
+        .toArr((v, k) => (v < showThreshold) ? skip : [ k + ': ', v ])
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([ k, v ]) => `${k.padTail(20)}${v}`);
+      
+      if (pairs.length) console.log('METRIC\n' + pairs.map(p => `  METRIC/${p}`).join('\n'));
+      else              console.log('METRIC:none');
+      
+    }
+    
+  })();
+  
+}
+
 // Do setup
 require('./setup/clearing.js');
 require('./setup/foundationNodejs.js');

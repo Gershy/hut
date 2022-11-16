@@ -27,13 +27,14 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       tell: Src(),
       hear: Src()
     });
-    session.endWith(() => mmm('soktSessions', -1) || socket.end());
+    session.endWith(() => mmm('soktSessions', -1));
     
     // Logic to track socket state and parse messages from binary
     let curOp = null;
     let curFrames = [];
     let curSize = 0;
-    let sendMsgs = (ms=opts.msFn()) => { try { while (buff.length >= 2 && session.onn()) {
+    
+    let hearSoktMessages = (ms=opts.msFn()) => { try { while (buff.length >= 2 && session.onn()) {
       
       // ==== PARSE FRAME
       
@@ -80,6 +81,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
       // The following operations can occur regardless of socket state
       if (op === 8) {         // Process "close" op
+        gsc('SESSION ENDED!!');
         return session.end(); // Socket ended
       } else if (op === 9) {  // Process "ping" op
         throw Error('Unimplemented op: 9');
@@ -96,7 +98,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
       // Text ops are our ONLY supported ops! (TODO: For now?)
       if (op !== 1) throw Error(`Unsupported op: ${op}`);
-      if (curSize + data.length > 100000) throw Error(`Limit of 100000 bytes exceeded!`);
+      if (curSize + data.length > 5000) throw Error('Sokt frame too large!');
       
       buff = buff.slice(offset + length); // Dispense with the frame we've just processed
       curFrames.push(data);               // Include the complete frame
@@ -118,17 +120,16 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
     }} catch (err) {
       
-      socket.destroy();
       session.end();
       throw err;
       
     }};
     
-    // Only start Sending from `session.hear` after a tick so a consumer
-    // has a chance to add Routes
+    // Only start Sending via `session.hear` after a tick so consumers
+    // get a chance to add Routes
     Promise.resolve().then(() => {
       
-      sendMsgs(); // `buff` passed to `makeSoktSession` can contain initial data!
+      hearSoktMessages(); // `buff` passed to `makeSoktSession` can contain initial data!
       
       socket.on('readable', () => {
         
@@ -137,7 +138,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         if (!buff0) return session.end(); // `socket.read()` can return `null` to indicate the end of the stream
         
         buff = Buffer.concat([ buff, buff0 ]);
-        sendMsgs(ms);
+        hearSoktMessages(ms);
         
       });
       
@@ -145,6 +146,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     
     session.tell.route(msg => {
       
+      if (session.off()) return;
       if (!msg) return;
       let dataBuff = Buffer.from(valToJson(msg), 'utf8');
       
@@ -191,9 +193,21 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       // that multiple socket writes could occur out-of-order (which is
       // only a problem if the consumer doesn't apply any ordering
       // scheme, which in the case of Hut isn't an issue)
-      socket.write(Buffer.concat([ metaBuff, dataBuff ]), 'utf8');
+      socket.write(Buffer.concat([ metaBuff, dataBuff ]), err => {
+        if (!err) return;
+        gsc('Error writing to socket', err);
+        session.end();
+      });
       
     }, 'prm');
+    
+    session.endWith(async () => {
+      let m = Buffer.alloc(2);
+      m[0] = 128 + 8; // `8` is the "close" op
+      m[1] = 0;       // Indicate there's no payload
+      try     { await Promise((rsv, rjc) => socket.write(buff, err => err ? rjc(err) : rsv())); }
+      finally { socket.end(); }
+    });
     
     return session;
     

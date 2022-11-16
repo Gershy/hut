@@ -383,12 +383,10 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
       // time the Server reopens
       
       let road = Tmp({
-        
         key: '!above',
         currentCost: () => cost,
         tell: Src(),
         hear: Src()
-        
       });
       hut.getRoadFor = otherHut => {
         if (otherHut !== aboveHut) throw Error(`Best-road query should always include the AboveHut (included ${otherHut.desc()})`);
@@ -492,14 +490,22 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
       src: Src()
     });
     
-    let socket = new global.WebSocket(`${port >= 400 ? 'wss' : 'ws'}://${host}:${port}/?trn=sync&hutId=${this.hutId}`);
-    let openPrm = Promise((rsv, rjc) => {
-      socket.addEventListener('open', rsv, { once: true });
-      socket.addEventListener('error', rjc, { once: true });
-    });
-    server.endWith(() => socket.close());
-    
-    server.src.route(session => {
+    server.src.route(async session => {
+      
+      server.endWith(session);
+      
+      let socket = new global.WebSocket(`${port >= 400 ? 'wss' : 'ws'}://${host}:${port}/?trn=sync&hutId=${this.hutId}`);
+      socket.addEventListener('error', err => {
+        this.subcon('warning')('Socket error event (restarting in 3sec)', err);
+        setTimeout(() => this.restart(), 3000);
+      });
+      socket.addEventListener('close', (...args) => gsc('Socket closed...'));
+      
+      let openPrm = Promise((rsv, rjc) => {
+        socket.addEventListener('open', rsv, { once: true });
+        socket.addEventListener('error', rjc, { once: true });
+      });
+      session.endWith(() => socket.close());
       
       socket.addEventListener('message', ({ data: msg, ...stuff }) => {
         msg = jsonToVal(msg);
@@ -511,9 +517,14 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
         await openPrm;
         socket.send(valToJson(data));
       });
+      session.endWith(routeBeforeConnect);
+      
       openPrm.then(() => {
+        
         routeBeforeConnect.end();
-        session.tell.route(data => data && socket.send(valToJson(data)));
+        let routeAfterConnect = session.tell.route(data => data && socket.send(valToJson(data)));
+        session.endWith(routeAfterConnect);
+        
       });
       
     });

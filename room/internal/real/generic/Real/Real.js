@@ -281,6 +281,8 @@ global.rooms['internal.real.generic.Real'] = foundation => form({ name: 'Real', 
   },
   addLayout(layout) {
     
+    let tmp = Tmp();
+    
     // Convert from "{ form: 'LayoutFormName', ... }" to Layout(...)
     let formName = null;
     if (isForm(layout, Object)) {
@@ -301,8 +303,7 @@ global.rooms['internal.real.generic.Real'] = foundation => form({ name: 'Real', 
       
     }
     
-    let tmp = Object.assign(Tmp(), { layout });
-    
+    tmp.layout = layout;
     then(layout, layout => {
       
       if (tmp.off()) return;
@@ -323,9 +324,13 @@ global.rooms['internal.real.generic.Real'] = foundation => form({ name: 'Real', 
       });
       
     });
-    
     return tmp;
     
+  },
+  addLayouts(layouts) {
+    let tmp = Tmp();
+    for (let layout of layouts) tmp.endWith(this.addLayout(layout));
+    return tmp;
   }
   
 })});

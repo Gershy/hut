@@ -23,7 +23,7 @@ global.rooms['internal.real.htmlBrowser.Geom'] = async foundation => {
     },
     $props: 'shape,w,h,ow,oh,anchor,x,y,z'.split(','),
     
-    init: function({ shape='rect', w=null, h=null, ow=null, oh=null, anchor=null, x=null, y=null, z=null }) {
+    init({ shape='rect', w=null, h=null, ow=null, oh=null, anchor=null, x=null, y=null, z=null }) {
       
       if (anchor === null) anchor = (x !== null || y !== null) ? 'cen' : 'none';
       
@@ -35,7 +35,7 @@ global.rooms['internal.real.htmlBrowser.Geom'] = async foundation => {
       Object.assign(this, { shape, w, h, ow, oh, anchor, x, y, z });
       
     },
-    render: function(real, domNode) {
+    render(real, domNode) {
       
       let [ shape, w, h, ow, oh, anchor, x, y, z ] = Form.props.map(v => this.getParam(real, v));
       
@@ -51,7 +51,7 @@ global.rooms['internal.real.htmlBrowser.Geom'] = async foundation => {
       else if (shape.type === 'circle') { domNode.style.borderRadius = '100%'; }
       
       // Apply z index
-      if (z !== null) domNode.style.zIndex = `${z}`;
+      if (z !== null) domNode.style.zIndex = z.toString();
       
       // Skip all positioning changes if no anchor
       if (anchor === 'none') return;
@@ -76,7 +76,8 @@ global.rooms['internal.real.htmlBrowser.Geom'] = async foundation => {
       
       // Apply anchored positioning; map "w" to centered-width, "h" to
       // centered-height, and "-" to fixed (edge-aligned) "0"
-      let anchPos = Form.anchorPositions[anchor].map(v => {
+      let anchProps = Form.anchorPositions[anchor]; // E.g., { left: 'w', top: '-' } or { 
+      let anchPos = anchProps.map(v => {
         return (v === '-') ? '0' : `calc(50% - ${(v === 'w') ? w : h} / 2)`;
       });
       
@@ -85,8 +86,8 @@ global.rooms['internal.real.htmlBrowser.Geom'] = async foundation => {
       Object.assign(domNode.style, {
         position: 'absolute',
         ...anchPos,
-        ...(x ? { marginLeft: x } : {}),
-        ...(y ? { marginTop:  y } : {})
+        ...(x ? { [(anchProps.has('left')) ? 'marginLeft' : 'marginRight' ]: x } : {}),
+        ...(y ? { [(anchProps.has('top'))  ? 'marginTop'  : 'marginBottom']:  y } : {})
       });
       
     }

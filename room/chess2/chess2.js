@@ -15,7 +15,7 @@ global.rooms['chess2'] = async foundation => {
   let isDev = (foundation.conf('deploy.maturity') || foundation.conf('maturity')) === 'dev';
   let pieceStyle = 'classic';
   let layoutStyle = 'classic';
-  let moveMs = (isDev ? 10 : 60) * 1000;
+  let moveMs = (isDev ? 12 : 60) * 1000;
   let enterMs = (isDev ? 0.1 : 2) * 1000;
   let matchmakeMs = (isDev ? 1 : 5) * 1000;
   let tsM2 = 'calc(70% + 0.78vmin)';
@@ -856,182 +856,230 @@ global.rooms['chess2'] = async foundation => {
           contentReal.addReal('c2.text', lay.text('Click anywhere to play again...'));
           
         });
-        dep.scp(outcomeChooser.srcs.off, (nop, dep) => dep.scp(match, 'c2.round', (round, dep) => {
+        dep.scp(outcomeChooser.srcs.off, (nop, dep) => {
           
-          let timeBarReal = dep(myPlayerHolderReal.addReal('c2.timer', [
-            { form: 'Geom', anchor: 'cen', z: 0, w: '0', h: '100%' },
-            { form: 'Decal', colour: 'rgba(40, 40, 100, 0.35)', transition: {
-              x: { ms: 800, curve: 'linear' },
-              w: { ms: 800, curve: 'linear' }
-            }}
-          ]));
-          let passReal = dep(myPlayerHolderReal.addReal('c2.pass', [
-            { form: 'Geom', shape: 'circle', anchor: 'br', z: 1, w: '10%', h: '100%' },
-            { form: 'Text', textSize: ts00, text: 'Pass' },
-            { form: 'Decal', colour: '#ffffff20' }
-          ]));
+          let resignAct = dep(hut.enableAction('c2.resign', async () => {
+            
+            /// {ABOVE=
+            let round = await match.withRh({ type: 'c2.round', fn: rh => rh.getRec() });
+            if (round) round.end();
+            hut.addRecord('c2.outcome', [ match ], { winner: (myColour === 'white') ? 'black' : 'white', reason: 'resign' });
+            /// =ABOVE}
+            
+          }));
           
-          let timerSrc = dep(TimerSrc({ ms: 500, num: Infinity }));
-          timerSrc.route(() => {
-            
-            let elapsed = (Date.now() - round.getValue('ms'));
-            let total = moveMs - 2000; // Subtracting an amount makes the timer feel generous (TODO: Can be funky for very low `moveMs` values??)
-            let amt = 1 - Math.min(1, elapsed / total);
-            
-            timeBarReal.mod({ w: `${Math.round(amt * 100)}%` });
-            
-          }, 'prm');
-          
-          dep.scp(roundMoveChooser.srcs.off, (noRoundMove, dep) => {
-            
-            let submitMoveAct = dep(hut.enableAction('c2.submitMove', async move => {
-              
-              /// {ABOVE=
-              
-              let { type='play' } = move;
-              if (type === 'pass')
-                return void hut.addRecord('c2.roundMove', { 0: round, 1: matchPlayer, 'piece?': null });
-              
-              let { trg } = move;
-              if (!trg) throw Error(`Missing "trg"`);
-              
-              let { piece: pieceUid } = move;
-              let pieces = await match.rh('c2.piece').getRecs()
-              let piece = pieces.find(piece => piece.uid === pieceUid).val;
-              if (!piece) throw Error(`Invalid piece uid: ${pieceUid}`).mod({ move });
-              if (piece.getValue('wait') > 0) throw Error(`Selected piece needs to wait`);
-              
-              let vm = getValidMoves(pieces, matchPlayer, piece)
-                .find(vm => vm.col === trg.col && vm.row === trg.row)
-                .val;
-              
-              // Ensure the provided move is a valid move
-              if (!vm) return;
-              
-              let { col, row, cap } = vm;
-              
-              hut.addRecord('c2.roundMove', { 0: round, 1: matchPlayer, 'piece?': piece }, { col, row, cap: !!cap });
-              
-              /// =ABOVE}
-              
-            }));
+          dep.scp(match, 'c2.round', (round, dep) => {
             
             /// {BELOW=
-            dep(passReal.addLayout({ form: 'Press', pressFn: () => submitMoveAct.act({ type: 'pass' }) }));
-            
-            let selectedPieceChooser = dep(Chooser([ 'off', 'onn' ]));
-            dep.scp(selectedPieceChooser.srcs.off, (noSelectedPiece, dep) => {
+            let timeBarReal = dep(myPlayerHolderReal.addReal('c2.timer', [
+              { form: 'Geom', anchor: 'cen', z: 0, w: '0', h: '100%' },
+              { form: 'Decal', colour: 'rgba(40, 40, 100, 0.35)', transition: {
+                x: { ms: 800, curve: 'linear' },
+                w: { ms: 800, curve: 'linear' }
+              }}
+            ]));
+            let passReal = dep(myPlayerHolderReal.addReal('c2.pass', [
+              { form: 'Geom', shape: 'circle', anchor: 'br', z: 1, w: '10vmin', h: '10vmin' },
+              { form: 'Text', textSize: ts00, text: 'Pass' },
+              { form: 'Decal', colour: '#ffffff20' }
+            ]));
+            let resignReal = dep(myPlayerHolderReal.addReal('c2.resign', [
+              { form: 'Geom', shape: 'circle', anchor: 'br', z: 1, w: '10vmin', h: '10vmin', y: '10vmin' },
+              { form: 'Text', textSize: ts00, text: 'Resign' },
+              { form: 'Decal', colour: '#ff808020', windowing: false }
+            ]));
+            dep(TimerSrc({ ms: 500, num: Infinity })).route(() => {
               
-              // Pieces can be selected by clicking
-              dep.scp(pieceControls, ({ piece, pieceReal }, dep) => {
+              let elapsed = (Date.now() - round.getValue('ms'));
+              let total = moveMs - 2000; // Subtracting an amount makes the timer feel generous (TODO: Can be funky for very low `moveMs` values??)
+              let amt = 1 - Math.min(1, elapsed / total);
+              
+              timeBarReal.mod({ w: `${Math.round(amt * 100)}%` });
+              
+            }, 'prm');
+            /// =BELOW}
+            
+            dep.scp(roundMoveChooser.srcs.off, (noRoundMove, dep) => {
+              
+              let submitMoveAct = dep(hut.enableAction('c2.submitMove', async move => {
                 
-                // Can't select enemy pieces
-                if (piece.getValue('colour') !== myColour) return;
+                /// {ABOVE=
                 
-                dep(pieceReal.addLayout({ form: 'Press',
-                  pressFn: () => selectedPieceChooser.choose('onn', Tmp({ piece, pieceReal, '~chooserInternal': true })) // TODO: Ridiculous
-                }));
+                let { type='play' } = move;
+                if (type === 'pass')
+                  return void hut.addRecord('c2.roundMove', { 0: round, 1: matchPlayer, 'piece?': null });
+                
+                let { trg } = move;
+                if (!trg) throw Error(`Missing "trg"`);
+                
+                let { piece: pieceUid } = move;
+                let pieces = await match.rh('c2.piece').getRecs()
+                let piece = pieces.find(piece => piece.uid === pieceUid).val;
+                if (!piece) throw Error(`Invalid piece uid: ${pieceUid}`).mod({ move });
+                if (piece.getValue('wait') > 0) throw Error(`Selected piece needs to wait`);
+                
+                let vm = getValidMoves(pieces, matchPlayer, piece)
+                  .find(vm => vm.col === trg.col && vm.row === trg.row)
+                  .val;
+                
+                // Ensure the provided move is a valid move
+                if (!vm) return;
+                
+                let { col, row, cap } = vm;
+                
+                hut.addRecord('c2.roundMove', { 0: round, 1: matchPlayer, 'piece?': piece }, { col, row, cap: !!cap });
+                
+                /// =ABOVE}
+                
+              }));
+              
+              /// {BELOW=
+              dep(passReal.addLayout({ form: 'Press', pressFn: () => submitMoveAct.act({ type: 'pass' }) }));
+              
+              let feelSrc = MemSrc.Tmp1();
+              dep(resignReal.addLayout({ form: 'Feel', feelSrc }));
+              dep.scp(feelSrc, (feel, dep) => {
+                
+                let holdReal = dep(resignReal.addReal('c2.hold', { colour: '#faa2', w: '120%', h: '120%' }, [
+                  { form: 'Geom', shape: 'circle', anchor: 'cen', z: -1 },
+                  { form: 'Decal', transition: {
+                    colour: { ms: 2000, curve: 'linear' },
+                    x:      { ms: 2000, curve: 'linear' },
+                    y:      { ms: 2000, curve: 'linear' },
+                    w:      { ms: 2000, curve: 'linear' },
+                    h:      { ms: 2000, curve: 'linear' }
+                  }}
+                ]));
+                
+                setTimeout(() => holdReal.mod({ colour: '#c2a4', w: '200%', h: '200%' }), 100);
+                
+                dep(TimerSrc({ ms: 2000 })).route(() => {
+                  
+                  holdReal.end();
+                  dep(resignReal.addLayouts([
+                    { form: 'Press', pressFn: () => resignAct.act() },
+                    { form: 'Decal', colour: '#c2aa' }
+                  ]));
+                  
+                }, 'prm');
                 
               });
               
+              let selectedPieceChooser = dep(Chooser([ 'off', 'onn' ]));
+              dep.scp(selectedPieceChooser.srcs.off, (noSelectedPiece, dep) => {
+                
+                // Pieces can be selected by clicking
+                dep.scp(pieceControls, ({ piece, pieceReal }, dep) => {
+                  
+                  // Can't select enemy pieces
+                  if (piece.getValue('colour') !== myColour) return;
+                  
+                  dep(pieceReal.addLayout({ form: 'Press',
+                    pressFn: () => selectedPieceChooser.choose('onn', Tmp({ piece, pieceReal, '~chooserInternal': true })) // TODO: Ridiculous
+                  }));
+                  
+                });
+                
+              });
+              dep.scp(selectedPieceChooser.srcs.onn, async ({ piece, pieceReal }, dep) => {
+                
+                dep(pieceReal.addLayout({ form: 'Decal', border: { ext: '5px', colour: moveColour } }));
+                
+                let pieces = await match.rh('c2.piece').getRecs();
+                
+                for (let { col, row, cap } of getValidMoves(pieces, matchPlayer, piece)) {
+                  
+                  let optionReal = dep(boardReal.addReal('c2.option', [
+                    { form: 'Geom', anchor: 'tl', w: tileVal(1), h: tileVal(1), ...tileCoord(col, row) },
+                    { form: 'Press',
+                      pressFn: () => submitMoveAct.act({ piece: piece.uid, trg: { col, row } })
+                    }
+                  ]));
+                  
+                  optionReal.addReal('c2.indicator', [
+                    
+                    { form: 'Geom', shape: 'circle', anchor: 'cen', w: cap ? '80%' : '40%', h: cap ? '80%' : '40%' },
+                    { form: 'Decal', border: cap ? { ext: '5px', colour: moveColour } : null, colour: cap ? null : moveColour }
+                    
+                  ]);
+                  
+                }
+                
+                // Click anywhere on the board to deselect
+                dep(boardReal.addLayout({ form: 'Press', pressFn: () =>  selectedPieceChooser.choose('off') }));
+                
+              });
+              /// =BELOW}
+              
             });
-            dep.scp(selectedPieceChooser.srcs.onn, async ({ piece, pieceReal }, dep) => {
+            dep.scp(roundMoveChooser.srcs.onn, (roundMove, dep) => {
+              
+              let retractMoveAct = dep(hut.enableAction('c2.retractMove', async () => {
+                
+                /// {ABOVE=
+                // Really this is just sanity; a move must exist due to
+                // the scoping!
+                let curMove = await matchPlayer.rh('c2.roundMove').getRec();
+                if (curMove) curMove.end();
+                /// =ABOVE}
+                
+              }));
+              
+              /// {BELOW=
+              
+              // Indicate whether "pass" is currently selected
+              if (roundMove.m('piece?') === null) {
+                dep(passReal.addLayout({ form: 'Decal', colour: '#ffffffa0' }));
+                dep(passReal.addLayout({ form: 'Press', pressFn: () => retractMoveAct.act() }));
+              }
+              
+              // Click anywhere on the board to cancel current move
+              dep(boardReal.addLayout({ form: 'Press', pressFn: () => retractMoveAct.act() }));
+              
+              let movePiece = roundMove.m('piece?');
+              if (!movePiece) return;
+              
+              let pieceReal = pieceControls.vals.find(({ piece }) => piece === movePiece).val.pieceReal;
+              
+              let { col, row, cap } = roundMove.getValue();
               
               dep(pieceReal.addLayout({ form: 'Decal', border: { ext: '5px', colour: moveColour } }));
               
-              let pieces = await match.rh('c2.piece').getRecs();
+              let moveReal = dep(boardReal.addReal('c2.move', [
+                { form: 'Geom', anchor: 'tl', w: tileVal(1), h: tileVal(1), ...tileCoord(col, row) }
+              ]));
               
-              for (let { col, row, cap } of getValidMoves(pieces, matchPlayer, piece)) {
+              if (cap) {
                 
-                let optionReal = dep(boardReal.addReal('c2.option', [
-                  { form: 'Geom', anchor: 'tl', w: tileVal(1), h: tileVal(1), ...tileCoord(col, row) },
-                  { form: 'Press',
-                    pressFn: () => submitMoveAct.act({ piece: piece.uid, trg: { col, row } })
-                  }
-                ]));
+                moveReal.addReal('c2.indicator1', [
+                  { form: 'Geom', shape: 'circle', anchor: 'cen', w: '95%', h: '95%' },
+                  { form: 'Decal', border: { ext: '2px', colour: moveColour } }
+                ]);
+                moveReal.addReal('c2.indicator2', [
+                  { form: 'Geom', shape: 'circle', anchor: 'cen', w: '80%', h: '80%' },
+                  { form: 'Decal', border: { ext: '4px', colour: moveColour } }
+                ]);
                 
-                optionReal.addReal('c2.indicator', [
-                  
-                  { form: 'Geom', shape: 'circle', anchor: 'cen', w: cap ? '80%' : '40%', h: cap ? '80%' : '40%' },
-                  { form: 'Decal', border: cap ? { ext: '5px', colour: moveColour } : null, colour: cap ? null : moveColour }
-                  
+              } else {
+                
+                moveReal.addReal('c2.indicator1', [
+                  { form: 'Geom', shape: 'circle', anchor: 'cen', w: '50%', h: '50%' },
+                  { form: 'Decal', border: { ext: '2px', colour: moveColour } }
+                ]);
+                moveReal.addReal('c2.indicator2', [
+                  { form: 'Geom', shape: 'circle', anchor: 'cen', w: '35%', h: '35%' },
+                  { form: 'Decal', colour: moveColour }
                 ]);
                 
               }
               
-              // Click anywhere on the board to deselect
-              dep(boardReal.addLayout({ form: 'Press', pressFn: () =>  selectedPieceChooser.choose('off') }));
+              /// =BELOW}
               
             });
-            /// =BELOW}
             
-          });
-          dep.scp(roundMoveChooser.srcs.onn, (roundMove, dep) => {
-            
-            let retractMoveAct = dep(hut.enableAction('c2.retractMove', async () => {
-              
-              /// {ABOVE=
-              // Really this is just sanity; a move must exist due to
-              // the scoping!
-              let curMove = await matchPlayer.rh('c2.roundMove').getRec();
-              if (curMove) curMove.end();
-              /// =ABOVE}
-              
-            }));
-            
-            /// {BELOW=
-            
-            // Indicate whether "pass" is currently selected
-            if (roundMove.m('piece?') === null) {
-              dep(passReal.addLayout({ form: 'Decal', colour: '#ffffffa0' }));
-              dep(passReal.addLayout({ form: 'Press', pressFn: () => retractMoveAct.act() }));
-            }
-            
-            // Click anywhere on the board to cancel current move
-            dep(boardReal.addLayout({ form: 'Press', pressFn: () => retractMoveAct.act() }));
-            
-            let movePiece = roundMove.m('piece?');
-            if (!movePiece) return;
-            
-            let pieceReal = pieceControls.vals.find(({ piece }) => piece === movePiece).val.pieceReal;
-            
-            let { col, row, cap } = roundMove.getValue();
-            
-            dep(pieceReal.addLayout({ form: 'Decal', border: { ext: '5px', colour: moveColour } }));
-            
-            let moveReal = dep(boardReal.addReal('c2.move', [
-              { form: 'Geom', anchor: 'tl', w: tileVal(1), h: tileVal(1), ...tileCoord(col, row) }
-            ]));
-            
-            if (cap) {
-              
-              moveReal.addReal('c2.indicator1', [
-                { form: 'Geom', shape: 'circle', anchor: 'cen', w: '95%', h: '95%' },
-                { form: 'Decal', border: { ext: '2px', colour: moveColour } }
-              ]);
-              moveReal.addReal('c2.indicator2', [
-                { form: 'Geom', shape: 'circle', anchor: 'cen', w: '80%', h: '80%' },
-                { form: 'Decal', border: { ext: '4px', colour: moveColour } }
-              ]);
-              
-            } else {
-              
-              moveReal.addReal('c2.indicator1', [
-                { form: 'Geom', shape: 'circle', anchor: 'cen', w: '50%', h: '50%' },
-                { form: 'Decal', border: { ext: '2px', colour: moveColour } }
-              ]);
-              moveReal.addReal('c2.indicator2', [
-                { form: 'Geom', shape: 'circle', anchor: 'cen', w: '35%', h: '35%' },
-                { form: 'Decal', colour: moveColour }
-              ]);
-              
-            }
-            
-            /// =BELOW}
-            
-          });
-          
-        }));
+          })
+        
+        });
         
       };
       

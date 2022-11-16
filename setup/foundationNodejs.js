@@ -848,27 +848,24 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
     
     let FakeReal = form({ name: 'FakeReal', has: { Tmp }, props: (forms, Form) => ({
       init({ name, tech }) {
-        
         forms.Tmp.init.call(this);
         Object.assign(this, {
           name, tech,
           fakeLayout: null,
           params: { textInputSrc: { mod: Function.stub, route: fn => fn(''), send: Function.stub }}
         });
-        
       },
       loaded: Promise.resolve(),
       setTree() {},
       addReal(real) { return this; },
       mod() {},
       addLayout: lay => Tmp({ layout: { src: Src.stub, route: Function.stub } }),
-      getLayout() { return this.fakeLayout || (this.fakeLayout = primaryFakeReal.getLayoutForm('FakeBoi')()); },
-      getLayoutForm(name) { return primaryFakeReal.tech.getLayoutForm(name); },
-      getTech: () => fakeRealTech,
+      getLayout() { return this.fakeLayout || (this.fakeLayout = fakeReal.getLayoutForm('FakeBoi')()); },
+      getLayoutForm(name) { return fakeReal.tech.getLayoutForm(name); },
+      getTech() { return this.tech; },
       addNavOption() { return { activate: () => {} }; },
       render() {}
     })});
-    
     let FakeLayout = form({ name: 'FakeLayout', has: { Src }, props: (forms, Form) => ({
       init() { forms.Src.init.call(this); this.keysSrc = Src.stub; },
       isInnerLayout() { return false; },
@@ -876,21 +873,19 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       addReal(){},
       src: Src.stub
     })});
-    let fakeLayout = FakeLayout();
     
-    let layouts = {};
-    let fakeRealTech = {
+    let fakeReal = FakeReal({ name: 'nodejs.fakeReal', tech: {
       render: Function.stub,
       informNavigation: Function.stub,
       getLayoutForm: name => fakeLayout,
-      getLayoutForms: names => names.toObj(name => [ name, primaryFakeReal.getLayoutForm(name) ]),
+      getLayoutForms: names => names.toObj(name => [ name, fakeReal.getLayoutForm(name) ]),
       render: Function.stub
-    };
-    let primaryFakeReal = FakeReal({ name: 'nodejs.fakeReal', tech: fakeRealTech });
+    }});
+    let fakeLayout = FakeLayout();
     
     return {
       access: name => {
-        if (name === 'primary') return primaryFakeReal;
+        if (name === 'primary') return fakeReal;
         throw Error(`Invalid access for Real -> "${name}"`);
       }
     };

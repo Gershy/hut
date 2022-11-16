@@ -193,10 +193,15 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     let resHeaders = {
       ...(encode ? { 'Content-Encoding': encode } : {}),
       'Content-Type': mime,
-      ...(cache ? { 'Cache-Control': opts.doCaching ? `${cache}, max-age=${getCacheSecs(msg)}` : 'max-age=0' } : {})
+      'Cache-Control': (opts.doCaching && cache) ? `${cache}, max-age=${getCacheSecs(msg)}` : 'max-age=0'
     };
     
     res.explicitBody = { body: keep ?? msg, encode };
+    
+    let timeout = setTimeout(() => {
+      errSubcon(`Ending response destructively because response data was not ready in time`);
+      res.end();
+    }, 5000); // Stream needs to complete in 5000ms
     
     try {
       
@@ -207,13 +212,10 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         let pipe = await keep.getTailPipe();
         if (encode) {
           
+          let err = Error('trace');
           let encoder = zlib[`create${encode[0].upper()}${encode.slice(1)}`](); // Transforms, e.g., "delate", "gzip" into "createDeflate", "createGzip"
           await Promise( (g, b) => stream.pipeline(pipe, encoder, res, err => err ? b(err) : g()) )
-            .fail(err => {
-              errSubcon(`Error piping ${keep.desc()} to Response`, err);
-              res.end();
-              err.propagate(msg => ({ msg: `Failed to stream ${keep.desc()} (${msg})`, encode }));
-            });
+            .fail( ctxErr => err.propagate({ ctxErr, msg: `Failed to stream ${keep.desc()}`, encode }) );
           
         } else {
           
@@ -221,9 +223,13 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
           
         }
         
+        clearTimeout(timeout);
+        
       } else {
         
+        // Encode if necessary
         if (encode) msg = await Promise( (g, b) => zlib[encode](msg, (err, v) => err ? b(err) : g(v)) );
+        
         res.writeHead(code, { ...resHeaders, 'Content-Length': Buffer.byteLength(msg).toString(10) });
         res.end(msg);
         
@@ -231,9 +237,13 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
     } catch (err) {
       
-      errSubcon(`Failed to respond with ${getFormName(keep ?? msg)}: ${keep ? keep.desc() : msg?.slice?.(0, 100)}`);
-      try { res.writeHead(500); } catch (err) {}
+      errSubcon(`Failed to respond with ${getFormName(keep ?? msg)}: ${keep ? keep.desc() : (msg?.slice?.(0, 100) ?? msg)}`, err);
+      try { res.writeHead(400); } catch (err) {}
       try { res.end(); } catch (err) {}
+      
+    } finally {
+      
+      clearTimeout(timeout);
       
     }
     
@@ -289,13 +299,29 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
       let ms = msFn();
       
-      let body = await new Promise((rsv, rjc) => {
-        let chunks = [];
+      // Consume http request body
+      let body = null;
+      {
+        
+        let bodyPrm = Promise.later();
+        let timeout = setTimeout(() => bodyPrm.reject(Error('Http payload too slow')), 2000);
+        let chunks = [], len = 0, dataFn = null, endFn = null;
         req.setEncoding('utf8');
-        req.on('data', chunk => chunks.push(chunk));
-        req.on('end', () => rsv(chunks.join('')));
-        req.on('error', ctxErr => rjc(Error(`Client abandoned http session`).mod({ ctxErr })));
-      });
+        req.on('data', dataFn = chunk => {
+          chunks.push(chunk);
+          if ((len += chunk.length) > 5000) bodyPrm.reject(Error('Http payload too large'));
+        });
+        req.on('end', endFn = () => bodyPrm.resolve(chunks.join('')));
+        
+        try { body = await bodyPrm; }
+        catch (err) { return res.writeHead(400).end(err.message); }
+        finally {
+          req.off('data', dataFn);
+          req.off('end', endFn);
+          clearTimeout(timeout);
+        }
+        
+      }
       
       if (subcon.enabled) {
         

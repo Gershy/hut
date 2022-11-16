@@ -2,15 +2,15 @@ global.rooms['internal.real.htmlBrowser.Press'] = async foundation => {
   
   let Layout = await foundation.getRoom('internal.real.generic.Layout');
   
-  return U.form({ name: 'Press', has: { Layout, Src }, props: (forms, Form) => ({
+  return form({ name: 'Press', has: { Layout, Src }, props: (forms, Form) => ({
     init: function({ modes=[ 'continuous', 'discrete' ], flat=true, pressFn=null }={}) {
       
       forms.Src.init.call(this);
       
-      if (!U.isForm(modes, Array)) modes = [ modes ];
+      if (!isForm(modes, Array)) modes = [ modes ];
       if (!modes.count()) throw Error(`Supply at least one mode`);
       if (modes.count() > 2) throw Error(`Supply maximum two modes`);
-      if (modes.find(v => !U.isForm(v, String)).found) throw Error(`All modes should be String`);
+      if (modes.find(v => !isForm(v, String)).found) throw Error(`All modes should be String`);
       if (modes.find(v => ![ 'continuous', 'discrete' ].includes(v)).found) throw Error(`Invalid mode; use either "continuous" or "discrete"`);
       Object.assign(this, { modes, flat, pressFn });
       

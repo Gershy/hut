@@ -34,7 +34,7 @@ global.rooms['logic.MemSrc'] = foundation => {
   })});
   MemSrc.Tmp1 = form({ name: 'MemSrc.Tmp1', has: { MemSrc }, props: (forms, Form) => ({
     
-    init(val) {
+    init() {
       forms.MemSrc.init.call(this);
       this.valEndRoute = null;
       this.val = null;
