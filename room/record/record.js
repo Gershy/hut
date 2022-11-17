@@ -708,6 +708,11 @@ global.rooms['record'] = async foundation => {
     // set of Holders (the Groups containing the Record, when considered
     // as a Member)
     
+    $relHandlerMethods: Object.plain({
+      all: rh => rh.getRecs(),
+      one: rh => rh.getRec()
+    }),
+    
     init({ type, uid, group=Group(type.manager, {}), value=null, volatile=false }) {
       
       if (group.mems.find( mem => mem.off() ).found) throw Error('Record created with ended Member');
@@ -1019,7 +1024,7 @@ global.rooms['record'] = async foundation => {
         if (!isForm(args[0], Object)) throw Error(`Single argument must be Object`);
         /// =DEBUG}
         
-        let { fn: fn0, ...rhArgs0 } = args[0];
+        let { fn: fn0='all', ...rhArgs0 } = args[0];
         fn = fn0;
         rhArgs = [ rhArgs0 ];
         
@@ -1029,6 +1034,16 @@ global.rooms['record'] = async foundation => {
         rhArgs = args.slice(0, -1);
         
       }
+      
+      let defaultLimit1 = true
+        && fn === 'one'
+        && args.length === 1
+        && isForm(args[0], Object)
+        && !args[0].has('limit');
+      if (defaultLimit1) args[0].limit = 1;
+      
+      if (fn?.constructor === String) fn = Form.relHandlerMethods[fn];
+      if (!isForm(fn, Function)) throw Error(`"fn" should be Function but got ${getFormName(fn)}`).mod({ fn });
       
       let rh = this.rh(...rhArgs);
       try     { return await fn(rh); }

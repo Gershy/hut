@@ -81,7 +81,7 @@ Object.assign(global, {
   rooms: Object.create(null)
 });
 
-if (0) { // Low-level debug
+if (1) { // Low-level debug
   
   let enabled = true;
   let intervalMs = 7500;

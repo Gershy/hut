@@ -472,7 +472,7 @@ global.rooms['chess2'] = async foundation => {
           let bAlive = false;
           if (significantMoves.count()) {
             
-            let pieces = await match.rh('c2.piece').getRecs();
+            let pieces = await match.withRh('c2.piece', 'all');
             applyMoves(pieces, significantMoves);
             
             let aliveKings = pieces.map(pc => (pc.onn() && pc.getValue('type') === 'king') ? pc : skip);
@@ -491,7 +491,8 @@ global.rooms['chess2'] = async foundation => {
         };
         
         // If both players have submitted moves, perform those moves
-        let roundMoveSrc = dep(round.rh('c2.roundMove').map(hrec => hrec.rec));
+        let roundMoveRh = dep(round.rh('c2.roundMove'));
+        let roundMoveSrc = dep(roundMoveRh.map(hrec => hrec.rec));
         let moveSetSrc = dep(SetSrc(roundMoveSrc));
         dep(moveSetSrc.route( playerMoves => (playerMoves.count() === 2) && resolveRound(playerMoves) ));
         
@@ -506,7 +507,8 @@ global.rooms['chess2'] = async foundation => {
         
         let ms = Date.now();
         
-        let queuedStatusesByTerm = (await chess2.rh('c2.queue').getRecs()).categorize(q => q.getValue('term'));
+        let queues = await chess2.withRh('c2.queue', 'all');
+        let queuedStatusesByTerm = queues.categorize(q => q.getValue('term'));
         for (let [ term, queuedStatuses ] of queuedStatusesByTerm) {
           
           // Shuffle the PlayerStatus({ type: 'queue' }) Records; this
@@ -533,8 +535,8 @@ global.rooms['chess2'] = async foundation => {
               c2Subcon(`MATCH OPEN (${matchDesc})`);
               match.endWith(() => { c2Subcon(`MATCH SHUT (${matchDesc})`); });
               
-              let rh = match.rh('c2.outcome');
-              rh.route(({ rec: outcome }) => c2Subcon(`MATCH OUTC (${matchDesc})`, outcome.getValue()));
+              // RelHandle Dep Ends when Match Ends
+              match.rh('c2.outcome').route(({ rec: outcome }) => c2Subcon(`MATCH OUTC (${matchDesc})`, outcome.getValue()));
               
             }
             
@@ -554,12 +556,12 @@ global.rooms['chess2'] = async foundation => {
             let mpb = hut.addRecord('c2.matchPlayer', [ match, pb.status ], { colour: 'black' });
             mpw.endWith(async () => {
               c2Subcon(`WHITE ENDED (${pw.getValue('term')})`);
-              let round = await match.withRh({ type: 'c2.round', fn: rh => rh.getRec() });
+              let round = await match.withRh('c2.round', 'one');
               if (round) { round.end(); hut.addRecord('c2.outcome', [ match ], { winner: 'black' }); }
             });
             mpb.endWith(async () => {
               c2Subcon(`BLACK ENDED (${pb.getValue('term')})`);
-              let round = await match.withRh({ type: 'c2.round', fn: rh => rh.getRec() });
+              let round = await match.withRh('c2.round', 'one');
               if (round) { round.end(); hut.addRecord('c2.outcome', [ match ], { winner: 'white' }); }
             });
             
@@ -607,8 +609,6 @@ global.rooms['chess2'] = async foundation => {
             
             if (status === player.status.getValue('type')) return;
             
-            gsc(`STATUS: ${player.status.getValue('type')} -> ${status}`);
-            
             player.status.end();
             player.status = hut.addRecord('c2.playerStatus', [ player ], { type: status, ms: Date.now() });
             
@@ -641,7 +641,7 @@ global.rooms['chess2'] = async foundation => {
         let numPlayersReal = chillReal.addReal('info', lay.text());
         let numMatchesReal = chillReal.addReal('info', lay.text());
         chillReal.addReal('gap', lay.gap());
-        chillReal.addReal('queue', lay.button('Find a match!', () => gsc('FIND') || changeStatusAct.act({ status: 'queue' })));
+        chillReal.addReal('queue', lay.button('Find a match!', () => changeStatusAct.act({ status: 'queue' })));
         chillReal.addReal('learn', lay.button('How to play', () => changeStatusAct.act({ status: 'learn' })));
         chillReal.addReal('gap', lay.gap());
         chillReal.addReal('item', lay.text('Sorry for any bugs! Chess2 is only getting better!', tsM2));
@@ -890,7 +890,7 @@ global.rooms['chess2'] = async foundation => {
           let resignAct = dep(hut.enableAction('c2.resign', async () => {
             
             /// {ABOVE=
-            let round = await match.withRh({ type: 'c2.round', fn: rh => rh.getRec() });
+            let round = await match.withRh('c2.round', 'one');
             if (round) round.end();
             hut.addRecord('c2.outcome', [ match ], { winner: (myColour === 'white') ? 'black' : 'white', reason: 'resign' });
             /// =ABOVE}
@@ -942,7 +942,7 @@ global.rooms['chess2'] = async foundation => {
                 if (!trg) throw Error(`Missing "trg"`);
                 
                 let { piece: pieceUid } = move;
-                let pieces = await match.rh('c2.piece').getRecs()
+                let pieces = await match.withRh('c2.piece', 'all');
                 let piece = pieces.find(piece => piece.uid === pieceUid).val;
                 if (!piece) throw Error(`Invalid piece uid: ${pieceUid}`).mod({ move });
                 if (piece.getValue('wait') > 0) throw Error(`Selected piece needs to wait`);
@@ -1014,7 +1014,7 @@ global.rooms['chess2'] = async foundation => {
                 
                 dep(pieceReal.addLayout({ form: 'Decal', border: { ext: '5px', colour: moveColour } }));
                 
-                let pieces = await match.rh('c2.piece').getRecs();
+                let pieces = await match.withRh('c2.piece', 'all');
                 
                 for (let { col, row, cap } of getValidMoves(pieces, matchPlayer, piece)) {
                   
@@ -1048,7 +1048,7 @@ global.rooms['chess2'] = async foundation => {
                 /// {ABOVE=
                 // Really this is just sanity; a move must exist due to
                 // the scoping!
-                let curMove = await matchPlayer.rh('c2.roundMove').getRec();
+                let curMove = await matchPlayer.withRh('c2.roundMove', 'all'); // OR { type: 'c2.roundMove', fn: 'all' } OR { type: 'c2.roundMove', fn: rh => rh.getRecs() }
                 if (curMove) curMove.end();
                 /// =ABOVE}
                 
@@ -1120,7 +1120,6 @@ global.rooms['chess2'] = async foundation => {
         let changeStatusAct = dep(hut.enableAction('c2.changeStatus', async msg => {
           
           /// {ABOVE=
-          gsc('CHANGE', hut.desc(), msg);
           let { status=null } = msg ?? {};
           if (![ 'chill', 'learn', 'queue', 'lobby' ].has(status)) throw Error('Invalid status!');
           player.setValue({ status });
