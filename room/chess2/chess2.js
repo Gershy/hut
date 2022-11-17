@@ -637,7 +637,7 @@ global.rooms['chess2'] = async foundation => {
           { form: 'Axis1d', axis: 'y', dir: '+', mode: 'compactCenter' }
         ]));
         chillReal.addReal('info', lay.text('You\'re playing Chess2!', tsP1));
-        chillReal.addReal('info', lay.text(`Opponents will know you as "${player.getValue('term')}" ("${hut.uid}")`));
+        chillReal.addReal('info', lay.text(`Opponents will know you as "${player.getValue('term')}"`));
         let numPlayersReal = chillReal.addReal('info', lay.text());
         let numMatchesReal = chillReal.addReal('info', lay.text());
         chillReal.addReal('gap', lay.gap());
