@@ -203,8 +203,8 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       }
       
     },
-    async getHeadPipe() { return filesys.getWriteStream(this.absPath) },
-    async getTailPipe() { return filesys.getReadStream(this.absPath) }
+    async getHeadPipe() { return filesys.getWriteStream(this.absPath); },
+    async getTailPipe() { return filesys.getReadStream(this.absPath); }
     
   })}),
   
@@ -351,6 +351,13 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       }
     },
     
+    'hinterland': {
+      desc: String.baseline(`
+        | Control Subcon output regarding the presence of Huts in the Hinterland.
+      `),
+      enabled: false
+    },
+    
     'loft': {
       desc: String.baseline(`
         | A Loft is a custom Hut process that persists until it is manually ended. Lofts typically involve shared experiences between multiple users.
@@ -465,6 +472,12 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       }
     },
     
+    'record.instance': {
+      desc: String.baseline(`
+        | Control Subcon information regarding the existence of Records
+      `),
+      enabled: false
+    },
     'record.sample': {
       desc: String.baseline(`
         | A Hut Deployment can make changes to the set of Records over time. Some Records can reside purely in the Bank, while others need to be stored in memory.
@@ -538,6 +551,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
     
     Thank you, you pioneer, you.
   `),
+  $subconHeader: '-'.repeat(28) + '+' + '-'.repeat(50) + '\n', // TODO: Contingent on left-pane width of 28
   
   // Lifetime
   init() {
@@ -1769,7 +1783,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
           return l + '| ' + r;
         }).join('\n');
         
-        console.log(logStr, '\n');
+        console.log(Form.subconHeader + logStr);
         
       });
       

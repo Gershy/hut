@@ -81,16 +81,17 @@ Object.assign(global, {
   rooms: Object.create(null)
 });
 
-if (1) { // Low-level debug
+if (0) { // Low-level debug
   
   let enabled = true;
-  let intervalMs = 5000;
-  let showThreshold = 300;
-  let mm = {};
+  let intervalMs = 7500;
+  let showThreshold = 1;
+  let metrics = {};
 
   global.mmm = (term, val) => {
-    if (!mm.has(term)) mm[term] = 0;
-    mm[term] += val;
+    if (!metrics.has(term)) metrics[term] = 0;
+    metrics[term] += val;
+    if (!metrics[term]) delete metrics[term];
   };
   (async () => {
     
@@ -98,13 +99,9 @@ if (1) { // Low-level debug
       
       await new Promise(rsv => setTimeout(rsv, intervalMs));
       
-      let pairs = mm
-        .toArr((v, k) => (v < showThreshold) ? skip : [ k + ': ', v ])
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([ k, v ]) => `${k.padTail(20)}${v}`);
-      
-      if (pairs.length) console.log('METRIC\n' + pairs.map(p => `  METRIC/${p}`).join('\n'));
-      else              console.log('METRIC:none');
+      let relevantMetrics = metrics.map(v => (v > showThreshold) ? v : skip);
+      if (relevantMetrics.empty()) relevantMetrics = null;
+      gsc({ metrics: relevantMetrics });
       
     }
     

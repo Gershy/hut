@@ -99,7 +99,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     }, 'prm');
     
     session.endWith(() => {
-      for (let pkg of session.queueRes) { pkg.used = true; pkg.res.writeHead(204).end(); }
+      for (let pkg of session.queueRes) { pkg.used = true; forceEnd(pkg.res, 204); }
       session.queueRes = Array.stub;
       session.queueMsg = Array.stub;
       clearTimeout(session.timeout);
@@ -249,14 +249,31 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     } catch (err) {
       
       errSubcon(`Failed to respond with ${getFormName(keep ?? msg)}: ${keep ? keep.desc() : (msg?.slice?.(0, 100) ?? msg)}`, err);
-      try { res.writeHead(400); } catch (err) {}
-      try { res.end(); } catch (err) {}
+      forceEnd(res, 400);
       
     } finally {
       
       clearTimeout(timeout);
       
     }
+    
+  };
+  let forceEnd = (res, code=400, body=null) => {
+    
+    let errs = [];
+    try { res.writeHead(code);   } catch (err) { errs.push(err); }
+    try { res.end(body || skip); } catch (err) { errs.push(err); }
+    
+    if (errs.empty()) return;
+    errSubcon(`Errors occurred trying to end response (with code ${code})`, ...errs.map(err => {
+      
+      // Short output for premature stream closes (these simply mean the
+      // response socket ended while the resource was streaming - so the
+      // response is already sent, anyways!)
+      if (err.code === 'ERR_STREAM_PREMATURE_CLOSE') return err.message;
+      return err;
+      
+    }));
     
   };
   
@@ -325,7 +342,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         req.on('end', endFn = () => bodyPrm.resolve(chunks.join('')));
         
         try { body = await bodyPrm; }
-        catch (err) { return res.writeHead(400).end(err.message); }
+        catch (err) { forceEnd(res, 400, err.message); }
         finally {
           req.off('data', dataFn);
           req.off('end', endFn);
@@ -406,11 +423,11 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         
       }
       
-      if (tmp.closing) return res.writeHead(500).end();
+      if (tmp.closing) return forceEnd(res, 500);
       for (let intercept of tmp.intercepts) if (intercept(req.gain({ body }), res)) return;
       
       try         { body = processBody(body); }
-      catch (err) { errSubcon('Error processing http body', err); return res.writeHead(400).end('Invalid body'); }
+      catch (err) { errSubcon('Error processing http body', err); forceEnd(res, 400, 'Invalid body'); }
       
       let headers = req.headers;
       let cookie = headers.cookie
@@ -420,7 +437,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         ?? {};
       let cookieKeys = cookie.toArr((v, k) => k);
       try         { cookie = processCookie(cookie); }
-      catch (err) { errSubcon('Error processing http cookie', err); return res.writeHead(400).end('Invalid cookie'); }
+      catch (err) { errSubcon('Error processing http cookie', err); forceEnd(res, 400, 'Invalid cookie'); }
       
       let [ , path, query='', fragment='' ] = req.url.match(/^([/][^?#]*)([?][^#]+)?([#].*)?$/);
       path = path.slice(1);
@@ -510,7 +527,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       while (session.queueRes.length > 1) { // TODO: Parameterize "maxBankedResponses"?
         let pkg = session.queueRes.shift();
         pkg.used = true;
-        pkg.res.writeHead(204).end();
+        forceEnd(pkg.res, 204);
       }
       
     });

@@ -230,7 +230,6 @@ global.rooms['Hut'] = async foundation => {
         
       });
       
-      mmm('hut', +1);
       
       /// {ABOVE=
       if (this.isHere) {
@@ -238,6 +237,9 @@ global.rooms['Hut'] = async foundation => {
         this.bankedPrm = this.bankedPrm.then(() => this.ownedHutRh.ready());
       }
       /// =ABOVE}
+      
+      mmm('hut', +1);
+      foundation.subcon('hinterland')({ type: 'join', hut: this.desc() });
       
     },
     desc() {
@@ -266,7 +268,7 @@ global.rooms['Hut'] = async foundation => {
     },
     getRoadedHut(server, road, hutId=null) {
       
-      let subcon = foundation.subcon('road.traffic');
+      let trafficSubcon = foundation.subcon('road.traffic');
       
       // Generate a stock `hutId` if `null` provided
       if (hutId === null) hutId = this.getHutUid();
@@ -280,12 +282,17 @@ global.rooms['Hut'] = async foundation => {
         mmm('roadedHuts', +1);
         this.roadedHuts.set(hutId, { hut, roads: Map(/* Server => Road */) });
         hut.endWith(() => {
+          
           let { roads } = this.roadedHuts.get(hutId);
           for (let [ , road ] of roads) road.end();
+          
+          mmm('roadedHuts', -1);
+          this.roadedHuts.rem(hutId);
+          
         });
         
-        subcon({ type: 'join', hut: hut.desc() });
-        hut.endWith(() => subcon({ type: 'exit', hut: hut.desc() }));
+        trafficSubcon({ type: 'join', hut: hut.desc() });
+        hut.endWith(() => trafficSubcon({ type: 'exit', hut: hut.desc() }));
         
       }
       let roadedHut = this.roadedHuts.get(hutId); // roadedHut ~= { hut: Hut(...), roads: Map(Server => Session/Road) }
@@ -295,19 +302,20 @@ global.rooms['Hut'] = async foundation => {
         // Map Server->Road for this RoadedHut
         let { roads, hut } = roadedHut;
         
+        // Track the new Road
         mmm('roads', +1);
         roads.set(server, road);
-        road.endWith(() => mmm('roads', -1) || roads.rem(server));
+        
+        // When a Road Ends we additionally check to see if there are
+        // any Roads remaining - if not we end the KidHut as well!
+        road.endWith(() => { roads.rem(server); mmm('roads', -1); roads.empty() && hut.end(); });
         
         // Subcon output
-        if (subcon.enabled) {
-          let netAddrs = Set(...roads.toArr(road => road.knownNetAddrs)).toArr(v => v);
-          subcon({ type: 'hold', hut: hut.desc(), numRoads: roads.size, netAddrs, server: server.desc() });
-          road.endWith(() => subcon({ type: 'drop', hut: hut.desc(), numRoads: roads.size, netAddrs, server: server.desc() }));
+        if (trafficSubcon.enabled) {
+          let netAddrs = () => Set(...roads.toArr(road => road.knownNetAddrs)).toArr(v => v);
+          trafficSubcon({ type: 'hold', hut: hut.desc(), numRoads: roads.size, netAddrs: netAddrs(), server: server.desc() });
+          road.endWith(() => trafficSubcon({ type: 'drop', hut: hut.desc(), numRoads: roads.size, netAddrs: netAddrs(), server: server.desc() }));
         }
-        
-        // End the Hut if all its Roads ended
-        road.endWith(() => roads.size || hut.end());
         
       }
       
@@ -936,6 +944,8 @@ global.rooms['Hut'] = async foundation => {
     cleanup() {
       
       mmm('hut', -1);
+      foundation.subcon('hinterland')({ type: 'exit', hut: this.desc() });
+      
       forms.Record.cleanup.call(this);
       
       /// {ABOVE=

@@ -576,8 +576,9 @@ module.exports = async foundation => {
       for (let i = 0; i < 6; i++) srcs[1].send('ha');
       for (let i = 0; i < 7; i++) srcs[2].send('hi');
       
-      
       if (events.count() !== 1) throw Error(`Expected exactly 1 event; got ${events.count()}`);
+      
+      fnSrc.end();
       
     },
     async m => { // FnSrc.Prm1 gets MemSrc.Prm1 vals as expected
@@ -614,6 +615,9 @@ module.exports = async foundation => {
         
       });
       
+      srcs.each(src => src.end());
+      fnSrc.end();
+      
     },
     async m => { // FnSrc.Prm1 gets Chooser vals as expected
       
@@ -648,6 +652,9 @@ module.exports = async foundation => {
         if (e1 !== r1 || e2 !== r2 || e3 !== r3) throw Error(`Mismatch on row ${i}; expected [ ${e1}, ${e2}, ${e3} ]; got [ ${r1}, ${r2}, ${r3} ]`);
         
       });
+      
+      choosers.each(chooser => chooser.end());
+      fnSrc.end();
       
     },
     async m => { // FnSrc.Tmp1 only sends once, for multiple src sends, if value is always the same Tmp

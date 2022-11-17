@@ -1,5 +1,10 @@
 global.rooms['chess2'] = async foundation => {
   
+  let c2Subcon = foundation.createSubcon('chess2.gameplay', {
+    enabled: true,
+    format: () => {} // Suppress stdout output
+  });
+  
   let rooms = await foundation.getRooms([
     'logic.TmpAny',
     'logic.Chooser',
@@ -444,11 +449,15 @@ global.rooms['chess2'] = async foundation => {
         
         let desc = kidHut.desc() + ' @ ' + kidHut.getKnownNetAddrs().toArr(v => v).join('+');
         
-        timerSrc.route(() => gsc(`${desc} FAILED to create player!`), 'prm');
+        timerSrc.route(() => c2Subcon(`${desc} FAILED to create player!`), 'prm');
         timerSrc.route(() => kidHut.end(), 'prm');
         
-        dep(playerRh.route(hrec => gsc(`${desc} created player! (${hrec.rec.getValue('term')})`)));
-        dep(playerRh.route(() => { timerSrc.end(); playerRh.end(); }));
+        dep(playerRh.route(hrec => c2Subcon(`${desc} created player! (${hrec.rec.getValue('term')})`)));
+        dep(playerRh.route(() => {
+          // If we get the Player before the Timeout cancel the Timeout
+          timerSrc.end();
+          playerRh.end();
+        }));
         
       });
       
@@ -498,7 +507,6 @@ global.rooms['chess2'] = async foundation => {
         let ms = Date.now();
         
         let queuedStatusesByTerm = (await chess2.rh('c2.queue').getRecs()).categorize(q => q.getValue('term'));
-        
         for (let [ term, queuedStatuses ] of queuedStatusesByTerm) {
           
           // Shuffle the PlayerStatus({ type: 'queue' }) Records; this
@@ -516,9 +524,19 @@ global.rooms['chess2'] = async foundation => {
             for (let p of [ pw, pb ]) p.setValue({ status: 'match' });
             
             // Get Players from PlayerStatus({ type: 'queue' }) Records
-            gsc(`CREATE MATCH (white:${pw.getValue('term')} vs black:${pb.getValue('term')})`);
+            
             let match = hut.addRecord('c2.match', [ chess2 ], { ms });
-            match.endWith(() => { gsc(`MATCH ENDED (white:${pw.getValue('term')} vs black:${pb.getValue('term')})`); });
+            
+            if (c2Subcon.enabled) {
+              
+              let matchDesc = `white:${pw.getValue('term')} vs black:${pb.getValue('term')}`;
+              c2Subcon(`MATCH OPEN (${matchDesc})`);
+              match.endWith(() => { c2Subcon(`MATCH SHUT (${matchDesc})`); });
+              
+              let rh = match.rh('c2.outcome');
+              rh.route(({ rec: outcome }) => c2Subcon(`MATCH OUTC (${matchDesc})`, outcome.getValue()));
+              
+            }
             
             mmm('chess2Match', +1);
             match.endWith(() => mmm('chess2Match', -1));
@@ -535,12 +553,12 @@ global.rooms['chess2'] = async foundation => {
             let mpw = hut.addRecord('c2.matchPlayer', [ match, pw.status ], { colour: 'white' });
             let mpb = hut.addRecord('c2.matchPlayer', [ match, pb.status ], { colour: 'black' });
             mpw.endWith(async () => {
-              gsc(`WHITE ENDED (${pw.getValue('term')})`);
+              c2Subcon(`WHITE ENDED (${pw.getValue('term')})`);
               let round = await match.withRh({ type: 'c2.round', fn: rh => rh.getRec() });
               if (round) { round.end(); hut.addRecord('c2.outcome', [ match ], { winner: 'black' }); }
             });
             mpb.endWith(async () => {
-              gsc(`BLACK ENDED (${pb.getValue('term')})`);
+              c2Subcon(`BLACK ENDED (${pb.getValue('term')})`);
               let round = await match.withRh({ type: 'c2.round', fn: rh => rh.getRec() });
               if (round) { round.end(); hut.addRecord('c2.outcome', [ match ], { winner: 'white' }); }
             });
@@ -583,13 +601,18 @@ global.rooms['chess2'] = async foundation => {
           player.status = hut.addRecord('c2.playerStatus', [ player ], { type: 'chill', ms: Date.now() });
           
           // Update the single PlayerStatus based on changes to "status"
-          player.getValuePropSrc('status').route(status => {
+          let statusSrc = player.getValuePropSrc('status');
+          player.endWith(statusSrc);
+          statusSrc.route(status => {
             
             if (status === player.status.getValue('type')) return;
+            
+            gsc(`STATUS: ${player.status.getValue('type')} -> ${status}`);
+            
             player.status.end();
             player.status = hut.addRecord('c2.playerStatus', [ player ], { type: status, ms: Date.now() });
             
-          });
+          }, 'prm');
           /// =ABOVE}
           
         }));
@@ -614,11 +637,11 @@ global.rooms['chess2'] = async foundation => {
           { form: 'Axis1d', axis: 'y', dir: '+', mode: 'compactCenter' }
         ]));
         chillReal.addReal('info', lay.text('You\'re playing Chess2!', tsP1));
-        chillReal.addReal('info', lay.text(`Opponents will know you as "${player.getValue('term')}"`));
+        chillReal.addReal('info', lay.text(`Opponents will know you as "${player.getValue('term')}" ("${hut.uid}")`));
         let numPlayersReal = chillReal.addReal('info', lay.text());
         let numMatchesReal = chillReal.addReal('info', lay.text());
         chillReal.addReal('gap', lay.gap());
-        chillReal.addReal('queue', lay.button('Find a match!', () => changeStatusAct.act({ status: 'queue' })));
+        chillReal.addReal('queue', lay.button('Find a match!', () => gsc('FIND') || changeStatusAct.act({ status: 'queue' })));
         chillReal.addReal('learn', lay.button('How to play', () => changeStatusAct.act({ status: 'learn' })));
         chillReal.addReal('gap', lay.gap());
         chillReal.addReal('item', lay.text('Sorry for any bugs! Chess2 is only getting better!', tsM2));
@@ -682,7 +705,8 @@ global.rooms['chess2'] = async foundation => {
 
         queueReal.addReal('gap', lay.gap());
         
-        let queueChooser = dep(Chooser(status.rh('c2.queue')));
+        let queueRh = dep(status.rh('c2.queue'));
+        let queueChooser = dep(Chooser(queueRh));
         dep.scp(queueChooser.srcs.off, (noQueue, dep) => {
           
           let queueAct = dep(hut.enableAction('c2.enterQueue', ({ term }) => {
@@ -692,7 +716,7 @@ global.rooms['chess2'] = async foundation => {
             hut.addRecord('c2.queue', [ chess2, status ], { term, ms: Date.now() });
           }));
           
-          let termSrc = MemSrc.Prm1('');
+          let termSrc = dep(MemSrc.Prm1(''));
           let contentReal = dep(queueReal.addReal('content', [
             { form: 'Geom', w: '90%' },
             { form: 'Axis1d', axis: 'y', mode: 'stack' }
@@ -837,7 +861,8 @@ global.rooms['chess2'] = async foundation => {
         });
         
         // Render based on the current Outcome
-        let outcomeChooser = dep(Chooser(match.rh('c2.outcome')));
+        let outcomeRh = dep(match.rh('c2.outcome'));
+        let outcomeChooser = dep(Chooser(outcomeRh));
         dep.scp(outcomeChooser.srcs.onn, (outcome, dep) => {
           
           let outcomeReal = dep(boardReal.addReal('c2.outcome', [
@@ -1087,19 +1112,21 @@ global.rooms['chess2'] = async foundation => {
         
       };
       
-      let playerExistsChooser = dep(Chooser(hut.rh('c2.player')));
+      let playerRh = dep(hut.rh('c2.player'));
+      let playerExistsChooser = dep(Chooser(playerRh, null));
       dep.scp(playerExistsChooser.srcs.off, (noPlayer, dep) => nodePlayerless(dep, mainReal, chess2));
       dep.scp(playerExistsChooser.srcs.onn, (player, dep) => {
         
-        let changeStatusAct = hut.enableAction('c2.changeStatus', async msg => {
+        let changeStatusAct = dep(hut.enableAction('c2.changeStatus', async msg => {
           
           /// {ABOVE=
+          gsc('CHANGE', hut.desc(), msg);
           let { status=null } = msg ?? {};
           if (![ 'chill', 'learn', 'queue', 'lobby' ].has(status)) throw Error('Invalid status!');
           player.setValue({ status });
           /// =ABOVE}
           
-        });
+        }));
         
         let paneReal = dep(mainReal.addReal('pane', [
           { form: 'Geom', w: '80%', h: '80%', anchor: 'cen' },

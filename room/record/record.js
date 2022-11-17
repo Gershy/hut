@@ -738,6 +738,8 @@ global.rooms['record'] = async foundation => {
       mmm('record', +1);
       this.endWith(() => mmm('record', -1));
       
+      foundation.subcon('record.instance')(() => `LIVE ${this.desc()} (banking...)`);
+      
       // Apply Banking
       let err = Error('');
       this.bankedPrm = (async () => {
@@ -764,11 +766,11 @@ global.rooms['record'] = async foundation => {
         // RelHandlers of its Members! This means there is a moment
         // where the Record is already pending creation, but the Chooser
         // hasn't registered that its "off" Dep should trigger! I think
-        // the solution could look like kicking off the Banking Promise
+        // the solution could look like kicking off the Sync Promise
         // immediately but not `await`ing it, synchronously Sending the
         // newly created Record (`this`) to its Members' RelHandlers,
         // and only after that has all been completed synchronously,
-        // `await`ing the Banking Promise!
+        // `await`ing the Sync Promise!
         
         try {
           
@@ -804,18 +806,23 @@ global.rooms['record'] = async foundation => {
             
           }
           
+          foundation.subcon('record.instance')(() => `PROP ${this.desc()} (await sync...)`);
+          
           await syncPrm;
+          
+          foundation.subcon('record.instance')(() => `SYNC ${this.desc()}`);
           
         } catch (ctxErr) {
           
           // Any Errors upon Banking / informing Holders result in the
           // Record Ending immediately
           
+          foundation.subcon('record.instance')(() => `FAIL ${this.desc()}`);
+          
           try         { this.end(); }
           catch (err) { gsc(`Additional Error when ${this.desc()} failed to Bank`, foundation.formatError(err)); }
           
           err.propagate({ ctxErr, msg: `Failed to Bank ${this.desc()}` });
-          this.end();
           
         }
         
@@ -1069,6 +1076,20 @@ global.rooms['record'] = async foundation => {
     getValues(...keys) { return keys.toObj(key => [ key, this.getValue(key) ]); }, // TODO: This could be more efficient
     getValuePropSrc(prop) {
       
+      // TODO: ValuePropSrcs should be tracked and reused! So multiple
+      // requests for the same ValuePropSrc return the same instance,
+      // using refs to make sure ending 1 use doesn't end all. Then make
+      // sure that Records clean up their ValuePropSrcs when they end!
+      // Note this will remove the need to perform the second line in
+      // every case like:
+      //    | let propSrc = rec.getValuePropSrc('prop');
+      //    | rec.endWith(propSrc);
+      // but may require any Routes created on the ValuePropSrc to be
+      // "tmp" (whereas previously it was safe to make them "prm", as
+      // each ValuePropSrc was a unique instance and confined in scope).
+      // Note this will also require all tracked ValuePropSrcs to be
+      // ended when the Record is cleaned up!
+      
       if (!isForm(prop, String)) throw Error(`Must provide a String property`);
       
       let src = MemSrc.Prm1(null);
@@ -1093,10 +1114,7 @@ global.rooms['record'] = async foundation => {
       });
       
       let origCleanup = src.cleanup;
-      Object.defineProperty(src, 'cleanup', { value: () => {
-        origCleanup.call(src);
-        route.end();
-      }});
+      Object.defineProperty(src, 'cleanup', { value: () => { origCleanup.call(src); route.end(); }});
       
       return src;
       
@@ -1138,19 +1156,14 @@ global.rooms['record'] = async foundation => {
     end() { forms.Tmp.end.call(this); return this.endedPrm; },
     cleanup() {
       
-      // Note that I've considered calling `this.valueSrc.end` here, but
-      // that leads to `this.valueSrc.val` being set to `skip` which can
-      // produce issues for code that expects `this.valueSrc.val` to
-      // always be of a certain type. Considering that there's no real
-      // cleanup produced from MemSrc.Prm1.prototype.end, I've decided
-      // not to call `this.valueSrc.end`
+      foundation.subcon('record.instance')(() => `KILL ${this.desc()}`);
       
       for (let endWithMemRoute of this.endWithMemRoutes) endWithMemRoute.end();
       
       // Note that it's good to end `this.valueSrc`, but even Ended,
       // `this` may be passed around to some code that doesn't expect
-      // `this.valueSrc.val === skip` (`MemSrc.Prm1.prototype.cleanup`
-      // sets this) - so end the value Src, but replace the value!
+      // `this.valueSrc.val === skip` - so end the value Src, but then
+      // set the value back to what it used to be! (TODO: hacky??)
       let val = this.valueSrc.val;
       this.valueSrc.end();
       this.valueSrc.val = val;

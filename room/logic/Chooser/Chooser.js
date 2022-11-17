@@ -1,5 +1,5 @@
 global.rooms['logic.Chooser'] = async foundation => {
-  
+  // TODO: HEEERE! Try not to change line count - untitled has stack traces; figure out why line 69 is creating unending Tmps!!
   let MemSrc = await foundation.getRoom('logic.MemSrc');
   
   return form({ name: 'Chooser', has: { Endable, Src }, props: forms => ({
@@ -24,8 +24,6 @@ global.rooms['logic.Chooser'] = async foundation => {
       this.srcs = names.toObj(n => [ n, MemSrc.Tmp1() ]);
       this.activeSrcName = names[0];
       this.srcs[this.activeSrcName].mod(Tmp({ '~chooserInternal': true }));
-      
-      let err = Error('ctrace');
       
       if (src) {
         
@@ -68,7 +66,8 @@ global.rooms['logic.Chooser'] = async foundation => {
           // Choose the "off" option if the Tmp ends. Stop waiting for
           // this to happen if the Chooser itself ends first. Release
           // the reference to the Route if the Tmp ends first.
-          let endRoute = tmp.route(() => { this.srcRouteDeps.rem(endRoute); this.choose(nOff); });
+          
+          let endRoute = tmp.route(() => { gsc('HEEEEEERE', Error('trace')); this.srcRouteDeps.rem(endRoute); endRoute.end(); this.choose(nOff); });
           this.srcRouteDeps.add(endRoute);
           
         });
@@ -123,10 +122,8 @@ global.rooms['logic.Chooser'] = async foundation => {
       for (let [ name, tmp1 ] of this.srcs) tmp1.end();
       
       this.maybeEndTmp(this.activeSrcName);
-      if (this.srcRoute) {
-        this.srcRoute.end();
-        for (let dep of this.srcRouteDeps) dep.end();
-      }
+      if (this.srcRoute) this.srcRoute.end();
+      if (this.srcRouteDeps) for (let dep of this.srcRouteDeps) dep.end();
       
     }
     

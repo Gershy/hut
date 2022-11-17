@@ -82,7 +82,6 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
       // The following operations can occur regardless of socket state
       if (op === 8) {         // Process "close" op
-        gsc('SESSION ENDED!!');
         return session.end(); // Socket ended
       } else if (op === 9) {  // Process "ping" op
         throw Error('Unimplemented op: 9');

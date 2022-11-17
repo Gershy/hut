@@ -15,8 +15,12 @@ global.rooms['clock'] = async foundation => {
     
     init({ endMs=null, endMsSrc=endMs, real=null }) {
       
-      if (isForm(endMsSrc, Number)) endMsSrc = MemSrc.Prm1(endMsSrc);
-      if (!hasForm(endMsSrc, Src)) throw Error(`"endMsSrc" must be a Src (got ${getFormName(endMs)})`);
+      let manageEndMsSrc = false;
+      if (isForm(endMsSrc, Number)) {
+        manageEndMsSrc = true; // We created the Src - we need to manage it!
+        endMsSrc = MemSrc.Prm1(endMsSrc);
+      }
+      if (!isForm(endMsSrc, MemSrc.Prm1)) throw Error(`"endMsSrc" must be MemSrc.Prm1 (got ${getFormName(endMs)})`);
       if (!endMsSrc.srcFlags.memory) throw Error(`The "endMsSrc" Src must supply an immediate value`);
       if (!real) throw Error(`Can't omit "real"`);
       
@@ -58,12 +62,13 @@ global.rooms['clock'] = async foundation => {
         
       });
       
-      Object.assign(this, { endMsSrc, timerSrc, remainingMsSrc });
+      Object.assign(this, { endMsSrc, manageEndMsSrc, timerSrc, remainingMsSrc });
       
     },
     cleanup() {
       this.timerSrc.end();
       this.remainingMsSrc.end();
+      if (this.manageEndMsSrc) this.endMsSrc.end();
     }
     
   })});
