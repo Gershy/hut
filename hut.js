@@ -95,7 +95,6 @@ if (1) { // Setup basic process monitoring
   for (let evt of evts) process.on(`SIG${evt.upper()}`, (...args) => (log(`Process event: "${evt}"`, args), skip));
   
   process.on('SIGINT', (sig, code) => process.exit(code));
-  process.on('SIGKILL', (sig, code) => process.exit(code));
   
   process.on('beforeExit', (...args) => log('Process exiting (before); args:', args));
   process.on('exit',       (...args) => log('Process exiting (final); args:', args));
