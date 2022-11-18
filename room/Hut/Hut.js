@@ -375,7 +375,7 @@ global.rooms['Hut'] = async foundation => {
           rep.strikes.push({ reason, amt, ms });
           rep.total += amt;
           rep.window += amt;
-          while ((ms - rep.strikes[0].ms) > (1000 * 60 * 5)) { // Remember strike for 5min
+          while ((ms - rep.strikes[0].ms) > (1000 * 60 * 15)) { // Remember strike for 15min
             rep.window -= rep.strikes[0].amt; // Relieve this strike
             rep.strikes.shift();
             mmm('netAddrStrike', -1);
@@ -387,7 +387,7 @@ global.rooms['Hut'] = async foundation => {
         
       }
       
-      foundation.subcon('warning')('STRIKE!', this.getKnownNetAddrs().toObj((v, k) => [ k, naRep.get(v) ]));
+      foundation.subcon('warning')('STRIKE!', this.getKnownNetAddrs().toObj(v => [ v, naRep.get(v) ]));
       
     },
     /// =ABOVE}
