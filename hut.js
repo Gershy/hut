@@ -89,13 +89,9 @@ if (1) { // Setup basic process monitoring
   
   let log = (...args) => global.gsc ? global.gsc(...args) : console.log(...args);
   
-  // let orig = process.exit;
-  // process.exit = (...args) => {
-  //   log(`Process explicitly closed; args:`, args, Error('trace'));
-  //   return orig.call(process, ...args);
-  // };
-  
-  let evts = 'hup,int,kill,pipe,quit,stope,term'.split(',');
+  // NOTE: Trying to catch SIGKILL or SIGSTOP crashes posix!
+  // https://github.com/nodejs/node-v0.x-archive/issues/6339
+  let evts = 'hup,int,pipe,quit,term'.split(',');
   for (let evt of evts) process.on(`SIG${evt.upper()}`, (...args) => (log(`Process event: "${evt}"`, args), skip));
   
   process.on('SIGINT', (sig, code) => process.exit(code));
