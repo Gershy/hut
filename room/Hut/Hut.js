@@ -387,7 +387,7 @@ global.rooms['Hut'] = async foundation => {
         
       }
       
-      gsc('STRIKE!', this.getKnownNetAddrs().toObj((v, k) => [ k, naRep.get(v) ]));
+      foundation.subcon('warning')('STRIKE!', this.getKnownNetAddrs().toObj((v, k) => [ k, naRep.get(v) ]));
       
     },
     /// =ABOVE}

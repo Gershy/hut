@@ -261,7 +261,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         }).join('\n');
       }
     },
-    'warning': { enabled: true },
+    'warning': { enabled: true, format: () => {} },
     
     'bank': {
       desc: String.baseline(`
@@ -1821,9 +1821,8 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       let badNetAddr = netAddrs.find(na => naRep.get(na)?.window >= 1).val; // "window" refers to the reputational damage within some timeframe (as opposed to "total" reputational damage)
       let badRep = badNetAddr && naRep.get(badNetAddr);
       
-      gsc({ session: { key, knownNetAddrs, d }, badRep });
       if (badRep) {
-        gsc(`Reject ${session.desc()} @ ${netAddrs.toArr(v => v).join(' + ')}`, Set(badRep.strikes.map(v => v.reason)).toArr(v => v));
+        this.subcon('warning')(`Reject ${session.desc()} @ ${netAddrs.toArr(v => v).join(' + ')}`, Set(badRep.strikes.map(v => v.reason)).toArr(v => v));
         return session.end();
       }
       
