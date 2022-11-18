@@ -67,7 +67,7 @@ global.rooms['logic.Chooser'] = async foundation => {
           // this to happen if the Chooser itself ends first. Release
           // the reference to the Route if the Tmp ends first.
           
-          let endRoute = tmp.route(() => { gsc('HEEEEEERE', Error('trace')); this.srcRouteDeps.rem(endRoute); endRoute.end(); this.choose(nOff); });
+          let endRoute = tmp.route(() => { this.srcRouteDeps.rem(endRoute); endRoute.end(); this.choose(nOff); });
           this.srcRouteDeps.add(endRoute);
           
         });

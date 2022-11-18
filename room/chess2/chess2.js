@@ -1048,7 +1048,7 @@ global.rooms['chess2'] = async foundation => {
                 /// {ABOVE=
                 // Really this is just sanity; a move must exist due to
                 // the scoping!
-                let curMove = await matchPlayer.withRh('c2.roundMove', 'all'); // OR { type: 'c2.roundMove', fn: 'all' } OR { type: 'c2.roundMove', fn: rh => rh.getRecs() }
+                let curMove = await matchPlayer.withRh('c2.roundMove', 'one'); // OR { type: 'c2.roundMove', fn: 'all' } OR { type: 'c2.roundMove', fn: rh => rh.getRecs() }
                 if (curMove) curMove.end();
                 /// =ABOVE}
                 
