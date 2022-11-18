@@ -88,6 +88,10 @@ if (1) { // Low-level debug
   let showThreshold = 1;
   let metrics = {};
 
+  let bToMb = 1 / (1000 ** 2);
+  let { heapUsed, heapTotal } = process.memoryUsage();
+  let consumed = heapUsed * bToMb;
+
   global.mmm = (term, val) => {
     if (!metrics.has(term)) metrics[term] = 0;
     metrics[term] += val;
@@ -101,7 +105,7 @@ if (1) { // Low-level debug
       
       let relevantMetrics = metrics.map(v => (v > showThreshold) ? v : skip);
       if (relevantMetrics.empty()) relevantMetrics = null;
-      gsc({ metrics: relevantMetrics });
+      gsc({ metrics: relevantMetrics, heapConsumed: consumed.toFixed(2) });
       
     }
     

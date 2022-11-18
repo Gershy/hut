@@ -480,6 +480,8 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         
       }
       
+      if (session.off()) return res.socket.destroy(); // return res.socket.destroy(); //end(); //forceEnd(res, 204);
+      
       let replyPrm = null;
       let replyable = () => {
         let timeout = setTimeout(() => replyPrm.reject(Error('Timeout').mod({ keyedMsg })), 10 * 1000); // 10sec is v generous

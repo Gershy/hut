@@ -1814,6 +1814,19 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
     // This Route directs Hears/Tells between the Session and the Hut
     server.src.route(session => {
       
+      let { key, knownNetAddrs, desc, d=desc() } = session;
+      
+      let naRep = hut.netAddrReputation;
+      let netAddrs = session.knownNetAddrs;
+      let badNetAddr = netAddrs.find(na => naRep.get(na)?.window >= 1).val; // "window" refers to the reputational damage within some timeframe (as opposed to "total" reputational damage)
+      let badRep = badNetAddr && naRep.get(badNetAddr);
+      
+      gsc({ session: { key, knownNetAddrs, d }, badRep });
+      if (badRep) {
+        gsc(`Reject ${session.desc()} @ ${netAddrs.toArr(v => v).join(' + ')}`, Set(badRep.strikes.map(v => v.reason)).toArr(v => v));
+        return session.end();
+      }
+      
       if (session.key === null) {
         
         // Note that if `session.key === null` then `sessionMsg.msg.trn`

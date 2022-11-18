@@ -252,8 +252,13 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
       let query = req.url.cut('?')[1].split('&').toObj(v => v.cut('='));
       try {
+        
         let key = opts.getKey({ query });
-        tmp.src.send(makeSoktSession(key, req, socket, buff));
+        let session = makeSoktSession(key, req, socket, buff);
+        tmp.src.send(session);
+        
+        if (session.off()) return socket.destroy();
+        
       } catch (err) {
         
         errSubcon('Error getting session key', query, err);

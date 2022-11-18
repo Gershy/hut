@@ -450,7 +450,7 @@ global.rooms['chess2'] = async foundation => {
         let desc = kidHut.desc() + ' @ ' + kidHut.getKnownNetAddrs().toArr(v => v).join('+');
         
         timerSrc.route(() => c2Subcon(`${desc} FAILED to create player!`), 'prm');
-        timerSrc.route(() => kidHut.end(), 'prm');
+        timerSrc.route(() => (kidHut.strike(0.15, 'Failed timely chess2 player creation'), kidHut.end()), 'prm');
         
         dep(playerRh.route(hrec => c2Subcon(`${desc} created player! (${hrec.rec.getValue('term')})`)));
         dep(playerRh.route(() => {
@@ -711,11 +711,12 @@ global.rooms['chess2'] = async foundation => {
           
           let queueAct = dep(hut.enableAction('c2.enterQueue', ({ term }) => {
             if (!isForm(term, String)) throw Error('Term must be String');
-            if (term && term.length < 4) throw Error('Term min length: 4');
-            if (term.length > 30) throw Error('Term max length: 30');
+            //if (term && term.length < 4) throw Error('Term min length: 4');
+            if (term.length > 50) throw Error('Term max length: 50');
             hut.addRecord('c2.queue', [ chess2, status ], { term, ms: Date.now() });
           }));
           
+          /// {BELOW=
           let termSrc = dep(MemSrc.Prm1(''));
           let contentReal = dep(queueReal.addReal('content', [
             { form: 'Geom', w: '90%' },
@@ -729,6 +730,7 @@ global.rooms['chess2'] = async foundation => {
           contentReal.addReal('termInput', lay.input('Code?', termSrc));
           contentReal.addReal('go', lay.button('Start matching!', () => queueAct.act({ term: termSrc.val })));
           contentReal.addReal('back', lay.button('Go back', () => changeStatusAct.act({ status: 'chill' })));
+          /// =BELOW}
           
         });
         dep.scp(queueChooser.srcs.onn, (queue, dep) => {

@@ -202,6 +202,8 @@ global.rooms['Hut'] = async foundation => {
         // If no parent, we are a ParentHut. We have a responsibility
         // to manage ChildHuts.
         
+        this.netAddrReputation = Map();
+        
          // For managing ChildHuts
         this.roadedHutIdCnt = 0;
         this.roadedHuts = Map(); // Map kidHutUid => { hut: Hut(...), roads: Map( Server(...) => Road(...) ) }
@@ -350,6 +352,42 @@ global.rooms['Hut'] = async foundation => {
       let roadedHut = this.parHut.roadedHuts.get(this.uid);
       if (!roadedHut) return Set();
       return Set(roadedHut.roads.toArr(road => road.knownNetAddrs.toArr(v => v)).flat(1));
+      
+    },
+    
+    strike(amt, reason=null) {
+      
+      if (!this.parHut) throw Error(`Should only call "strike" on KidHuts`);
+      
+      let ms = Date.now();
+      let naRep = this.parHut.netAddrReputation;
+      for (let netAddr of this.getKnownNetAddrs()) {
+        
+        let rep = naRep.get(netAddr);
+        if (!rep) {
+          naRep.set(netAddr, rep = { total: 0, window: 0, strikes: [] });
+          mmm('netAddrRep', +1);
+        }
+        
+        if (rep.window < 1) { // Don't bother with struck-out NetworkAddresses
+          
+          mmm('netAddrStrike', +1);
+          rep.strikes.push({ reason, amt, ms });
+          rep.total += amt;
+          rep.window += amt;
+          while ((ms - rep.strikes[0].ms) > (1000 * 60 * 60 * 3)) { // Remember strikes for 3hrs
+            rep.window -= rep.strikes[0].amt; // Relieve this strike
+            rep.strikes.shift();
+            mmm('netAddrStrike', -1);
+          }
+          
+        }
+        
+        if (rep.window >= 1) this.end();
+        
+      }
+      
+      gsc('STRIKE!', this.getKnownNetAddrs().toObj((v, k) => [ k, naRep.get(v) ]));
       
     },
     /// =ABOVE}
