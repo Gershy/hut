@@ -89,9 +89,15 @@ if (1) { // Setup basic process monitoring
   
   let log = (...args) => global.gsc ? global.gsc(...args) : console.log(...args);
   
+  let origExit = process.exit;
+  process.exit = (...args) => {
+    log(`Process explicitly ended`, args, Error('trace'));
+    return origExit.call(process, ...args);
+  };
+  
   // NOTE: Trying to catch SIGKILL or SIGSTOP crashes posix!
   // https://github.com/nodejs/node-v0.x-archive/issues/6339
-  let evts = 'hup,int,pipe,quit,term'.split(',');
+  let evts = 'hup,int,pipe,quit,term,tstp'.split(',');
   for (let evt of evts) process.on(`SIG${evt.upper()}`, (...args) => (log(`Process event: "${evt}"`, args), skip));
   
   process.on('SIGINT', (sig, code) => process.exit(code));
@@ -106,6 +112,7 @@ if (1) { // Low-level debug
   let enabled = true;
   let intervalMs = 10000;
   let showThreshold = 1;
+  let maxMetrics = 20; // Consider `Infinity`
   let metrics = {};
 
   global.mmm = (term, val) => {
@@ -125,6 +132,7 @@ if (1) { // Low-level debug
 
       let relevantMetrics = metrics
         .toArr((v, k) => (v < showThreshold) ? skip : [ k, v ])
+        .slice(0, maxMetrics)
         .valSort(([ k, v ]) => -v);
       
       if (relevantMetrics.empty()) {
