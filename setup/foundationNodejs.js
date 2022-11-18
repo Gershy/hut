@@ -835,7 +835,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
   
   // Sandbox
   getMs: require('perf_hooks').performance.now,
-  formatAnyValue(val, { depth=10 }={}) { return require('util').inspect(val, { colors: true, depth }); },
+  formatAnyValue(val, { depth=10 }={}) { return require('util').inspect(val, { colors: false, depth }); },
   
   // Services
   createKeep(opts={}) { return Form.KeepNodejs(); },
