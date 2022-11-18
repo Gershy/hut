@@ -90,19 +90,25 @@ global.Foundation = form({ name: 'Foundation', pars: { Endable, Slots }, props: 
     return `${protocol}://${host}${excludePort ? '' : (':' + port)}`;
   },
   formatAnyValue(val) { try { return valToSer(val); } catch (err) { return `[${getFormName(val)}]`; } },
-  subcon(term) {
+  subcon(term, params=null) {
+    
+    // Any case where `params` is set explicitly suggests the subcon is
+    // enabled; the only way to disable such a subcon is to explicitly
+    // configure it in `this.seek('conf')` and set `{ enabled: false }`!
     
     if (!isForm(term, String)) throw Error(`Subcon term should be a String (got ${getFormName(term)})`);
+    if (params && params.has('enabled')) throw Error(`Don't provide subcon "enabled" value with explicit params!`);
     
     let subconVal = this.conf('subcon');
     if (!isForm(subconVal, Object)) throw Error(`Can't use Subcon yet (Conf returning ${getFormName(subconVal)})`);
-    if (!subconVal.has(term)) return Object.assign(() => {}, { enabled: false, defined: false });
     
-    let subconData = subconVal[term];
+    // No explicit params, no configured params - return dummy instance!
+    if (!params && !subconVal.has(term)) return Object.assign(() => {}, { enabled: false });
+    
+    let subconData = { enabled: true, ...(subconVal.has(term) ? subconVal[term] : {}), ...(params ?? {}) };
     if (!subconData.enabled) return Object.assign(() => {}, subconData);
     
     if (!this.subcons.has(term)) this.subcons.set(term, this.createSubcon(term, subconData));
-    
     return this.subcons.get(term);
     
   },

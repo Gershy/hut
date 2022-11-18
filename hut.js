@@ -81,10 +81,35 @@ Object.assign(global, {
   rooms: Object.create(null)
 });
 
+// Do setup
+require('./setup/clearing.js');
+require('./setup/foundationNodejs.js');
+
+if (1) { // Setup basic process monitoring
+  
+  let log = (...args) => global.gsc ? global.gsc(...args) : console.log(...args);
+  
+  // let orig = process.exit;
+  // process.exit = (...args) => {
+  //   log(`Process explicitly closed; args:`, args, Error('trace'));
+  //   return orig.call(process, ...args);
+  // };
+  
+  let evts = 'hup,int,kill,pipe,quit,stope,term'.split(',');
+  for (let evt of evts) process.on(`SIG${evt.upper()}`, (...args) => (log(`Process event: "${evt}"`, args), skip));
+  
+  process.on('SIGINT', (sig, code) => process.exit(code));
+  process.on('SIGKILL', (sig, code) => process.exit(code));
+  
+  process.on('beforeExit', (...args) => log('Process exiting (before); args:', args));
+  process.on('exit',       (...args) => log('Process exiting (final); args:', args));
+  
+}
+
 if (1) { // Low-level debug
   
   let enabled = true;
-  let intervalMs = 7500;
+  let intervalMs = 10000;
   let showThreshold = 1;
   let metrics = {};
 
@@ -103,9 +128,19 @@ if (1) { // Low-level debug
       let { heapUsed, heapTotal } = process.memoryUsage();
       let consumed = heapUsed * bToMb;
 
-      let relevantMetrics = metrics.map(v => (v > showThreshold) ? v : skip);
-      if (relevantMetrics.empty()) relevantMetrics = null;
-      gsc({ metrics: relevantMetrics, heapConsumed: consumed.toFixed(2) });
+      let relevantMetrics = metrics
+        .toArr((v, k) => (v < showThreshold) ? skip : [ k, v ])
+        .valSort(([ k, v ]) => -v);
+      
+      if (relevantMetrics.empty()) {
+        
+        gsc(`Heap: ${consumed.toFixed(2)}mb\n  (No metrics)`);
+        
+      } else {
+        
+        gsc(`Heap: ${consumed.toFixed(2)}mb\n` + relevantMetrics.map(([ k, v ]) => `  METRIC - ${(k + ':').padTail(20)}${v}`).join('\n'));
+        
+      }
       
     }
     
@@ -113,12 +148,7 @@ if (1) { // Low-level debug
   
 }
 
-// Do setup
-require('./setup/clearing.js');
-require('./setup/foundationNodejs.js');
-
 let conf = null;
-
 try {
   
   let { argv } = process;

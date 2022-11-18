@@ -1,9 +1,6 @@
 global.rooms['chess2'] = async foundation => {
   
-  let c2Subcon = foundation.createSubcon('chess2.gameplay', {
-    enabled: true,
-    format: () => {} // Suppress stdout output
-  });
+  let c2Subcon = foundation.subcon('chess2.gameplay', {});
   
   let rooms = await foundation.getRooms([
     'logic.TmpAny',
@@ -536,7 +533,7 @@ global.rooms['chess2'] = async foundation => {
               match.endWith(() => { c2Subcon(`MATCH SHUT (${matchDesc})`); });
               
               // RelHandle Dep Ends when Match Ends
-              match.rh('c2.outcome').route(({ rec: outcome }) => c2Subcon(`MATCH OUTC (${matchDesc})`, outcome.getValue()));
+              match.rh('c2.outcome').route(({ rec: outcome }) => c2Subcon(`MATCH OTCM (${matchDesc})`, outcome.getValue()));
               
             }
             

@@ -251,17 +251,8 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
   },
   $defSubconsVal: {
     
-    'dev': { // Installed at `global.gsc` during `FoundationNodejs(...).configure`
-      enabled: true,
-      format: (f, p, ...args) => {
-        let { depth=10 } = p;
-        return args.map(arg => {
-          if (hasForm(arg, Error)) return f.formatError(arg);
-          else                     return f.formatAnyValue(arg, { depth });
-        }).join('\n');
-      }
-    },
-    'warning': { enabled: true, format: () => {} },
+    'dev': { enabled: true }, // Installed at `global.gsc` during `FoundationNodejs(...).configure`
+    'warning': { enabled: true },
     
     'bank': {
       desc: String.baseline(`
@@ -471,6 +462,12 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         
       }
     },
+    'network.identity.server': {
+      desc: String.baseline(`
+        | Control Subcon information about how NetworkIdentities are managing their Servers.
+      `),
+      enabled: false
+    },
     
     'record.instance': {
       desc: String.baseline(`
@@ -560,7 +557,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
     // FoundationNodejs instances exist (as occurs during testing)??
     if (!process['~topLevelErrsHandled']) {
       process['~topLevelErrsHandled'] = true;
-      let onErr = err => console.error('(Top level)', this.formatError(err));
+      let onErr = err => this.subcon('warning')('(Top level)', this.formatError(err));
       process.on('uncaughtException', onErr);
       process.on('unhandledRejection', onErr);
     }
@@ -726,6 +723,10 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         }
         /// =DEBUG}
         
+        NetworkIdentity.subcon.server = this.subcon('network.identity.server');
+        NetworkIdentity.subcon.sign = this.subcon('dev');
+        NetworkIdentity.subcon.acme = this.subcon('dev');
+        
         global.gsc = this.subcon('dev');
         
         return conf;
@@ -835,7 +836,10 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
   
   // Sandbox
   getMs: require('perf_hooks').performance.now,
-  formatAnyValue(val, { depth=10 }={}) { return require('util').inspect(val, { colors: false, depth }); },
+  formatAnyValue(val, { depth=10 }={}) {
+    if (hasForm(val, Error)) return this.formatError(val);
+    return require('util').inspect(val, { colors: false, depth });
+  },
   
   // Services
   createKeep(opts={}) { return Form.KeepNodejs(); },
@@ -1719,6 +1723,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       return result;
       
     }});
+    
     
     /*
     bank.keep.value
