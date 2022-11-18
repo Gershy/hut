@@ -641,7 +641,7 @@ global.rooms['chess2'] = async foundation => {
         chillReal.addReal('queue', lay.button('Find a match!', () => changeStatusAct.act({ status: 'queue' })));
         chillReal.addReal('learn', lay.button('How to play', () => changeStatusAct.act({ status: 'learn' })));
         chillReal.addReal('gap', lay.gap());
-        chillReal.addReal('item', lay.text('Sorry for any bugs! Chess2 is only getting better!', tsM2));
+        chillReal.addReal('item', lay.text('(Chess2 is in beta and improving!)', tsM2));
         
         let numPlayersSrc = dep(chess2.getValuePropSrc('numPlayers'));
         dep(numPlayersSrc.route(num => numPlayersReal.mod({ text: `Players online: ${num}` })));
