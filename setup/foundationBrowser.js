@@ -76,6 +76,7 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
     
     Object.assign(this, {
       hutId: null,
+      viewId: this.getUid(),
       aboveHut: Promise.later(),
       belowHut: Promise.later(),
       aboveOffsetMs: null,
@@ -91,7 +92,10 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
     
   },
   halt() { debugger; },
-  restart() { global.location.reload(true); },
+  restart() {
+    if (this.off()) return gsc('Restart suppressed because Foundation ended');
+    global.location.reload(true);
+  },
   configure(data) {
     
     let conf = forms.Foundation.configure.call(this, data);
@@ -128,7 +132,43 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
     Object.assign(this, { hutId, aboveOffsetMs: latencyMs - performance.now() + ageMs });
     
   },
+  ensureSingleTab() {
+    
+    // TODO: Support multiple tabs! (Probably with a SharedWorker)
+    let { localStorage: storage } = window;
+    if (!storage) throw Error(`No "localStorage" available`);
+    
+    // Set our view under the hid; end this Foundation if the value ever
+    // changes!
+    let hutKey = `view/${this.hutId}`;
+    storage.setItem(hutKey, `${this.viewId}/${Date.now().toString(32)}`);
+    let evtFn = null;
+    window.addEventListener('storage', evtFn = e => {
+      
+      if (e.key !== hutKey) return;
+      
+      // Any other event means another tab took control
+      this.subcon('multiview')(`Lost view priority (hut: ${this.hutId}, view: ${this.viewId})`, e);
+      window.removeEventListener('storage', evtFn);
+      this.end();
+      
+      let children = document.body.querySelectorAll(':scope > *');
+      for (let child of children) child.remove();
+      
+      let anchor = document.createElement('a');
+      anchor.classList.add('view');
+      anchor.setAttribute('href', this.getFoundationUrlPath());
+      anchor.textContent = 'To use this tab click or refresh';
+      document.body.appendChild(anchor);
+      
+    });
+    
+    this.subcon('multiview')(`Took view priority (hut: ${this.hutId}, view: ${this.viewId})`);
+    
+  },
   async hoist(...args) {
+    
+    this.ensureSingleTab();
     
     //let t = this.getMs();
     let Hut = await this.getRoom('Hut');
@@ -166,6 +206,10 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
   },
   
   // Sandbox
+  getFoundationUrlPath() {
+    let { pathname='/', search='' } = window.location;
+    return pathname + search;
+  },
   getMs() { return performance.now() + this.aboveOffsetMs; },
   getUrl(arg /* { command, query } */, { fixed=false }={}) {
     
@@ -417,6 +461,9 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
     });
     server.endWith(() => server.abort.abort(Error('Server closed')));
     
+    // TODO: Think about how to clean this up so the logic which results
+    // in a refresh is clearer! Right now refreshes are ignored if the
+    // Foundation was explicitly ended for losing tab priority!
     server.src.route(session => {
       
       let timeout = null;
@@ -578,6 +625,14 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
   srcLineRegex() { return { regex: /.^/, extract: fullMatch => ({ roomName: null, line: 0, char: 0 }) }; }, // That regex ain't ever gonna match! (Intentionally!)
   /// =DEBUG}
   
-  cleanup() { for (let server of this.servers) server.end(); }
+  cleanup() {
+    
+    // If we had tab focus clear this indicator from LocalStorage
+    let val = window.localStorage.getItem(`view/${this.hutId}`);
+    if (val.hasHead(`${this.viewId}/`)) window.localStorage.removeItem(`view/${this.hutId}`);
+    
+    for (let server of this.servers) server.end();
+    
+  }
   
 })});

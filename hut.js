@@ -87,6 +87,8 @@ require('./setup/foundationNodejs.js');
 
 if (1) { // Setup basic process monitoring
   
+  // https://nodejs.org/api/process.html#signal-events
+  
   let log = (...args) => global.gsc ? global.gsc(...args) : console.log(...args);
   
   let origExit = process.exit;
@@ -97,22 +99,21 @@ if (1) { // Setup basic process monitoring
   
   // NOTE: Trying to catch SIGKILL or SIGSTOP crashes posix!
   // https://github.com/nodejs/node-v0.x-archive/issues/6339
-  let evts = 'hup,int,pipe,quit,term,tstp'.split(',');
-  for (let evt of evts) process.on(`SIG${evt.upper()}`, (...args) => (log(`Process event: "${evt}"`, args), skip));
+  let evts = 'hup,int,pipe,quit,term,tstp,break'.split(',');
+  let haltEvts = Set('int,term,quit'.split(','));
+  for (let evt of evts) process.on(`SIG${evt.upper()}`, (...args) => {
+    log(`Process event: "${evt}"`, args);
+    haltEvts.has(evt) && process.exit(isForm(args[1], Number) ? args[1] : -1);
+  });
   
-  process.on('SIGINT', (sig, code) => process.exit(code));
-  process.on('SIGTERM', (sig, code) => process.exit(code));
-  process.on('SIGQUIT', (sig, code) => process.exit(code));
-  
-  process.on('beforeExit', (...args) => log('Process exiting (before); args:', args));
-  process.on('exit',       (...args) => log('Process exiting (final); args:', args));
+  process.on('exit', (...args) => log('Process exited; args:', args));
   
 }
 
 if (1) { // Low-level debug
   
   let enabled = true;
-  let intervalMs = 10000;
+  let intervalMs = 10 * 1000;
   let showThreshold = 1;
   let maxMetrics = 20; // Consider `Infinity`
   let metrics = {};

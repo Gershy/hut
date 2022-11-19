@@ -195,7 +195,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       // scheme, which in the case of Hut isn't an issue)
       socket.write(Buffer.concat([ metaBuff, dataBuff ]), err => {
         if (!err) return;
-        gsc('Error writing to socket', err);
+        errSubcon('Error writing to socket', err);
         session.end();
       });
       
@@ -310,7 +310,6 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   let tmp = Tmp({
     desc: () => `ws${secure ? 's' : ''}://${netAddr}:${port}`,
     secure, protocol: 'sokt', netAddr, port,
-    subcon,
     serverOpen, serverShut,
     src: Src(), // Sends `session` Objects
     reusedServer: false,

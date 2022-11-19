@@ -560,7 +560,6 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   let tmp = Tmp({
     desc: () => `http${secure ? 's' : ''}://${netAddr}:${port}`,
     secure, protocol: 'http', netAddr, port,
-    subcon,
     serverOpen, serverShut,
     intercepts: [],
     src: Src(), // Sends `session` Objects

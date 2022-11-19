@@ -33,7 +33,7 @@ global.rooms['chess2'] = async foundation => {
     textFwd: (text, textSize=ts00, align='fwd') => lay.text(text, textSize, align),
     link: (keepText, uri, { textSize=ts00, protocol=null, mode='separate' }={}) => [
       { form: 'Keep', protocol, uri, keepText, mode },
-      { form: 'Decal', text: { colour: '#c4d2ff', size: '4px' } }
+      { form: 'Decal', text: { colour: '#c4d2ff', size: textSize } }
     ],
     gap: (amt='1em') => [{ form: 'Geom', h: amt }],
     button: (text, pressFn, textSize=ts00) => [
@@ -676,7 +676,7 @@ global.rooms['chess2'] = async foundation => {
         learnReal.addReal('item', lay.textFwd('- If both players pass simultaneously the game ends in a draw'));
         learnReal.addReal('item', lay.gap());
         learnReal.addReal('item', lay.text('Chess2 by Gershom Maes'));
-        learnReal.addReal('item', lay.link('(Hut also by Gershom Maes)', 'github.com/Gershy/hut', { protocol: 'https' }));
+        learnReal.addReal('item', lay.link('(Hut also by Gershom Maes)', 'github.com/Gershy/hut', { textSize: tsM2, protocol: 'https' }));
         learnReal.addReal('item', lay.gap());
         learnReal.addReal('item', lay.button('Click to go back', () => changeStatusAct.act({ status: 'chill' })));
         learnReal.addReal('item', lay.gap('3em'));

@@ -1255,7 +1255,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   
   openPort(port, servers, security=null) {
     
-    Form.subcon.server(`NetworkIdentity opening port ${port} (${servers.count()} servers)`);
+    Form.subcon.server(`NetworkIdentity opening port ${port} (${servers.count()} server(s))`);
     
     /// {ASSERT=
     if (isForm(port, String)) port = parseInt(port, 10);
@@ -1274,7 +1274,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   },
   shutPort(port, servers, security=null) {
     
-    Form.subcon.server(`NetworkIdentity shutting port ${port} (${servers.count()} servers)`);
+    Form.subcon.server(`NetworkIdentity shutting port ${port} (${servers.count()} server(s))`);
     
     /// {ASSERT=
     if (isForm(port, String)) port = parseInt(port, 10);
@@ -1347,7 +1347,9 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     }
     /// =DEBUG}
     
-    sc(`NetworkIdentity hosting Open! (${this.secureBits ? 'secure' : 'unsafe'})`);
+    sc(`NetworkIdentity hosting Open! (${this.secureBits ? 'secure' : 'unsafe'})`, {
+      portServers: portServers.map(servers => servers.map(s => s.desc()))
+    });
     
     if (!this.secureBits) {
       
@@ -1382,7 +1384,6 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
           //   which is just less than 25 days; if we need to wait more
           //   than 25 days we'll call do multiple `setTimeout` calls in
           //   series until we've waited long enough
-          sc(`NetworkIdentity hosting Ended!`);
           while (tmp.onn() && sgn.validity.expiryMs > Date.now()) {
             let route = null;
             await Promise(rsv => {
@@ -1396,7 +1397,9 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
           
         }
         
-        sc(`NetworkIdentity hosting Shut!`);
+        sc(`NetworkIdentity hosting Shut! (${this.secureBits ? 'secure' : 'unsafe'})`, {
+          portServers: portServers.map(servers => servers.map(s => s.desc()))
+        });
         await Promise.all(portServers.map((servers, port) => this.shutPort(port, servers)))
           .fail(err => sc(`Failed to end Server`, err));
         

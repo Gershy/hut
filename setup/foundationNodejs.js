@@ -462,7 +462,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         
       }
     },
-    'network.identity.server': {
+    'network.server.status': {
       desc: String.baseline(`
         | Control Subcon information about how NetworkIdentities are managing their Servers.
       `),
@@ -723,7 +723,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         }
         /// =DEBUG}
         
-        NetworkIdentity.subcon.server = this.subcon('network.identity.server');
+        NetworkIdentity.subcon.server = this.subcon('network.server.status');
         NetworkIdentity.subcon.sign = this.subcon('dev');
         NetworkIdentity.subcon.acme = this.subcon('dev');
         

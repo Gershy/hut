@@ -115,6 +115,14 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
               
               /* Normalize */
               html > body * { position: relative; }
+              
+              /* View (tab) reset */
+              body > a.view {
+                position: absolute; width: 100%; height: 100%;
+                line-height: 100vh;
+                text-align: center;
+                font-size: calc(60% + 1.5vw);
+              }
             </style>
             
             <script type="text/javascript">Object.assign(window.global = window, { roomDebug: Object.create(null), rooms: Object.create(null) });</script>
