@@ -372,7 +372,6 @@ global.rooms['Hut'] = async foundation => {
       return Set(roadedHut.roads.toArr(road => road.knownNetAddrs.toArr(v => v)).flat(1));
       
     },
-    
     strike(amt, reason=null) {
       
       if (!this.parHut) throw Error(`Should only call "strike" on KidHuts`);
@@ -440,32 +439,23 @@ global.rooms['Hut'] = async foundation => {
         msg = { command: 'error', type: 'application', msg: msg.message };
       }
       
-      let subcon = foundation.subcon('road.traffic');
-      if (reply && subcon.enabled) {
-        
-        // Extend `reply` so it sends subcon output
-        let orig = reply;
-        reply = msg => {
-          subcon(() => ({ type: 'comm', src: trg.desc(), trg: src.desc(), msg: hasForm(msg, Keep) ? msg.desc() : msg }));
-          return orig(msg);
-        };
-        
-        subcon(() => ({ type: 'comm', src: src?.desc() ?? null, trg: trg.desc(), msg: hasForm(msg, Keep) ? msg.desc() : msg }));
-        
-      }
-      
-      
       if (!msg) return;
       if (!src && road) throw Error(`Can't provide Road without SrcHut (who is on the other end of that Road??)`);
       if (!src && reply) throw Error(`Can't omit "src" and provide "reply" (who would receive that reply??)`);
       if (src && src.parHut !== trg && trg.parHut !== src) {
-        console.log({ src, trg });
         throw Error(String.baseline(`
           | Supplied unrelated Huts (neither is the other's parent)
           | Src: ${src?.desc?.() ?? null}
           | Trg: ${trg?.desc?.() ?? null}
         `));
       }
+      
+      foundation.subcon('road.traffic')(() => ({
+        type: 'comm',
+        src: src?.desc() ?? null,
+        trg: trg.desc(),
+        msg: hasForm(msg, Keep) ? msg.desc() : msg
+      }));
       
       if (!src && trg.isAfar) throw Error(`Can't tell TrgAfarHut when SrcHut is null`);
       if (!src) return trg.actOnTell({ src: null, road: null, reply: null, ms, msg });
@@ -659,9 +649,8 @@ global.rooms['Hut'] = async foundation => {
         
         // `result` is either response data or resulting Error
         let result = await safe( () => fn(msg, { ms, src, trg }) );
-        
-        if (result === skip)                       return reply(null);
-        if (result === null)                       return reply(null);
+        if (result === skip) return reply(null);
+        if (result === null) return reply(null);
         
         let isReplyData = false
           || [ Object, Array, String, Error ].has(result?.constructor)
@@ -977,15 +966,6 @@ global.rooms['Hut'] = async foundation => {
       // Mark `this` as fully up-to-date
       this.pendingSync = { add: {}, upd: {}, rem: {} };
       this.throttleSyncPrm = null; // Cancel any previously pending sync (the full-sync will encompass it)
-      
-      /// {DEBUG=
-      foundation.subcon('road.traffic')(() => ({
-        type: 'cosm', // "consume"
-        src: this.parHut?.desc() ?? null,
-        trg: this.desc(),
-        msg: { command: 'sync', v: this.syncTellVersion, content }
-      }));
-      /// =DEBUG}
       
       return { command: 'sync', v: this.syncTellVersion++, content };
       
