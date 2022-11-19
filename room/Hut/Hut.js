@@ -117,7 +117,25 @@ global.rooms['Hut'] = async foundation => {
         // sync payloads
         this.bufferedSyncs = Map();
         
-        this.roadSrc('error').route(args => { console.log('Road error', args); });
+        this.roadSrc('error').route(args => {
+          
+          gsc('Road error', args);
+          
+          /// {BELOW=
+          // Road Errors can indicate that the user used a Real to
+          // perform an Action that no longer existed Above - this is
+          // often because of transport desyncs, and especially because
+          // of multiple tabs (the single-tab-ensurance logic is very
+          // simple; the newest tab simply updates LocalStorage and
+          // immediately assumes it is receiving all network events -
+          // but if another tab was previously active, it may consume a
+          // network event intended for the latest tab, before it closes
+          // itself in accordance with single-tab-ensurance... this
+          // often results in a "road error" event)
+          foundation.restart();
+          /// =BELOW}
+          
+        });
         this.roadSrc('multi').route(({ src, msg /* src, trg, reply, road, ms, msg */ }) => {
           
           // TODO: This isn't being used rn??
