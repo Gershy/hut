@@ -1121,6 +1121,10 @@ global.rooms['chess2'] = async foundation => {
           /// {ABOVE=
           let { status=null } = msg ?? {};
           if (![ 'chill', 'learn', 'queue', 'lobby' ].has(status)) throw Error('Invalid status!');
+          if (status === player.getValue('status')) throw Error(`Can't change to same status!`);
+          
+          c2Subcon(`Player "${player.getValue('term')}" status: "${player.getValue('status')}" -> "${status}"`);
+          
           player.setValue({ status });
           /// =ABOVE}
           

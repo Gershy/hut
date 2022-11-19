@@ -136,17 +136,17 @@ global.rooms['Hut'] = async foundation => {
           /// =BELOW}
           
         });
-        this.roadSrc('multi').route(({ src, msg /* src, trg, reply, road, ms, msg */ }) => {
+        this.roadSrc('multi').route(({ src, msg, reply /* src, trg, reply, road, ms, msg */ }) => {
           
           // TODO: This isn't being used rn??
           
           let { list=null } = msg;
           
-          if (!isForm(list, Array)) return this.tell({ trg: src, msg: {
+          if (!isForm(list, Array)) return reply({
             command: 'error',
             type: 'invalidMultiList',
             orig: msg
-          }});
+          });
           
           // TODO: If `reply` is available we could swap it with a fn
           // that buffers every Hear result, concatenates it together
