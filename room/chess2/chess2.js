@@ -176,10 +176,23 @@ global.rooms['chess2'] = async foundation => {
     let pieceMoves = { white: [], black: [] };
     let dangerTiles = { white: [], black: [] };
     
+    c2Subcon(() => {
+      
+      return playerMoves.map(move => {
+        
+        let dst = move.getValue();
+        let src = move.m('piece?').getValue();
+        
+        return `${src.colour} ${src.type} @ (${src.col}, ${src.row}) -> (${dst.col}, ${dst.row})`;
+        
+      });
+      
+    });
+    
     // Update piece positions
     for (let playerMove of playerMoves) {
       
-      let { col: trgCol, row: trgRow, piece: pieceUid } = playerMove.getValue();
+      let { col: trgCol, row: trgRow } = playerMove.getValue();
       let piece = playerMove.m('piece?');
       let gudColour = piece.getValue('colour');
       let badColour = (gudColour === 'white') ? 'black' : 'white';
@@ -472,17 +485,22 @@ global.rooms['chess2'] = async foundation => {
             applyMoves(pieces, significantMoves);
             
             let aliveKings = pieces.map(pc => (pc.onn() && pc.getValue('type') === 'king') ? pc : skip);
-            wAlive = aliveKings.find(king => king.getValue('colour') === 'white').found;
-            bAlive = aliveKings.find(king => king.getValue('colour') === 'black').found;
+            let wAlive = aliveKings.find(king => king.getValue('colour') === 'white').found;
+            let bAlive = aliveKings.find(king => king.getValue('colour') === 'black').found;
+            
+            round.end();
+            
+            if ( wAlive && !bAlive) hut.addRecord('c2.outcome', [ match ], { winner: 'white', reason: 'checkmate' });
+            if (!wAlive &&  bAlive) hut.addRecord('c2.outcome', [ match ], { winner: 'black', reason: 'checkmate' });
+            if (!wAlive && !bAlive) hut.addRecord('c2.outcome', [ match ], { winner: null, reason: 'stalemate' });
+            if ( wAlive &&  bAlive) hut.addRecord('c2.round', [ match ], { ms: Date.now() }); // Game continues!
+            
+          } else {
+            
+            round.end();
+            hut.addRecord('c2.outcome', [ match ], { winner: null, reason: 'lethargy' });
             
           }
-          
-          round.end();
-          
-          if ( wAlive && !bAlive) hut.addRecord('c2.outcome', [ match ], { winner: 'white' });
-          if (!wAlive &&  bAlive) hut.addRecord('c2.outcome', [ match ], { winner: 'black' });
-          if (!wAlive && !bAlive) hut.addRecord('c2.outcome', [ match ], { winner: null });
-          if ( wAlive &&  bAlive) hut.addRecord('c2.round', [ match ], { ms: Date.now() }); // Game continues!
           
         };
         
@@ -553,12 +571,12 @@ global.rooms['chess2'] = async foundation => {
             mpw.endWith(async () => {
               c2Subcon(`WHITE ENDED (${pw.getValue('term')})`);
               let round = await match.withRh('c2.round', 'one');
-              if (round) { round.end(); hut.addRecord('c2.outcome', [ match ], { winner: 'black' }); }
+              if (round) { round.end(); hut.addRecord('c2.outcome', [ match ], { winner: 'black', reason: 'cowardice' }); }
             });
             mpb.endWith(async () => {
               c2Subcon(`BLACK ENDED (${pb.getValue('term')})`);
               let round = await match.withRh('c2.round', 'one');
-              if (round) { round.end(); hut.addRecord('c2.outcome', [ match ], { winner: 'white' }); }
+              if (round) { round.end(); hut.addRecord('c2.outcome', [ match ], { winner: 'white', reason: 'cowardice' }); }
             });
             
             // Keep the Match alive so long as any Player is alive
@@ -876,11 +894,33 @@ global.rooms['chess2'] = async foundation => {
             { form: 'Decal', colour: 'rgba(40, 40, 100, 0.5)' }
           ]);
           
-          let outcomeText = (outcome.getValue('winner') === null)
-            ? 'Stalemate!'
-            : `Checkmate:\nYou ${(outcome.getValue('winner') === myColour) ? 'WIN' : 'LOSE'}!`
-          contentReal.addReal('c2.text', lay.text(outcomeText, tsP1));
-          contentReal.addReal('c2.text', lay.text('Click anywhere to play again...'));
+          let text = null;
+          let reason = outcome.getValue('reason');
+          let winner = outcome.getValue('winner');
+          if (reason === 'checkmate') {
+            
+            text = `Checkmate:\nYou ${(winner === myColour) ? 'WIN' : 'LOSE'}`
+            
+          } else if (reason === 'stalemate') {
+            
+            text = `Stalemate!`
+            
+          } else if (reason === 'cowardice') {
+            
+            text = (winner === myColour) ? `Your opponent ran away\u2026\nYou WIN!` : `You ran away\u2026\nYou LOSE!`;
+            
+          } else if (reason === 'lethargy') {
+            
+            text = `Neither player made a move!\nStalemate!`;
+            
+          } else if (reason === 'resign') {
+            
+            text = (winner === myColour) ? `Your opponent resigned\u2026\nYou WIN!` : `You resigned\u2026\nYou LOSE!`;
+            
+          }
+          
+          contentReal.addReal('c2.text', lay.text(text, tsP1));
+          contentReal.addReal('c2.text', lay.text('Click anywhere to play again\u2026'));
           
         });
         dep.scp(outcomeChooser.srcs.off, (nop, dep) => {
