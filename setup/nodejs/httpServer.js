@@ -563,6 +563,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     secure, protocol: 'http', netAddr, port,
     serverOpen, serverShut,
     intercepts: [],
+    subcon, // soktServer.js may use this for output
     src: Src(), // Sends `session` Objects
     server: null,
     closing: false,
