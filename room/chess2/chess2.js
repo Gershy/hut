@@ -441,20 +441,19 @@ global.rooms['chess2'] = async foundation => {
         
         let kidHut = owned.m('kid');
         
-        let playerRh = dep(kidHut.rh('c2.player'));
-        let timerSrc = dep(TimerSrc({ ms: 1500 }));
-        
         let desc = kidHut.desc() + ' @ ' + kidHut.getKnownNetAddrs().toArr(v => v).join('+');
         
+        let timerSrc = dep(TimerSrc({ ms: 1500 }));
         timerSrc.route(() => c2Subcon(`${desc} FAILED to create player!`), 'prm');
         timerSrc.route(() => (kidHut.strike(0.15, 'Failed timely chess2 player creation'), kidHut.end()), 'prm');
         
-        dep(playerRh.route(hrec => c2Subcon(`${desc} created player! (${hrec.rec.getValue('term')})`)));
-        dep(playerRh.route(() => {
-          // If we get the Player before the Timeout cancel the Timeout
-          timerSrc.end();
-          playerRh.end();
-        }));
+        dep.scp(kidHut, 'c2.player', (player, dep) => {
+          
+          c2Subcon(`${desc} OPEN player! (${player.getValue('term')})`)
+          dep(() => c2Subcon(`${desc} SHUT player! (${player.getValue('term')})`));
+          timerSrc.end(); // If we get the Player before the Timeout cancel the Timeout
+          
+        });
         
       });
       

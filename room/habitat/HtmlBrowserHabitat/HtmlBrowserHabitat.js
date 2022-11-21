@@ -93,14 +93,15 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
             <style type="text/css">
               html, body, body > div {
                 position: absolute; left: 0; top: 0; width: 100%; height: 100%;
-                margin: 0; padding: 0;
-                font-family: monospace;
-                overflow: hidden;
+                margin: 0; padding: 0; font-family: monospace; overflow: hidden;
               }
               html > body * { position: relative; }
-              
               body { opacity: 0; font-size: ${textSize}; transition: opacity 200ms linear; }
-              body.loaded { opacity: 1; }
+              body.loaded { opacity: 1; },
+              body > a.view {
+                position: absolute; width: 100%; height: 100%;
+                line-height: 100vh; text-align: center; font-size: calc(60% + 1.5vw);
+              }
             </style>
             
             <script type="text/javascript">Object.assign(window.global = window, { roomDebug: Object.create(null), rooms: Object.create(null) });</script>
@@ -246,12 +247,6 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
           animation-timing-function: linear;
           animation-iteration-count: 1;
           animation-fill-mode: forwards;
-        }
-        body > a.view {
-          position: absolute; width: 100%; height: 100%;
-          line-height: 100vh;
-          text-align: center;
-          font-size: calc(60% + 1.5vw);
         }
       `));
       

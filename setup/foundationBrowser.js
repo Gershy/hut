@@ -417,13 +417,11 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
     // appropriate Hut
     server.src.route(session => {
       
-      let timeout = null;
-      let renewTimeout = () => {
+      let timeout = setTimeout(() => session.tell.send({ command: 'lubdub' }), heartbeatMs);
+      session.tell.route(() => {
         clearTimeout(timeout);
         timeout = setTimeout(() => session.tell.send({ command: 'lubdub' }), heartbeatMs);
-      };
-      renewTimeout();
-      session.tell.route(renewTimeout, 'prm');
+      }, 'prm');
       
       let srcHut = getHutForSession(session);
       // TODO: No `replyable` / `reply` needed??

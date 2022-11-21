@@ -230,32 +230,18 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       wsIncoming(buff, ms);
       
     });
-    socket.on('close', closeFn = () => {
-      
-      session.close();
-      
-    });
-    socket.on('error', errorFn = err => {
-      
-      errSubcon(`Socket error ${session.desc()}`, err);
-      session.close();
-      
-    });
+    socket.on('close', closeFn = () => session.close());
+    socket.on('error', errorFn = err => errSubcon(`Socket error ${session.desc()}`, err) ?? session.close());
     
-    session.tell.route(msg => {
-      
-      if (session.off()) return;
-      if (!msg) return;
-      
-      wsWrite({ op: 1, text: valToJson(msg) });
-      
-    }, 'prm');
+    let tellRoute = session.tell.route(msg => msg && wsWrite({ op: 1, text: valToJson(msg) }));
     
     session.endWith(() => {
       
       socket.off('readable', readableFn);
       socket.off('close', closeFn);
       socket.off('error', errorFn);
+      
+      tellRoute.off();
       
       // Code: https://www.rfc-editor.org/rfc/rfc6455#section-7.4.1
       wsWrite({ op: 8, code: 1000, text: `Goodbye friend :')` }).finally(() => socket.end());
@@ -310,6 +296,8 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         let session = makeSoktSession(key, req, socket, buff);
         tmp.endWith(session, 'tmp');
         tmp.src.send(session);
+        
+        subcon(() => ({ type: 'hear', fin: null, op: null, mask: null, data: null }));
         
         if (session.off()) return socket.destroy();
         
