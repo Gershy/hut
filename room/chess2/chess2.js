@@ -168,7 +168,7 @@ global.rooms['chess2'] = async foundation => {
   /// {ABOVE=
   let TermBank = await foundation.getRoom('TermBank');
   let termBank = TermBank();
-  let applyMoves = (pieces, playerMoves) => {
+  let applyMoves = (match, pieces, playerMoves) => {
     
     // All pieces refresh by 1 turn
     for (let piece of pieces) if (piece.getValue().wait > 0) piece.setValue(v => (v.wait--, v));
@@ -176,18 +176,19 @@ global.rooms['chess2'] = async foundation => {
     let pieceMoves = { white: [], black: [] };
     let dangerTiles = { white: [], black: [] };
     
-    c2Subcon(() => {
+    c2Subcon(() => ({
       
-      return playerMoves.map(move => {
+      match: match.getValue('desc'),
+      moves: playerMoves.map(move => {
         
         let dst = move.getValue();
         let src = move.m('piece?').getValue();
         
         return `${src.colour} ${src.type} @ (${src.col}, ${src.row}) -> (${dst.col}, ${dst.row})`;
         
-      });
+      })
       
-    });
+    }));
     
     // Update piece positions
     for (let playerMove of playerMoves) {
@@ -482,7 +483,7 @@ global.rooms['chess2'] = async foundation => {
           if (significantMoves.count()) {
             
             let pieces = await match.withRh('c2.piece', 'all');
-            applyMoves(pieces, significantMoves);
+            applyMoves(match, pieces, significantMoves);
             
             let aliveKings = pieces.map(pc => (pc.onn() && pc.getValue('type') === 'king') ? pc : skip);
             let wAlive = aliveKings.find(king => king.getValue('colour') === 'white').found;
@@ -541,16 +542,15 @@ global.rooms['chess2'] = async foundation => {
             
             // Get Players from PlayerStatus({ type: 'queue' }) Records
             
-            let match = hut.addRecord('c2.match', [ chess2 ], { ms });
+            let match = hut.addRecord('c2.match', [ chess2 ], { ms, desc: `white:${pw.getValue('term')} vs black:${pb.getValue('term')}` });
             
             if (c2Subcon.enabled) {
               
-              let matchDesc = `white:${pw.getValue('term')} vs black:${pb.getValue('term')}`;
-              c2Subcon(`MATCH OPEN (${matchDesc})`);
-              match.endWith(() => { c2Subcon(`MATCH SHUT (${matchDesc})`); });
+              c2Subcon(`MATCH OPEN (${match.getValue('desc')})`);
+              match.endWith(() => { c2Subcon(`MATCH SHUT (${match.getValue('desc')})`); });
               
               // RelHandle Dep Ends when Match Ends
-              match.rh('c2.outcome').route(({ rec: outcome }) => c2Subcon(`MATCH OTCM (${matchDesc})`, outcome.getValue()));
+              match.rh('c2.outcome').route(({ rec: outcome }) => c2Subcon(`MATCH OTCM (${match.getValue('desc')})`, outcome.getValue()));
               
             }
             
