@@ -97,7 +97,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
               }
               html > body * { position: relative; }
               body { opacity: 0; font-size: ${textSize}; transition: opacity 200ms linear; }
-              body.loaded { opacity: 1; },
+              body.loaded { opacity: 1; }
               body > a.view {
                 position: absolute; width: 100%; height: 100%;
                 line-height: 100vh; text-align: center; font-size: calc(60% + 1.5vw);
