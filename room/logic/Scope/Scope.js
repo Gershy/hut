@@ -7,6 +7,12 @@ global.rooms['logic.Scope'] = foundation => form({ name: 'Scope', has: { Tmp }, 
   
   $createFrame: (scope, tmp) => {
     
+    // TODO: Think about how `dep` interacts with Tmp.prototype.ref - a
+    // single Scope can only hold a single Dep for any Tmp; this means
+    // if a Tmp is ref'd multiple times in a single Scope it may not be
+    // possible to represent, via Deps, that the Scope is responsible
+    // for ending the Dep multiple times (accounting for multiple refs)
+    
     // A Tmp has entered into the Scope; a Frame represents the
     // lifetime of this Tmp within the Scope
     

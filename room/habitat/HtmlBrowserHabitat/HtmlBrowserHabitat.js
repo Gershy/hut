@@ -97,32 +97,10 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
                 font-family: monospace;
                 overflow: hidden;
               }
-              
-              /* Fade body in on load */
-              body { opacity: 0; font-size: ${textSize}; transition: opacity 200ms linear; }
-              body.loaded { opacity: 1; }
-              
-              /* Blur edges of body when focus is lost */
-              body::before {
-                content: ''; display: block; position: absolute;
-                left: 0; right: 0; top: 0; bottom: 0;
-                box-shadow: inset 0 0 calc(0.8vmin + 0.5vmax) 2px #fffa;
-                z-index: 1000;
-                pointer-events: none;
-                transition: box-shadow 100ms linear;
-              }
-              body.focus::before { box-shadow: inset 0 0 0 0 #fffa; }
-              
-              /* Normalize */
               html > body * { position: relative; }
               
-              /* View (tab) reset */
-              body > a.view {
-                position: absolute; width: 100%; height: 100%;
-                line-height: 100vh;
-                text-align: center;
-                font-size: calc(60% + 1.5vw);
-              }
+              body { opacity: 0; font-size: ${textSize}; transition: opacity 200ms linear; }
+              body.loaded { opacity: 1; }
             </style>
             
             <script type="text/javascript">Object.assign(window.global = window, { roomDebug: Object.create(null), rooms: Object.create(null) });</script>
@@ -242,6 +220,15 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
           20%  { text-shadow: 0 0 15px currentColor; }
           100% { text-shadow: 0 0  0px currentColor; }
         }
+        body::before {
+          content: ''; display: block; position: absolute;
+          left: 0; right: 0; top: 0; bottom: 0;
+          box-shadow: inset 0 0 calc(0.8vmin + 0.5vmax) 2px #fffa;
+          z-index: 1000;
+          pointer-events: none;
+          transition: box-shadow 100ms linear;
+        }
+        body.focus::before { box-shadow: inset 0 0 0 0 #fffa; }
         :focus { outline: none !important; }
         ::placeholder { color: inherit; opacity: 0.6; }
         :not([id]):focus {
@@ -259,6 +246,12 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
           animation-timing-function: linear;
           animation-iteration-count: 1;
           animation-fill-mode: forwards;
+        }
+        body > a.view {
+          position: absolute; width: 100%; height: 100%;
+          line-height: 100vh;
+          text-align: center;
+          font-size: calc(60% + 1.5vw);
         }
       `));
       

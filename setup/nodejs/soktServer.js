@@ -3,7 +3,7 @@
 module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   
   let { subcon=Function.stub, errSubcon=Function.stub } = opts;
-  let { msFn=Date.now, getKey } = opts;
+  let { msFn=Date.now, getKey, heartbeatMs=60*1000 } = opts;
   if (!getKey) throw Error(String.baseline(`
     | Must provide "getKey":
     | It must be a Function like: ({ query }) => key
@@ -13,11 +13,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     | - "key" is the session identifier String for the given request
   `));
   
-  let makeSoktSession = (key, req, socket, buff=Buffer.alloc(0)) => {
-    
-    // TODO: Should probably end websocket Sessions if no data has been
-    // received for some interval of time (which also means clients
-    // should send heartbeats!)
+  let makeSoktSession = (key, req, socket, initialBuff=Buffer.alloc(0)) => {
     
     mmm('soktSessions', +1);
     let session = Tmp({
@@ -26,121 +22,223 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       currentCost: () => 0.3,
       knownNetAddrs: Set([ socket.remoteAddress ]),
       tell: Src(),
-      hear: Src()
+      hear: Src(),
+      timeout: setTimeout(() => session.end(), heartbeatMs)
     });
     session.endWith(() => mmm('soktSessions', -1));
     
-    // Logic to track socket state and parse messages from binary
-    let curOp = null;
-    let curFrames = [];
-    let curSize = 0;
+    let state = { frames: [], size: 0, buff: Buffer.alloc(0) };
+    session.endWith(() => state = null);
     
-    let hearSoktMessages = (ms=opts.msFn()) => { try { while (buff.length >= 2 && session.onn()) {
+    // Process conversions between op+code+payload and Buffer
+    let wsDecode = buff => {
       
-      // ==== PARSE FRAME
+      // Imagine the incoming buffer has FIN set, no reserved bits set,
+      // and 0b1111 (full bits, 127) for the `len`; this means in a
+      // diagram we would see:
+      // 0 . 1 . 2 . 3 . 4 . 5 . 6 . 7
+      // -----------------------------
+      // 1   0   0   0   1   1   1   1  
+      // 
+      // Likewise, `buff[0] === 0b10001111` in this case (most
+      // significant bit representing FIN)
       
-      let b = buff[0] >> 4;   // The low 4 bits of 1st byte give us flags (importantly "final")
-      if (b % 8) throw Error('Some reserved bits are on'); // % gets us low-end bits
-      let isFinalFrame = b === 8;
+      if (buff.length < 2) return null;
       
-      let op = buff[0] % 16;  // The 4 high bits of 1st byte give us the operation
-      if (op < 0 || (op > 2 && op < 8) || op > 10) throw Error(`Invalid op: ${op}`);
+      // FIRST BYTE:
+      let b = buff[0];
+      let fin =  b & 0b10000000; // 1st 4 bits set FIN and reserved bits
+      let rsv1 = b & 0b01000000;
+      let rsv3 = b & 0b00100000;
+      let rsv4 = b & 0b00010000;
+      let op =   b & 0b00001111; // Final (low-order) 4 bits compose OP
       
-      if (op >= 8 && !isFinalFrame) throw Error('Incomplete control frame');
+      // SECOND BYTE: 
+      b = buff[1];
+      let mask = b & 0b10000000; // 1st bit gives us MASK
+      let len =  b & 0b01111111;
       
-      b = buff[1];            // Look at second byte
-      let masked = b >> 7;    // Lowest bit of 2nd byte - states whether frame is masked
+      let offset = 2; // We already processed 2 bytes
       
-      // Server requires a mask; Client requires no mask
-      if (!masked) throw Error('No mask');
-      
-      let length = b % 128;
-      let offset = 6; // Masked frames have an extra 4 halfwords containing the mask
-      
-      if (buff.length < offset + length) return; // No messages - should await more data
-      
-      if (length === 126) {         // Websocket's "medium-size" frame format
-        length = buff.readUInt16BE(2);
-        offset += 2;
-      } else if (length === 127) {  // Websocket's "large-size" frame format
-        length = buff.readUInt32BE(2) * Number.int32 + buff.readUInt32BE(6);
-        offset += 8;
-      }
-      
-      if (buff.length < offset + length) return; // No messages - should await more data
-      
-      // Now we know the exact range of the incoming frame; we can slice and unmask it as necessary
-      let mask = buff.slice(offset - 4, offset); // The 4 halfwords preceeding the offset are the mask
-      let data = buff.slice(offset, offset + length); // After the mask comes the data
-      let w = 0;
-      for (let i = 0, len = data.length; i < len; i++) {
-        data[i] ^= mask[w];     // Apply XOR
-        w = w < 3 ? w + 1 : 0;  // `w` follows `i`, but wraps every 4. Faster than `%` (TODO: ... really? looks like branching)
-      }
-      
-      // ==== PROCESS FRAME (based on `isFinalFrame`, `op`, and `data`)
-      
-      // The following operations can occur regardless of socket state
-      if (op === 8) {         // Process "close" op
-        return session.end(); // Socket ended
-      } else if (op === 9) {  // Process "ping" op
-        throw Error('Unimplemented op: 9');
-      } else if (op === 10) { // Process "pong" op
-        throw Error('Unimplemented op: 10');
-      }
-      
-      // Validate "continuation" functionality
-      if (op === 0 && curOp === null) throw Error('Unexpected continuation frame');
-      if (op !== 0 && curOp !== null) throw Error('Truncated continuation frame');
-      
-      // Process "continuation" ops as if they were the op being continued
-      if (op === 0) op = curOp;
-      
-      // Text ops are our ONLY supported ops! (TODO: For now?)
-      if (op !== 1) throw Error(`Unsupported op: ${op}`);
-      if (curSize + data.length > 5000) throw Error('Sokt frame too large!');
-      
-      buff = buff.slice(offset + length); // Dispense with the frame we've just processed
-      curFrames.push(data);               // Include the complete frame
-      curSize += data.length;
-      
-      if (isFinalFrame) {
+      // Deal with variable lengths
+      if (len === 126) {
         
-        let msg = jsonToVal(Buffer.concat(curFrames).toString('utf8'));
-        session.hear.send({ replyable: null, ms, msg });
-        curOp = null;
-        curFrames = [];
-        curSize = 0;
+        offset += 2;
+        if (buff.length < offset) return null;
+        len = buff.readUInt16BE(2);
+        
+      } else if (len === 127) {
+        
+        offset += 6;
+        if (buff.length < offset) return null;
+        len = buff.readBigUInt64BE(2);
+        
+      }
+      
+      // Deal with an optional mask
+      if (mask) {
+        
+        offset += 4;
+        if (buff.length < offset) return null;
+        mask = buff.slice(offset - 4, offset);
         
       } else {
         
-        curOp = op; // Note `op === 1`, as our only supported op is "text"
+        mask = null;
         
       }
       
-    }} catch (err) {
+      // Read the payload
+      offset += len;
+      if (buff.length < offset) return null;
+      let data = buff.slice(offset - len, offset);
       
-      session.end();
-      throw err;
+      // If a mask is present xor all bits in `data`
+      if (mask) for (let i = 0; i < len; i++) data[i] ^= mask[i % 4];
       
-    }};
+      return { consumed: offset, fin, op, mask, data };
+      
+    };
+    let wsEncode = ({ op=1, code=null, text=null, data=Buffer.from(text ?? '', 'utf8') }) => {
+      
+      let meta = null;
+      
+      // `code` is set as 2 additional bytes prefixing `data`
+      if (code !== null) {
+        let codeBuff = Buffer.alloc(2);
+        codeBuff.writeUInt16BE(code, 0);
+        data = Buffer.concat([ codeBuff, data ]);
+      }
+      
+      let len = data.length;
+      
+      if (len <= 125) {
+        
+        meta = Buffer.alloc(2);
+        meta.writeUInt8(len, 1); // Note 1st bit of 2nd byte is MASK flag; always leave it 0!!
+        
+      } else if (len <= 65535) {
+        
+        meta = Buffer.alloc(2 + 2);
+        meta.writeUInt8(126, 1); // 126 means "medium size"
+        meta.writeUInt16BE(len, 2);
+        
+      } else {
+        
+        // TODO: Large size could use more testing
+        meta = Buffer.alloc(2 + 8);
+        meta.writeUInt8(127, 1); // 127 means "large size"
+        // meta.writeUInt32BE(len / Number.int32, 2);
+        // meta.writeUInt32BE(len % Number.int32, 6);
+        meta.writeBigUInt64(len, 2);
+        
+      }
+      
+      meta.writeUInt8(128 + op); // `128` sets highest/first bit (FIN bit); `op` fills 1st byte big-endian style (the last bits of the 1st byte)
+      
+      return Buffer.concat([ meta, data ]);
+      
+    };
     
-    // Only start Sending via `session.hear` after a tick so consumers
-    // get a chance to add Routes
-    Promise.resolve().then(() => {
+    // Queue writes to ensure they can't become interleaved
+    let wsWriteQueue = Promise.resolve();
+    let wsWrite = (opts /* { op, code, text, data } */) => {
       
-      hearSoktMessages(); // `buff` passed to `makeSoktSession` can contain initial data!
-      
-      socket.on('readable', () => {
-        
-        let ms = opts.msFn();
-        let buff0 = socket.read();
-        if (!buff0) return session.end(); // `socket.read()` can return `null` to indicate the end of the stream
-        
-        buff = Buffer.concat([ buff, buff0 ]);
-        hearSoktMessages(ms);
-        
+      subcon(() => {
+        let { op, code=null, text=null, data=Buffer.from(text ?? '', 'utf8') } = opts;
+        return { type: 'tell', op, code, text, payloadLen: data.length };
       });
+      
+      return wsWriteQueue = wsWriteQueue.then(() => Promise((rsv, rjc) => {
+        
+        socket.write(wsEncode(opts), err => {
+          if (!err) return rsv();
+          session.end();
+          rjc(err);
+        });
+        
+      }));
+      
+    };
+    
+    // Process incoming ws frames
+    let wsIncoming = async (buff, ms) => {
+      
+      // Call this whenever there's more data available on the wire
+      
+      clearTimeout(session.timeout);
+      session.timeout = setTimeout(() => session.end(), heartbeatMs);
+      
+      state.size += buff.length;
+      if (state.size > 5000) return session.end();
+      state.buff = Buffer.concat([ state.buff, buff ]);
+      
+      while (state) {
+        
+        let wsMsg = wsDecode(state.buff);
+        if (!wsMsg) break; // Need more data to finish decoding
+        
+        let { consumed, ...frame } = wsMsg;
+        state.buff = state.buff.slice(consumed);
+        state.size -= consumed;
+        wsFrame(ms, frame);
+        
+      }
+      
+    };
+    let wsFrame = (ms, { fin, op, mask, data }) => {
+      
+      // Conditionally called once by `wsIncoming` for every complete
+      // ws frame received on the wire
+      
+      subcon(() => ({ type: 'hear', fin, op, mask, data: data.toString('utf8') }));
+      
+      if (data.length) {
+        state.frames.push(data);
+        state.size += data.length; // This can't exceed the max size! The full frame binary was removed, so there's at least space for the payload
+      }
+      
+      if (fin && state.frames.length) {
+        
+        let msg = (state.frames.length === 1) ? state.frames[0] : Buffer.concat(state.frames);
+        state.frames = [];
+        state.size -= msg.length;
+        
+        try         { msg = jsonToVal(msg); }
+        catch (err) { msg = { command: msg.toString('utf8') }; }
+        
+        session.hear.send({ replyable: null, ms, msg });
+        
+      }
+      
+      if (op === 0x8) session.end();
+      if (op === 0x9) wsWrite({ op: 0xa, text: 'Pong!' });
+      if (op === 0xa) wsWrite({ op: 0x9, text: 'Ping!' });
+      
+    };
+    
+    // `setImmediate` allows consumer to set Routes on `session.tell`
+    let readableFn = null;
+    let closeFn = null;
+    let errorFn = null;
+    global.setImmediate(() => { wsIncoming(initialBuff, msFn()); initialBuff = null; });
+    socket.on('readable', readableFn = () => {
+      
+      let ms = msFn();
+      let buff = socket.read();
+      if (!buff) return socket.end(); // `socket.read` can return `null` to indicate end of stream
+      wsIncoming(buff, ms);
+      
+    });
+    socket.on('close', closeFn = () => {
+      
+      session.close();
+      
+    });
+    socket.on('error', errorFn = err => {
+      
+      errSubcon(`Socket error ${session.desc()}`, err);
+      session.close();
       
     });
     
@@ -148,65 +246,20 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
       if (session.off()) return;
       if (!msg) return;
-      let dataBuff = Buffer.from(valToJson(msg), 'utf8');
       
-      let len = dataBuff.length;
-      let metaBuff = null;
-      
-      // The 2nd byte (`metaBuff[1]`) indicates the "length-mode":
-      // `len < 126` specifies the exact size ("small mode")
-      // - `metaBuff[1] === len`
-      // `len < 65536` specifies "medium mode"
-      // - `metaBuff[1] === 126`
-      // - 2 additional bytes hold the exact length (max 2^16)
-      // `len >= 65536` specifies "large mode"
-      // - `metaBuff[1] === 127`
-      // - 8 additional bytes hold the exact length (max 2^64)
-      // 
-      // Note you'd think "small mode" could fit up to 254 in one byte
-      // (with 255 indicating "medium mode"), but ws protocol will wind
-      // up modding this value by 128
-      if (len < 126) {            // small-size
-        
-        metaBuff = Buffer.alloc(2);
-        metaBuff[1] = len;
-        
-      } else if (len < 65536) {   // medium-size
-        
-        metaBuff = Buffer.alloc(2 + 2);
-        metaBuff[1] = 126;
-        metaBuff.writeUInt16BE(len, 2);
-        
-      } else {                    // large-size
-        
-        // TODO: large-size packet could use more testing
-        metaBuff = Buffer.alloc(2 + 8);
-        metaBuff[1] = 127;
-        metaBuff.writeUInt32BE(Math.floor(len / Number.int32), 2); // Lo end of `len` from metaBuff[2-5]
-        metaBuff.writeUInt32BE(len % Number.int32, 6);             // Hi end of `len` from metaBuff[6-9]
-        
-      }
-      
-      metaBuff[0] = 128 + 1; // `128` pads for modding by 128; `1` is the "text" op
-      
-      // TODO: The packet may not be written immediately - this means
-      // that multiple socket writes could occur out-of-order (which is
-      // only a problem if the consumer doesn't apply any ordering
-      // scheme, which in the case of Hut isn't an issue)
-      socket.write(Buffer.concat([ metaBuff, dataBuff ]), err => {
-        if (!err) return;
-        errSubcon('Error writing to socket', err);
-        session.end();
-      });
+      wsWrite({ op: 1, text: valToJson(msg) });
       
     }, 'prm');
     
-    session.endWith(async () => {
-      let m = Buffer.alloc(2);
-      m[0] = 128 + 8; // `8` is the "close" op
-      m[1] = 0;       // Indicate there's no payload
-      try     { await Promise((rsv, rjc) => socket.write(buff, err => err ? rjc(err) : rsv())); }
-      finally { socket.end(); }
+    session.endWith(() => {
+      
+      socket.off('readable', readableFn);
+      socket.off('close', closeFn);
+      socket.off('error', errorFn);
+      
+      // Code: https://www.rfc-editor.org/rfc/rfc6455#section-7.4.1
+      wsWrite({ op: 8, code: 1000, text: `Goodbye friend :')` }).finally(() => socket.end());
+      
     });
     
     return session;
@@ -255,6 +308,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         
         let key = opts.getKey({ query });
         let session = makeSoktSession(key, req, socket, buff);
+        tmp.endWith(session, 'tmp');
         tmp.src.send(session);
         
         if (session.off()) return socket.destroy();

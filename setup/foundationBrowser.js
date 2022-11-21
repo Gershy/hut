@@ -398,6 +398,9 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
     // All Sessions connect FoundationBrowser to an AboveHut; this logic
     // ensures that RoadedHuts are populated as such
     
+    let heartbeatMs = this.conf('heartbeatMs');
+    heartbeatMs = Math.max(heartbeatMs * 0.9, heartbeatMs - 3000);
+    
     let Hut = hut.Form;
     
     let getHutForSession = session => {
@@ -413,9 +416,19 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
     // Any Sessions joining any Server have Hears/Tells directed to the
     // appropriate Hut
     server.src.route(session => {
+      
+      let timeout = null;
+      let renewTimeout = () => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => session.tell.send({ command: 'lubdub' }), heartbeatMs);
+      };
+      renewTimeout();
+      session.tell.route(renewTimeout, 'prm');
+      
       let srcHut = getHutForSession(session);
       // TODO: No `replyable` / `reply` needed??
       session.hear.route(({ ms, msg }) => srcHut.tell({ trg: hut, road: session, ms, msg }));
+      
     });
     
     // Every Server immediately creates a Session with the AboveHut
@@ -447,9 +460,6 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
   },
   createHttpServer({ hut, netIden, host, port }) {
     
-    let heartbeatMs = this.conf('heartbeatMs');
-    heartbeatMs = Math.max(heartbeatMs * 0.9, heartbeatMs - 3000);
-    
     let server = Tmp({
       
       desc: () => `HTTP://${host}:${port}`,
@@ -466,16 +476,8 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
     // Foundation was explicitly ended for losing tab priority!
     server.src.route(session => {
       
-      let timeout = null;
-      let renewTimeout = () => {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => session.tell.send(''), heartbeatMs);
-      };
-      
       let err = Error('');
       let route = session.tell.route(async msg => {
-        
-        renewTimeout();
         
         server.activeReqs++;
         try {
@@ -499,11 +501,7 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
           
           route.end();
           if (err?.message.has('abort')) gsc(`Http fetch aborted (ignore; presumably unloading!)`);
-          else {
-            gsc(`Error with http fetch (refreshing)`, err);
-            this.restart();
-          }
-          
+          else { gsc(`Error with http fetch (refreshing)`, err); this.restart(); }
           
         }
         server.activeReqs--;
@@ -528,25 +526,18 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
     
     if (!global.WebSocket) return null;
     
-    // TODO: This is not the correct way to detect whether secure ws is
-    // in effect!!
-    
-    let server = Tmp({
-      desc: () => `SOKT @ ${host}:${port}`,
-      netIden, host, port,
-      src: Src()
-    });
+    let server = Tmp({ desc: () => `SOKT @ ${host}:${port}`, netIden, host, port, src: Src() });
     
     server.src.route(session => {
       
-      server.endWith(session);
+      server.endWith(session, 'tmp');
       
+      // TODO: Detect ssl properly!
       let socket = new global.WebSocket(`${port >= 400 ? 'wss' : 'ws'}://${host}:${port}/?trn=sync&hutId=${this.hutId}`);
       socket.addEventListener('error', err => {
-        this.subcon('warning')('Socket error event (restarting in 3sec)', err);
-        setTimeout(() => this.restart(), 3000);
+        this.subcon('warning')('Socket error event', err);
       });
-      socket.addEventListener('close', (...args) => gsc('Socket closed...'));
+      socket.addEventListener('close', () => session.end());
       
       let openPrm = Promise((rsv, rjc) => {
         socket.addEventListener('open', rsv, { once: true });

@@ -40,20 +40,20 @@ global.rooms['Hinterland'] = async foundation => {
       // This is contextually sensible, as the FoundationBrowser code
       // itself has been transported over a live http connection (and
       // therefore minimum 1 http connection must be available)
+      let sc = foundation.subcon('network.server.active');
       let { netIden, servers } = networkGroup;
       for (let { address, bindings } of servers) for (let { protocol, port, ...opts } of bindings) {
         
         let server = foundation.createServer({ hut, protocol, netIden, host: address, port, ...opts });
         if (!netIden) tmp.endWith(server);
-        foundation.subcon('network.server.active')(async () => {
-          
-          //let url = await foundation.getRoom('url');
-          //return `Access ${this.roomName} at ${url.encode({ protocol, address, port })}`;
-          return `Access ${this.roomName} at ${protocol}://${address}:${port}`;
-          
-        });
+        
+        if (sc.enabled) {
+          sc(`OPEN ${server.desc()}`);
+          server.endWith(() => sc(`SHUT ${server.desc()}`));
+        }
         
       }
+      
       if (netIden) tmp.endWith(netIden.runManagedServers());
       
       // Prepare all habitats
@@ -67,8 +67,7 @@ global.rooms['Hinterland'] = async foundation => {
         tmp.endWith(addTypeFormFnTmp);
       }
       
-      let primaryReal = await foundation.seek('real', 'primary'); // TODO: ('real', 'primary') -> ('real')
-      let real = primaryReal.addReal(`${this.prefix}.root`);
+      let real = (await foundation.seek('real', 'primary')).addReal(`${this.prefix}.root`);
       
       let loftRh = hut.relHandler({ type: `${this.prefix}.loft`, term: 'hut', offset: 0, limit: 1, fixed: true });
       tmp.endWith(loftRh);

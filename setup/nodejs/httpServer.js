@@ -36,7 +36,7 @@ let httpResponseCodes = Object.plain({
 module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   
   let { subcon=Function.stub, errSubcon=Function.stub } = opts;
-  let { heartbeatMs=60 * 1000, doCaching=true } = opts;
+  let { heartbeatMs=60*1000, doCaching=true } = opts;
   let { msFn=Date.now, processCookie=Function.stub, processBody=Function.stub, getKeyedMessage } = opts;
   let { getCacheSecs=v=>(60 * 60 * 24 * 5) } = opts; // Cache for 5 days by default
   if (!getKeyedMessage) throw Error(String.baseline(`
@@ -464,6 +464,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       if (keyedMsg.key === null) { // Make an anonymous Session
         
         session = makeHttpSession(null, req);
+        tmp.endWith(session, 'tmp');
         tmp.src.send(session);
         
       } else {                     // Reuse or create an identity Session

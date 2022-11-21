@@ -525,6 +525,7 @@ global.rooms['Hut'] = async foundation => {
       
       let { command: cmd=null } = msg ?? {};
       if (!cmd) throw Error(`No Command provided`);
+      if (cmd === 'lubdub') return;
       
       let roadSrc = null;
       let ptr = (src.parHut === this) ? src : this; // The KidHut may have more specialized functionality (note either `this.parHut === src`, or `src.parHut === this`)

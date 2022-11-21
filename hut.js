@@ -75,6 +75,15 @@
 // hoping that the server and client create the same Recs in the same
 // order (and there's needs to be a resync mechanism if these go out of
 // sync).
+// 
+// Regarding stability: For some reason newly loaded pages are prone to
+// instability - they aren't synced to the exact current moment! I BET
+// this has to do with multiple tabs. The current single-tab-ensurance
+// is quick and dirty. CONSIDER:
+// - SharedWorker to manage all tabs for a given hid
+// - Try to submit a move and then refresh - the browser crashes!
+// - Overall look into how chess2 handles move submissions, and linking
+//   piece Records with Reals - it's a clumsy mess!!
 
 Object.assign(global, {
   roomDebug: Object.create(null),
@@ -110,9 +119,8 @@ if (1) { // Setup basic process monitoring
   
 }
 
-if (1) { // Low-level debug
+if (process.cwd() === '/hut') { // Low-level debug (TODO: cheap way to only run on digitalocean!!)
   
-  let enabled = true;
   let intervalMs = 10 * 1000;
   let showThreshold = 1;
   let maxMetrics = 20; // Consider `Infinity`

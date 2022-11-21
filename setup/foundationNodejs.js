@@ -457,10 +457,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         | Control Subcon information about the raw values being sent between Huts using WebSockets.
       `),
       payloadMaxChars: 200,
-      enabled: false,
-      format: (f, p, data) => {
-        
-      }
+      enabled: false
     },
     'network.server.status': {
       desc: String.baseline(`
@@ -1979,6 +1976,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         errSubcon: this.subcon('warning'),
         
         msFn: () => this.getMs(),
+        heartbeatMs: this.conf('network.heartbeat.ms'),
         getKey: ({ query: { trn='async', hutId=null } }) => {
           
           if (trn === 'anon') return null;
@@ -2221,7 +2219,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
   async installRoom(name, { bearing='above' }={}) {
     
     let namePcs = name.split('.');
-    let pcs = [ 'room', ...namePcs, `${namePcs.slice(-1)[0]}.js` ]
+    let pcs = [ 'room', ...namePcs, `${namePcs.slice(-1)[0]}.js` ];
     
     let contents = await this.seek('keep', 'fileSystem', pcs).getContent('utf8');
     if (!contents) throw Error(`Invalid room name: "${name}"`);
