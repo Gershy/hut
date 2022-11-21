@@ -554,9 +554,8 @@ global.rooms['chess2'] = async foundation => {
               
             }
             
-            gsc('YOOO???');
             mmm('chess2Match', +1);
-            match.endWith(() => gsc('YOOO!!!') ?? mmm('chess2Match', -1));
+            match.endWith(() => mmm('chess2Match', -1));
             
             // Initial Round of Match
             hut.addRecord('c2.round', [ match ], { ms: Date.now() });
@@ -611,9 +610,8 @@ global.rooms['chess2'] = async foundation => {
           let termTmp = termBank.hold();
           let player = hut.addRecord('c2.player', [ chess2, hut ], { term: termTmp.term, status: 'chill' });
           
-          gsc('HIIII???');
           mmm('chess2Player', +1);
-          player.endWith(() => gsc('HIIII!!!') ?? mmm('chess2Player', -1));
+          player.endWith(() => mmm('chess2Player', -1));
           player.endWith(termTmp);
           
           // Add a "status" property to the Player
@@ -728,7 +726,6 @@ global.rooms['chess2'] = async foundation => {
           
           let queueAct = dep(hut.enableAction('c2.enterQueue', ({ term }) => {
             if (!isForm(term, String)) throw Error('Term must be String');
-            //if (term && term.length < 4) throw Error('Term min length: 4');
             if (term.length > 50) throw Error('Term max length: 50');
             hut.addRecord('c2.queue', [ chess2, status ], { term, ms: Date.now() });
           }));
