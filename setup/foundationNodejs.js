@@ -1733,7 +1733,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
   createSubcon(term, data) {
     
     let keep = this.seek('conf', 'deploy', 'subcon', 'keep').val;
-    let pipe = keep && keep.seek(term).getHeadPipe();
+    let pipe = keep && keep.seek(term).getHeadPipe(); // TODO: HEEERE This is the LEAK! I bet it's because of persistent Promises in filesys...
     let q = pipe ? Promise.resolve(pipe) : null;
     keep = null;
     

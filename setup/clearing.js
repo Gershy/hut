@@ -769,11 +769,11 @@ Object.assign(global, {
     
     init(fn) {
       
-      if (global.foundation) this.zzz = this.Form.name + ': ' + global.foundation.formatError(Error('trace'))
-        .split('\n')
-        .slice(4)
-        .map(ln => ln.replace(/^[^a-zA-Z0-9]+/, ''))
-        .join(' / ');
+      // if (global.foundation) this.zzz = this.Form.name + ': ' + global.foundation.formatError(Error('trace'))
+      //   .split('\n')
+      //   .slice(4)
+      //   .map(ln => ln.replace(/^[^a-zA-Z0-9]+/, ''))
+      //   .join(' / ');
       
       mmm(this.zzz ?? this.Form.name, +1);
       

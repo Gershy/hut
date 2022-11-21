@@ -7,7 +7,7 @@ global.rooms['test2'] = async foundation => {
   
   let { Hinterland, HtmlBrowserHabitat } = rooms;
   
-  return Hinterland('test2', 'test2', {
+  return Hinterland('t2', 'test2', {
     
     habitats: [ HtmlBrowserHabitat() ],
     above: async (hut, appRec, real, dep) => {
@@ -22,7 +22,7 @@ global.rooms['test2'] = async foundation => {
         // for it if none already exists
         let kidHut = owned.getMember('kid');
         let user = await kidHut.withRh({ type: 'user', limit: 1,  fn: rh => rh.getRec() });
-        if (!user) hut.addRecord('user', [ appRec, kidHut ], { name: kidHut.uid });
+        if (!user) hut.addRecord('t2.user', [ appRec, kidHut ], { name: kidHut.uid });
         
       });
       

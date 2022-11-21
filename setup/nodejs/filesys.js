@@ -26,10 +26,7 @@ let fs = {
   }),
   getType: async (fp, opts) => {
     
-    let stat = null;
-    try         { stat = await fs.stat(fp, opts); }
-    catch (err) { if (err.code !== 'ENOENT') throw err; }
-    
+    let stat = await fs.safeStat(fp, opts);
     if (stat === null) return null;
     if (stat.isFile()) return 'file';
     if (stat.isDirectory()) return 'dir';
@@ -59,9 +56,9 @@ let makeFns = rootCmps => {
   
   let validComponentRegex = /^[a-zA-Z0-9!@][-a-zA-Z0-9!@._ ]*$/; // alphanum!@ followed by the same including ".", "-" (careful this guy in regexes), "_", and " "
   
-  let lockAll = {};
-  let lockRem = {};
-  let lockStAll = {}; // "lock subtree all"
+  let lockAll = Object.plain();
+  let lockRem = Object.plain();
+  let lockStAll = Object.plain(); // "lock subtree all"
   
   //// let ind = 0;
   let fns = null;
@@ -165,9 +162,11 @@ let makeFns = rootCmps => {
       // Indicate `cmps` is locked for all operations
       for (let lockAllKey of lockAllKeys) {
         
-        let myLockAll = lockAll[lockAllKey] = (lockAll[lockAllKey] || Promise.resolve())
-          .then(() => safePrm)
-          .then(r => { if (lockAll[lockAllKey] === myLockAll) delete lockAll[lockAllKey]; return r; });
+        if (!lockAll[lockAllKey]) mmm('lockAll', +1);
+        let myLockAll = lockAll[lockAllKey] = Promise.all([ safePrm, lockAll[lockAllKey] ]).then(([ r ]) => {
+          if (lockAll[lockAllKey] === myLockAll) { mmm('lockAll', -1); delete lockAll[lockAllKey]; }
+          return r;
+        });
         //// myLockAll.desc = desc;
         
       }
@@ -178,9 +177,11 @@ let makeFns = rootCmps => {
         
         let uKey = fns.makeFp(cmps.slice(0, n + 1), { rcmps: [] }).key;
         
-        let myLockRem = lockRem[uKey] = (lockRem[uKey] || Promise.resolve())
-          .then(() => safePrm)
-          .then(r => { if (lockRem[uKey] === myLockRem) delete lockRem[uKey]; return r; });
+        if (!lockRem[uKey]) mmm('lockRem', +1);
+        let myLockRem = lockRem[uKey] = Promise.all([ safePrm, lockRem[uKey] ]).then(([ r ]) => {
+          if (lockRem[uKey] === myLockRem) { delete lockRem[uKey]; mmm('lockRem', -1); }
+          return r;
+        });
         //// myLockRem.desc =`[${mi}] (chain:${n}) ${op} "${uKey}"`;
         
       }
@@ -188,9 +189,11 @@ let makeFns = rootCmps => {
       // For "subtree" ops indicate the full subtree of `cmps` is locked
       if (st) {
         
-        let myLockStAll = lockStAll[key] = (lockStAll[key] || Promise.resolve())
-          .then(() => safePrm)
-          .then(result => ( lockStAll[key] === myLockStAll && delete lockStAll[key], result ));
+        if (!lockStAll[key]) mmm('lockStAll', +1)
+        let myLockStAll = lockStAll[key] = Promise.all([ safePrm, lockStAll[key] ]).then(([ r ]) => {
+          if (lockStAll[key] === myLockStAll) { delete lockStAll[key]; mmm('lockStAll', -1); }
+          return r;
+        });
         //// myLockStAll.desc = desc;
         
       }
@@ -409,7 +412,7 @@ let makeFns = rootCmps => {
         // TODO: Ideally there should be a transaction around this!!
         // Using `fns.atomically` has some really scary event-loop
         // consequences that I'm not ready to look into now...
-        await fns.setValue(cmps, null); // Using `null` simply ensures the par dir exists, but doesn't touch the file itself
+        await fns.setValue(cmps, null); // Using `null` simply ensures the par dir exists but doesn't touch the file itself
         await fns.performInQueue('getWriteStream', cmps, async (fp, cmps) => {
           
           let stream = fs.createWriteStream(fp, opts);
@@ -420,7 +423,6 @@ let makeFns = rootCmps => {
           streamPrm.reject = null;
           
           await Promise((g, b) => { stream.on('close', g); stream.on('error', b); });
-          return;
           
           // TODO: Something really scary was happening here...
           // let timeout = null;

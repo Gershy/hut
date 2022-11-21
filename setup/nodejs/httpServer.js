@@ -333,7 +333,10 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         
         let bodyPrm = Promise.later();
         let timeout = setTimeout(() => bodyPrm.reject(Error('Http payload too slow')), 2000);
-        let chunks = [], len = 0, dataFn = null, endFn = null;
+        let chunks = [];
+        let len = 0;
+        let dataFn = null;
+        let endFn = null;
         req.setEncoding('utf8');
         req.on('data', dataFn = chunk => {
           chunks.push(chunk);

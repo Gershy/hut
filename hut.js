@@ -119,10 +119,10 @@ if (1) { // Setup basic process monitoring
   
 }
 
-if (1 && process.cwd() === '/hut') { // Low-level debug (TODO: cheap way to only run on digitalocean!!)
+if (1 || process.cwd() === '/hut') { // Low-level debug (TODO: cheap way to only run on digitalocean!!)
   
   let intervalMs = 3 * 1000;
-  let showThreshold = 20;
+  let showThreshold = 1;
   let maxMetrics = 22; // Consider `Infinity`
   let metrics = {};
 
@@ -143,7 +143,7 @@ if (1 && process.cwd() === '/hut') { // Low-level debug (TODO: cheap way to only
 
       let relevantMetrics = metrics
         .toArr((v, k) => (v < showThreshold) ? skip : [ k, v ])
-        .valSort(([ k, v ]) => -v)
+        .valSort(([ k, v ]) => -Math.abs(v))
         .slice(0, maxMetrics);
       
       if (relevantMetrics.empty()) {

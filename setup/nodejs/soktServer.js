@@ -239,7 +239,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       socket.off('close', closeFn);
       socket.off('error', errorFn);
       
-      tellRoute.off();
+      tellRoute.end();
       
       // Code: https://www.rfc-editor.org/rfc/rfc6455#section-7.4.1
       wsWrite({ op: 8, code: 1000, text: `Goodbye friend :')` }).finally(() => socket.end());

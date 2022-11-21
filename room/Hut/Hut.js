@@ -805,9 +805,10 @@ global.rooms['Hut'] = async foundation => {
         // First time following `rec`!
         let followTmp = Tmp({ rec, desc: () => `FollowSingle(${rec.desc()})` });
         
+        mmm('allFollows', +1);
         if (!allFollows[rec.uid]) allFollows[rec.uid] = Object.plain(); // Reference the new Follow #1
         allFollows[rec.uid][hutUid] = followTmp;                        // Reference the new Follow #2
-        mmm('follow', +1);
+        mmm('followedRecs', +1);
         this.followedRecs.add(rec);                                     // Link the Hut to the Record
         this.toSync('add', rec);                                        // Generate an "add" sync item
         let valRoute = rec.valueSrc.route(delta => {                    // New values become "upd" syncs
@@ -816,11 +817,12 @@ global.rooms['Hut'] = async foundation => {
         
         followTmp.route(() => { // Cleanup when the Follow ends
           
+          mmm('allFollows', -1);
           delete allFollows[rec.uid][hutUid];                          // Unreference #1
-          mmm('follow', -1);
           let empty = true;                                            // Check if...
           for (let k in allFollows[rec.uid]) { empty = false; break; } // ... no more huts ref this Record...
           if (empty) delete allFollows[rec.uid];                       // ... and if not clear up memory!
+          mmm('followedRecs', -1);
           this.followedRecs.rem(rec);                                  // Unlink the Hut from the Record
           this.toSync('rem', rec);                                     // Generate a "rem" sync item
           valRoute.end();                                              // Stop monitoring value changes
@@ -866,8 +868,11 @@ global.rooms['Hut'] = async foundation => {
       
       if (type === 'add') {
         
-        if (rem.has(rec.uid)) { delete rem[rec.uid]; }
-        else                  { delete upd[rec.uid]; add[rec.uid] = rec; }
+        if (rem.has(rec.uid)) delete rem[rec.uid];
+        else {
+          if (upd.has(rec.uid)) delete upd[rec.uid];
+          add[rec.uid] = rec;
+        }
         
       } else if (type === 'rem') {
         
@@ -912,6 +917,9 @@ global.rooms['Hut'] = async foundation => {
       if (!this.parHut) throw Error(`Don't consume ParHut syncs!`);
       /// =ASSERT}
       
+      let pendingSync = this.pendingSync;
+      this.pendingSync = { add: {}, upd: {}, rem: {} };
+      
       if (srcHut) {
         
         /// {DEBUG=
@@ -922,13 +930,10 @@ global.rooms['Hut'] = async foundation => {
         // to indicate an "add" for every followed Record - essentially
         // this is "sync-from-scratch" behaviour!
         this.syncTellVersion = 0;
-        let { add } = this.pendingSync = { add: {}, upd: {}, rem: {} };
+        let { add } = pendingSync = { add: {}, upd: {}, rem: {} };
         for (let rec of this.followedRecs) add[rec.uid] = rec;
         
       }
-      
-      let pendingSync = this.pendingSync;
-      this.pendingSync = { add: {}, upd: {}, rem: {} };
       
       // Creates sync for the BelowHut and modifies its representation
       // to be considered fully up-to-date
@@ -964,10 +969,7 @@ global.rooms['Hut'] = async foundation => {
       let content = { add, upd, rem }.map(v => v.empty() ? skip : v);
       if (content.empty()) return null;
       
-      // Mark `this` as fully up-to-date
-      this.pendingSync = { add: {}, upd: {}, rem: {} };
       this.throttleSyncPrm = null; // Cancel any previously pending sync (the full-sync will encompass it)
-      
       return { command: 'sync', v: this.syncTellVersion++, content };
       
     },
