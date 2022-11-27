@@ -318,10 +318,13 @@ global.Foundation = form({ name: 'Foundation', pars: { Endable, Slots }, props: 
     };
     
   },
-  formatError(err=null, { verbose=false }={}) {
+  formatError(err=null, { seen=Set(), verbose=false }={}) {
     
     // Form a pretty String representation of an Error; noisy filepaths
     // are removed, map line indices are mapped from compiled->source
+    
+    if (seen.has(err)) return '<circ>';
+    seen.add(err);
     
     if (err === null) err = Error('trace');
     
@@ -351,9 +354,11 @@ global.Foundation = form({ name: 'Foundation', pars: { Endable, Slots }, props: 
     if (ind < 0 && stack.startsWith(msg)) { ind = 0; pfx = msg; }
     
     if (ind < 0) {
-      pfx = `(Unknown error)`;
-      stack = `${pfx}\n\n${stack}`;
-      ind = pfx.length;
+      
+      pfx = msg  || `(Unknown error)`;
+      stack = `${pfx}\n${stack}`;
+      ind = 1;
+      
     }
     
     let traceBegins = ind + pfx.length;
@@ -400,15 +405,13 @@ global.Foundation = form({ name: 'Foundation', pars: { Endable, Slots }, props: 
       ).map(ln => `||  ${ln}`)
     ].join('\n');
     
-    let { message, ctxErr=null, ...specialArgs } = err;
-    if (!specialArgs.empty()) result += '\n' + this.formatAnyValue(specialArgs);
+    let { data={}, errs={} } = err.categorize(v => hasForm(v, Error) ? 'errs' : 'data');
+    if (!data.empty()) result += '\n' + this.formatAnyValue(data).indent('||  ');
     
-    // If the Error has a "cause" include it in the trace
-    if (ctxErr) result += '\n' + `\nCAUSE:\n${this.formatError(Object.assign(ctxErr, { ctxErr: null }), { verbose })}`.indent('||  ');
-    
-    then(this.conf('deploy.haltOnError'), haltOnError => then(haltOnError, haltOnError => {
-      if (haltOnError) { console.log('(First error)', result); this.halt() };
-    }));
+    for (let [ key, err ] of errs) {
+      let innerStr = this.formatError(err, { seen, verbose });
+      result += `\n${key.upper()}:\n` + innerStr.indent('||  ');
+    }
     
     return result;
     

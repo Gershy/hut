@@ -152,7 +152,7 @@ if (1 || process.cwd() === '/hut') { // Low-level debug (TODO: cheap way to only
         
       } else {
         
-        gsc(`Heap: ${consumed.toFixed(2)}mb\n` + relevantMetrics.map(([ k, v ]) => `  METRIC - ${(k + ':').padTail(20)}${v}`).join('\n'));
+        gsc(`Heap: ${consumed.toFixed(2)}mb\n` + relevantMetrics.map(([ k, v ]) => `  METRIC - ${k.padTail(20)}${v}`).join('\n'));
         
       }
       
@@ -209,6 +209,6 @@ Promise.resolve()
   .then(() => foundation.configure(conf))
   .then(conf => foundation.hoist())
   .fail(err => {
-    console.error(foundation.formatError(err.mod(msg => `${msg} (FATAL)`)));
+    gsc(foundation.formatError(err.mod(msg => `${msg} (FATAL)`)));
     foundation.halt();
   });

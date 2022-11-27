@@ -330,24 +330,22 @@ Object.assign(global, {
       if (isForm(props, Function)) props = props(this.message);
       if (isForm(props, String)) props = { message: props };
       
-      let { ctxErr=null, msg=null, message=msg||this.message, ...moreProps } = props;
+      let { ctxErr=null, msg=null, message=msg??this.message, ...moreProps } = props;
       
-      // The stack should embed the "message" property - changing the
-      // messages means the stack should change too
+      if (!message && ctxErr)    message = ctxErr.message;
+      if (!this.stack && ctxErr) this.stack = ctxErr.stack;
+      
       let reflectMessageChangeInStack = true
         && this.stack
-        && this.message
-        && message
-        && message !== this.message;
+        && message !== this.message
+        && this.stack.has(this.message);
       if (reflectMessageChangeInStack) this.stack = this.stack.replace(this.message, message);
       
-      if (ctxErr && !this.stack) this.stack = ctxErr.stack;
-      if (ctxErr && !this.message) this.message = ctxErr.message;
-      
-      if (ctxErr) this.ctxErr = ctxErr;
-      if (message) this.message = message;
-      
-      return Object.assign(this, moreProps);
+      // Assign `ctxErr` to transfer props like "code", etc.
+      // Assign `moreProps` to transfer any other properties
+      // Add `message` prop
+      // Only add `ctxErr` prop if `ctxErr` is non-null
+      return Object.assign(this, ctxErr, moreProps, { message }, ctxErr ? { ctxErr } : null);
       
     },
     propagate(props /* { ctxErr, msg, message, ...more } */) { throw this.mod(props); }

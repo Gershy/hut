@@ -8,7 +8,7 @@ A Hut partakes in a shared experience. A Hut may define the rules of how an expe
 
 - **Architecture Elimination:** Focus 100% on logic that is specific to whatever you're building!
 - **Dependency Elimination:** Essentially all required tools are included in Hut, and they interoperate with awareness of each other
-- **Client Anosticism:** With minimal configuration any Hut becomes accessible via a client's browser, command-line, desktop app, or other environment
+- **Client Agnosticism:** With minimal configuration any Hut becomes accessible via a client's browser, command-line, desktop app, or other environment
 - **Platform Agnosticism:** Hut runs on any supported platform - only some minimal configuration required (platform support is improving with time!)
 - **Persistence for free:** Never think about data persistence - simply tell Hut something like: "run my app using storage block A", and your app's state is automatically resumed and persisted!
 - **SSL for free:** Hut includes an [acme](https://letsencrypt.org/2019/03/11/acme-protocol-ietf-standard.html) implementation - you'll never have to think about certifying ("padlocking") the domains used with Hut

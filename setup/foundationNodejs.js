@@ -6,8 +6,6 @@
 require('./foundation.js');
 let { Foundation } = global;
 
-let filesys = require('./nodejs/filesys.js');
-let filesysCmps = filesys.convertFp(__dirname).slice(0, -1);
 let NetworkIdentity = require('./nodejs/NetworkIdentity.js');
 let niceRegex = (...args) => {
   
@@ -25,6 +23,10 @@ let niceRegex = (...args) => {
   
 };
 
+let { FilesysTransaction, Filepath } = require('./nodejs/filesys.js');
+let hutFp = Filepath(__dirname).par();
+let hutTrn = FilesysTransaction(hutFp);
+
 global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, props: (forms, Form) => ({
   
   $KeepNodejs: form({ name: 'KeepNodejs', has: { Keep }, props: forms => ({
@@ -33,12 +35,12 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       
       forms.Keep.init.call(this);
       
-      let fileSystemKeep = Form.KeepFileSystem({ absPath: filesysCmps, secure: true, blacklist: Set([ '.git', '.gitignore', 'mill' ]) });
+      let fileSystemKeep = Form.KeepFileSystem({ fp: hutFp, secure: true, blacklist: Set([ '.git', '.gitignore', 'mill' ]) });
       this.keepsByType = {
         static:             Form.KeepStatic(fileSystemKeep),
         fileSystem:         fileSystemKeep,
-        adminFileSystem:    Form.KeepFileSystem({ absPath: filesysCmps, secure: false }),
-        compiledFileSystem: Form.KeepFileSystem({ absPath: [ ...filesysCmps, 'mill', 'cmp' ], secure: true })
+        adminFileSystem:    Form.KeepFileSystem({ fp: hutFp, secure: false }),
+        compiledFileSystem: Form.KeepFileSystem({ fp: hutFp.kid([ 'mill', 'cmp' ]), secure: true })
       };
       
     },
@@ -85,6 +87,17 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
   })}),
   $KeepFileSystem: form({ name: 'KeepFileSystem', has: { Keep }, props: (forms, FormFs) => ({
     
+    $extToContentType: {
+      json: 'text/json; charset=utf-8',
+      html: 'text/html; charset=utf-8',
+      css: 'text/css; charset=utf-8',
+      txt: 'text/plain; charset=utf-8',
+      ico: 'image/x-icon',
+      png: 'image/png',
+      jpg: 'image/jpeg',
+      svg: 'image/svg+xml'
+    },
+    
     $HoneyPotKeep: form({ name: 'HoneyPotKeep', has: { Keep }, props: (forms, Form) => ({
       init(data=[ 'passwords', 'keys', 'tokens', 'secrets', 'credentials', 'bitcoin', 'wallet', 'honey' ]) { this.data = data; },
       
@@ -99,19 +112,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       getTailPipe() { return ({ pipe: async res => res.end(valToJson(this.data)) }); },
       desc() { return `${getFormName(this)}`; }
     })}),
-    
-    $extToContentType: {
-      json: 'text/json; charset=utf-8',
-      html: 'text/html; charset=utf-8',
-      css: 'text/css; charset=utf-8',
-      txt: 'text/plain; charset=utf-8',
-      ico: 'image/x-icon',
-      png: 'image/png',
-      jpg: 'image/jpeg',
-      svg: 'image/svg+xml'
-    },
-    
-    init({ absPath=[ 'tmp' ], secure=true, blacklist=Set.stub }) {
+    init({ fp=Filepath(require('os').tmpdir()), secure=true, blacklist=Set.stub }) {
       
       // NOTE: internal.install was serving its "install.log" file,
       // as the `node hut.js ...` command wound up writing install.log
@@ -122,23 +123,13 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       // inside <hutRepo>, unless it's inside "mill". Every file in
       // Hut, outside of "mill", is considered public/insensitive.
       
-      if (absPath.find(v => !isForm(v, String)).found) throw Error(`Invalid absPath for ${getFormName(this)}`);
-      
-      Object.assign(this, { absPath, secure, blacklist });
+      Object.assign(this, { fp, secure, blacklist });
       
     },
-    desc() { return `${getFormName(this)}(->${this.absPath.join('->')})`; },
-    getFileUrl() { return filesys.makeFp(this.absPath).key; },
+    desc() { return `${getFormName(this)}( ${this.fp.desc()} )`; },
     
-    contains(fsKeep) {
-      if (!fsKeep) return false;
-      if (this.absPath.length > fsKeep.absPath.length) return false;
-      for (let [ i, cmp ] of this.absPath.entries()) if (cmp !== fsKeep.absPath[i]) return false;
-      return true;
-    },
-    is(fsKeep) {
-      return (this.absPath.length === fsKeep.absPath.length) && this.contains(fsKeep);
-    },
+    contains(fsKeep) { return this.fp.contains(fsKeep.fp); },
+    equals(fsKeep) { return this.fp.equals(fsKeep.fp); },
     
     access(dirNames) {
       
@@ -157,7 +148,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       if (!dirNames.count()) return this;
       
       let KeepForm = this.Form;
-      return KeepForm({ absPath: [ ...this.absPath, ...dirNames ], secure: this.secure });
+      return KeepForm({ fp: this.fp.kid(dirNames), secure: this.secure });
       
     },
     
@@ -165,46 +156,31 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
     getContentType() {
       
       if (this.contentType) return this.contentType;
-      let [ lastCmp ] = this.absPath.slice(-1);
-      let [ pcs, ext=null ] = lastCmp.split('.').slice(-2); // Last 2 period-delimited components is more reliable
+      let lastCmp = this.fp.cmps.slice(-1)[0];
+      let [ pcs, ext=null ] = lastCmp.split('.').slice(-2); // Final 2 period-delimited components are more reliable
       
       return FormFs.extToContentType.has(ext) ? FormFs.extToContentType[ext] : 'application/octet-stream';
       
     },
     
-    async exists(opts={}) { return (await filesys.getSize(this.absPath, opts)) !== null; },
-    async getContent(opts={}) { return filesys.getValue(this.absPath, opts); },
-    async setContent(content, opts={}) {
-      
-      return (content !== null)
-        ? filesys.setValue(this.absPath, content, opts)
-        : filesys.rem(this.absPath, opts);
-      
-    },
-    async getContentByteLength() { return filesys.getSize(this.absPath); },
+    async getContent(opts={}) { return hutTrn.getData(this.fp, opts); },
+    async setContent(content) { return content ? hutTrn.setData(this.fp, content) : hutTrn.remSubtree(this.fp); },
+    async getContentByteLength() { return hutTrn.getDataBytes(this.fp); },
+    async exists() { return (await this.getContentByteLength()) > 0; },
     async getChildNames(opts={}) {
-      
-      return (await filesys.getChildNames(this.absPath, opts))
-        .map(fp => this.blacklist.has(fp) ? skip : fp);
-      
+      let names = await hutTrn.getKidNames(this.fp);
+      return names.map(fp => this.blacklist.has(fp) ? skip : fp);
     },
-    async countChildren(opts={}) {
-      
-      return this.getChildNames(opts).then(names => names.length);
-      
-    },
+    async countChildren(opts={}) { return hutTrn.getKidNames(this.fp).then(names => names.length); },
     async* iterateChildren(dbg=Function.stub) {
       
-      let dir = await filesys.iterateChildren(this.absPath);
-      try {
-        for await (let name of dir) if (!this.blacklist.has(name)) yield [ name, this.access(name) ];
-      } finally {
-        dir.close(); // No need to `await`
-      }
+      let it = await hutTrn.iterateNode(this.fp);
+      try     { for await (let n of dir) if (!this.blacklist.has(n)) yield [ n, this.access(n) ]; }
+      finally { dir.close(); }
       
     },
-    async getHeadPipe() { return filesys.getWriteStream(this.absPath); },
-    async getTailPipe() { return filesys.getReadStream(this.absPath); }
+    async getHeadPipe() { return hutTrn.getDataHeadStream(this.fp); },
+    async getTailPipe() { return hutTrn.getDataTailStream(this.fp); }
     
   })}),
   
@@ -714,7 +690,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         let subconMillKeep = this.seek('keep', 'adminFileSystem', 'mill', 'subcon');
         let subconKeep = this.seek('conf', 'deploy', 'subcon', 'keep').val;
         
-        if (subconMillKeep?.contains(subconKeep)) {
+        if (subconKeep && subconMillKeep?.contains(subconKeep)) {
           let numSubcons = await subconMillKeep.countChildren();
           if (numSubcons > 200) this.subcon('warning')(`${subconMillKeep.desc()} has a large number of children (${numSubcons})`);
         }
@@ -1040,8 +1016,6 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
     schema('deploy.stability.slowDiagnose', { fn: deployStabilityFn });
     schema('deploy.stability.slowPrevent', { fn: deployStabilityFn });
     schema('deploy.stability.*', { fn: deployStabilityFn });
-    
-    schema('deploy.haltOnError', { fn: (val, conf) => val });
     
     schema('deploy.subcon', { fn: parVal });
     schema('deploy.subcon.keep', { fn: (val, keep) => {
@@ -1676,7 +1650,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         keep = this.seek('keep', 'adminFileSystem', keep);
         
         // Use any previously existing reference
-        if (conf.val && keep.is(conf.val)) keep = conf.val;
+        if (conf.val && keep.equals(conf.val)) keep = conf.val;
         
       }
       
@@ -2007,63 +1981,58 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
     if (!isForm(roomPcs, Array)) throw Error(`Invalid "roomPcs" (${getFormName(roomPcs)})`);
     
     let cmpKeep = this.seek('keep', 'compiledFileSystem', [ bearing, `${roomPcs.join('.')}.js` ]);
+    if (await cmpKeep.exists()) return cmpKeep;
     
-    if (!await cmpKeep.exists()) {
+    let srcKeep = await (bearing === 'setup'
+      ? this.seek('keep', 'fileSystem', 'setup', `${roomPcs.join('.')}.js`)
+      : this.seek('keep', 'fileSystem', 'room', ...roomPcs, `${roomPcs.slice(-1)[0]}.js`)
+    );
+    if (!await srcKeep.exists()) throw Error(`Room ${roomPcs.join('.')} with Keep ${srcKeep.desc()} doesn't exist`);
+    
+    let { lines, offsets } = this.compileContent(bearing, await srcKeep.getContent('utf8'), roomPcs.join('.'));
+    if (!lines.count()) {
+      await cmpKeep.setContent(`'use strict';`); // Write something to avoid recompiling later
+      return cmpKeep;
+    }
+    
+    // Embed `offsets` within `lines` for BELOW or setup
+    if (this.conf('deploy.maturity') === 'dev' && [ 'below', 'setup' ].has(bearing)) {
       
-      let srcKeep = await (bearing === 'setup'
-        ? this.seek('keep', 'fileSystem', 'setup', `${roomPcs.join('.')}.js`)
-        : this.seek('keep', 'fileSystem', 'room', ...roomPcs, `${roomPcs.slice(-1)[0]}.js`)
-      );
+      let lastLine = lines.slice(-1)[0];
       
-      if (!await srcKeep.exists()) throw Error(`Room ${roomPcs.join('.')} with Keep ${srcKeep.desc()} doesn't exist`);
-      let { lines, offsets } = this.compileContent(bearing, await srcKeep.getContent('utf8'), roomPcs.join('.'));
-      
-      if (!lines.count()) { await cmpKeep.setContent(''); }
-      else {
-        
-        // Embed `offsets` within `lines` for BELOW or setup
-        if (this.seek('conf', 'deploy', 'maturity').val === 'dev' && [ 'below', 'setup' ].has(bearing)) {
-          
-          let lastLine = lines.slice(-1)[0];
-          
-          // We always expect the last character to be ";" as we need to
-          // append the roomDebug extension; if the last character isn't
-          // ";" we could encounter unexpected syntactic consequences
-          if (lastLine.slice(-1)[0] !== ';') throw Error(`Last character of ${roomPcs.join('.')} is "${lastLine.slice(-1)[0]}"; not ";"`);
-          lines[lines.length - 1] = `${lastLine} global.roomDebug['${roomPcs.join('.')}'] = ${valToJson({ offsets })};`;
-          
-        }
-        
-        if (this.conf('wrapClientJs')) {
-          
-          // SyntaxError is uncatchable in FoundationBrowser and has no
-          // useful trace. We can circumvent this by sending code which
-          // cannot cause a SyntaxError directly; instead the code is
-          // represented as a foolproof String, and then it is eval'd.
-          // If the string represents syntactically incorrect js, `eval`
-          // will crash but the script will have loaded without issue;
-          // a much more descriptive trace can result! There's also an
-          // effort here to not change the line count in order to keep
-          // debuggability; for this reason all wrapping code is
-          // appended/prepended to the first/last lines.
-          let escQt = '\\' + `'`;
-          let escEsc = '\\' + '\\';
-          let headEvalStr = `eval([`;
-          let tailEvalStr = `].join('\\n'));`;
-          
-          lines = lines.map(ln => `'` + ln.replace(/\\/g, escEsc).replace(/'/g, escQt) + `',`); // Ugly trailing comma
-          let headInd = 0;
-          let tailInd = lines.length - 1;
-          lines[headInd] = headEvalStr + lines[headInd];
-          lines[tailInd] = lines[tailInd] + tailEvalStr;
-          
-        }
-        
-        await cmpKeep.setContent(lines.join('\n'));
-        
-      }
+      // We always expect the last character to be ";" as we need to
+      // append the roomDebug extension; if the last character isn't
+      // ";" we could encounter unexpected syntactic consequences
+      if (lastLine.slice(-1)[0] !== ';') throw Error(`Last character of ${roomPcs.join('.')} is "${lastLine.slice(-1)[0]}"; not ";"`);
+      lines[lines.length - 1] = `${lastLine} global.roomDebug['${roomPcs.join('.')}'] = ${valToJson({ offsets })};`;
       
     }
+    
+    if (this.conf('wrapClientJs')) {
+      
+      // SyntaxError is uncatchable in FoundationBrowser and has no
+      // useful trace. We can circumvent this by sending code which
+      // cannot cause a SyntaxError directly; instead the code is
+      // represented as a foolproof String, and then it is eval'd.
+      // If the string represents syntactically incorrect js, `eval`
+      // will crash but the script will have loaded without issue;
+      // a much more descriptive trace can result! There's also an
+      // effort here to not change the line count in order to keep
+      // debuggability; for this reason all wrapping code is
+      // appended/prepended to the first/last lines.
+      let escQt = '\\' + `'`;
+      let escEsc = '\\' + '\\';
+      let headEvalStr = `eval([`;
+      let tailEvalStr = `].join('\\n'));`;
+      
+      lines = lines.map(ln => `'` + ln.replace(/\\/g, escEsc).replace(/'/g, escQt) + `',`); // Ugly trailing comma
+      let headInd = 0;
+      let tailInd = lines.length - 1;
+      lines[headInd] = headEvalStr + lines[headInd];
+      lines[tailInd] = lines[tailInd] + tailEvalStr;
+      
+    }
+    await cmpKeep.setContent(lines.join('\n'));
     
     return cmpKeep;
     
@@ -2231,6 +2200,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       content: (async () => {
         
         // Write, `require`, and ensure file populates `global.rooms`
+        
         await this.seek('keep', 'compiledFileSystem', [ bearing, `${name}.js` ]).setContent(lines.join('\n'));
         require(`../mill/cmp/${bearing}/${name}.js`);
         
@@ -2263,7 +2233,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
     
     /// {DEBUG=
     // Make sure the path is within the Hut repository
-    if (!path.hasHead(this.seek('keep', 'adminFileSystem').getFileUrl())) throw Error(`Path "${path}" isn't relevant to error`);
+    if (!this.seek('keep', 'adminFileSystem').fp.contains(Filepath(path))) throw Error(`Path "${path}" isn't relevant to error`);
     /// =DEBUG}
     
     // Note that for FoundationNodejs, code under "setup" is run raw,
