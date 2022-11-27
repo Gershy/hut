@@ -119,9 +119,9 @@ if (1) { // Setup basic process monitoring
   
 }
 
-if (1 || process.cwd() === '/hut') { // Low-level debug (TODO: cheap way to only run on digitalocean!!)
+if (1) { // Low-level debug (TODO: cheap way to only run on digitalocean!!)
   
-  let intervalMs = 3 * 1000;
+  let intervalMs = 10 * 1000;
   let showThreshold = 1;
   let maxMetrics = 22; // Consider `Infinity`
   let metrics = {};
