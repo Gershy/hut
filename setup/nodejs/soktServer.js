@@ -228,8 +228,8 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       wsIncoming(buff, ms);
       
     });
-    socket.on('close', closeFn = () => session.close());
-    socket.on('error', errorFn = err => errSubcon(`Socket error ${session.desc()}`, err) ?? session.close());
+    socket.on('close', closeFn = () => session.end());
+    socket.on('error', errorFn = err => errSubcon(`Socket error ${session.desc()}`, err) ?? session.end());
     
     let tellRoute = session.tell.route(msg => msg && wsWrite({ op: 1, text: valToJson(msg) }));
     
