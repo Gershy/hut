@@ -177,7 +177,7 @@ global.rooms['internal.real.generic.Real'] = foundation => form({ name: 'Real', 
       this.doRender(delta);
       this.renderPrm = null;
     });
-    this.renderPrm.fail( ctxErr => err.propagate({ msg: 'Failed to render', ctxErr }) );
+    this.renderPrm.fail( cause => err.propagate({ msg: 'Failed to render', cause }) );
     
   },
   mod(paramDelta={}) { this.params.gain(paramDelta); this.render({ paramDelta }); return this; },

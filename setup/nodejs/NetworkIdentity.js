@@ -588,10 +588,10 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
     let prm = Promise((resolve, reject) => {
       
-      proc.on('error', ctxErr => {
+      proc.on('error', cause => {
         
         let { stdout, stderr } = closure();
-        reject(err.mod( msg => ({ msg: `Failed spawning "${shellName}"\n${msg}`, ctxErr, stdout, stderr }) ));
+        reject(err.mod( msg => ({ cause, msg: `Failed spawning "${shellName}"\n${msg}`, stdout, stderr }) ));
         
       });
       

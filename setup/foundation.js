@@ -208,7 +208,7 @@ global.Foundation = form({ name: 'Foundation', pars: { Endable, Slots }, props: 
       let installPrm = this.installRoom(name, opts)
         
         // Add context for case #1
-        .fail(ctxErr => err.propagate({ ctxErr, msg: `Failed to resolve room "${name}"` }))
+        .fail(cause => err.propagate({ cause, msg: `Failed to resolve room "${name}"` }))
         
         // More logic to process case #2
         .then(orig => {
@@ -216,7 +216,7 @@ global.Foundation = form({ name: 'Foundation', pars: { Endable, Slots }, props: 
           // Add context for case #2
           let content = then(orig.content,
             v => v,
-            ctxErr => err.propagate({ ctxErr, msg: `Failed to resolve room "${name}"` })
+            cause => err.propagate({ cause, msg: `Failed to resolve room "${name}"` })
           );
           
           return { ...orig, content };

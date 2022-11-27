@@ -1906,8 +1906,6 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
           if (![ 'anon', 'sync', 'async' ].has(msg.trn)) throw Error(`Invalid trn value: "${msg.command}"`);
           if (msg.command === 'bp' && msg.trn !== 'async') throw Error(`If Command is "bp" Trn must be "async"`).mod({ tell: msg });
           
-          //if (msg.command === 'bp') gsc('BP:', { path, query, fragment, cookie, body });
-          
           // Return `null` Key to indicate this is an anonymous session
           if (msg.trn === 'anon') return { key: null, msg };
           

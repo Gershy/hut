@@ -10,7 +10,7 @@ let fs = (fs => ({
   ...fs.slice([ 'createReadStream', 'createWriteStream' ])
 }))(require('fs')).map((fn, name) => (...args) => {
   let err = Error('='.repeat(300));
-  return then(fn(...args), Function.stub, ctxErr => err.propagate({ ctxErr, msg: `Failed low-level ${name} on "${args[0]}"` }));
+  return then(fn(...args), Function.stub, cause => err.propagate({ cause, msg: `Failed low-level ${name} on "${args[0]}"` }));
 });
 
 let Filepath = form({ name: 'Filepath', props: (forms, Form) => ({
@@ -254,9 +254,9 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', props: (forms, Form)
     await Promise.all(collLocks.map(lk => lk.prm)); // Won't reject because it's a Promise.all over Locks, and no `Lock(...).prm` ever rejects!
     
     // We now own the locked context!
-    try            { return await fn(); }
-    catch (ctxErr) { throw err.mod({ ctxErr, msg: `Failed locked op: "${name}"` }); }
-    finally        { for (let lock of locks) lock.prm.resolve(); } // Ensure all Locks resolve
+    try           { return await fn(); }
+    catch (cause) { throw err.mod({ cause, msg: `Failed locked op: "${name}"` }); }
+    finally       { for (let lock of locks) lock.prm.resolve(); } // Ensure all Locks resolve
     
   },
   async transact({ name='?', fp, fn }) {

@@ -459,7 +459,7 @@ global.rooms['chess2'] = async foundation => {
         
         let timerSrc = dep(TimerSrc({ ms: 1500 }));
         timerSrc.route(() => c2Subcon(`${desc} FAILED to create player!`), 'prm');
-        timerSrc.route(() => (kidHut.strike(0.15, 'Failed timely chess2 player creation'), kidHut.end()), 'prm');
+        timerSrc.route(() => (kidHut.strike(0.075, 'Failed timely chess2 player creation'), kidHut.end()), 'prm');
         
         dep.scp(kidHut, 'c2.player', (player, dep) => {
           

@@ -260,7 +260,7 @@ global.rooms['record'] = async foundation => {
         let RecordForm = this.getRecordForm({ type, group, value });
         return RecordForm({ type, group, uid, value });
         
-      } catch (ctxErr) { err.propagate({ ctxErr, msg: `Failed to get Record from Cache or Plan` }); } });
+      } catch (cause) { err.propagate({ cause, msg: `Failed to get Record from Cache or Plan` }); } });
       
     }
     
@@ -462,7 +462,7 @@ global.rooms['record'] = async foundation => {
       let err = Error('trace');
       this.mod({ offset, limit, filter })
         .then(() => err = null)
-        .fail(ctxErr => err.propagate({ ctxErr, msg: `Failed initial mod for ${this.desc()}` }));
+        .fail(cause => err.propagate({ cause, msg: `Failed initial mod for ${this.desc()}` }));
       
       // Fixed RelHandlers immediately clobber their `this.mod` method
       // after calling it for the first (and only) time
@@ -595,7 +595,7 @@ global.rooms['record'] = async foundation => {
             newHrecPrms.push(then(
               this.manager.ensureRecord(selected.uid, selected),
               rec => this.handleRec(rec) && addedRecs.push(rec), // TODO: What if Selection is ended early, finally block sends all
-              ctxErr => err.propagate({ ctxErr, msg: `Couldn't ensure "${selected.uid}" during selection` })
+              cause => err.propagate({ cause, msg: `Couldn't ensure "${selected.uid}" during selection` })
             ));
             
           }
@@ -817,7 +817,7 @@ global.rooms['record'] = async foundation => {
           
           foundation.subcon('record.instance')(() => `SYNC ${this.desc()}`);
           
-        } catch (ctxErr) {
+        } catch (cause) {
           
           // Any Errors upon Banking / informing Holders result in the
           // Record Ending immediately
@@ -827,7 +827,7 @@ global.rooms['record'] = async foundation => {
           try         { this.end(); }
           catch (err) { gsc(`Additional Error when ${this.desc()} failed to Bank`, foundation.formatError(err)); }
           
-          err.propagate({ ctxErr, msg: `Failed to Bank ${this.desc()}` });
+          err.propagate({ cause, msg: `Failed to Bank ${this.desc()}` });
           
         }
         

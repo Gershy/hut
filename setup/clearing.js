@@ -325,15 +325,15 @@ Object.assign(global, {
     
     $stackTraceLimit: 150,
     
-    mod(props={} /* { ctxErr, msg, message, ...more } */) {
+    mod(props={} /* { cause, msg, message, ...more } */) {
       
       if (isForm(props, Function)) props = props(this.message);
       if (isForm(props, String)) props = { message: props };
       
-      let { ctxErr=null, msg=null, message=msg??this.message, ...moreProps } = props;
+      let { cause=null, msg=null, message=msg??this.message, ...moreProps } = props;
       
-      if (!message && ctxErr)    message = ctxErr.message;
-      if (!this.stack && ctxErr) this.stack = ctxErr.stack;
+      if (cause && !message)    message = cause.message;
+      if (cause && !this.stack) this.stack = cause.stack;
       
       let reflectMessageChangeInStack = true
         && this.stack
@@ -341,14 +341,14 @@ Object.assign(global, {
         && this.stack.has(this.message);
       if (reflectMessageChangeInStack) this.stack = this.stack.replace(this.message, message);
       
-      // Assign `ctxErr` to transfer props like "code", etc.
+      // Assign `cause` to transfer props like "code", etc.
       // Assign `moreProps` to transfer any other properties
       // Add `message` prop
-      // Only add `ctxErr` prop if `ctxErr` is non-null
-      return Object.assign(this, ctxErr, moreProps, { message }, ctxErr ? { ctxErr } : null);
+      // Only add `cause` prop if `cause` is non-null
+      return Object.assign(this, cause, moreProps, { message }, cause ? { cause } : null);
       
     },
-    propagate(props /* { ctxErr, msg, message, ...more } */) { throw this.mod(props); }
+    propagate(props /* { cause, msg, message, ...more } */) { throw this.mod(props); }
     
   });
   protoDefs(Date, {

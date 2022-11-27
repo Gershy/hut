@@ -226,7 +226,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
           let err = Error('trace');
           let encoder = zlib[`create${encode[0].upper()}${encode.slice(1)}`](); // Transforms, e.g., "delate", "gzip" into "createDeflate", "createGzip"
           await Promise( (g, b) => stream.pipeline(pipe, encoder, res, err => err ? b(err) : g()) )
-            .fail( ctxErr => err.propagate({ ctxErr, msg: `Failed to stream ${keep.desc()}`, encode }) );
+            .fail( cause => err.propagate({ cause, msg: `Failed to stream ${keep.desc()}`, encode }) );
           
         } else {
           

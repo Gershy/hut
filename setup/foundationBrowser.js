@@ -505,7 +505,7 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
         server.activeReqs--;
         
         // Ensure at least 1 banked poll is always available
-        if (server.activeReqs < 1) this.soon().then(() => session.tell.send(''), 100);
+        if (server.activeReqs < 1) this.soon().then(() => session.tell.send(''));
         
       });
       session.endWith(route);

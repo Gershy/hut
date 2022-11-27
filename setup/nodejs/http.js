@@ -54,7 +54,7 @@ module.exports = {
     let err = Error('');
     let resPrm = new Promise((rsv, rjc) => {
       req.on('response', rsv);
-      req.on('error', ctxErr => rjc(err.mod({ msg: 'Failed to request', ctxErr })));
+      req.on('error', cause => rjc(err.mod({ cause, msg: 'Failed to request' })));
     });
     
     if (body) req.write(body);
