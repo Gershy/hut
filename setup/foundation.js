@@ -354,11 +354,9 @@ global.Foundation = form({ name: 'Foundation', pars: { Endable, Slots }, props: 
     if (ind < 0 && stack.startsWith(msg)) { ind = 0; pfx = msg; }
     
     if (ind < 0) {
-      
       pfx = msg  || `(Unknown error)`;
       stack = `${pfx}\n${stack}`;
       ind = 1;
-      
     }
     
     let traceBegins = ind + pfx.length;

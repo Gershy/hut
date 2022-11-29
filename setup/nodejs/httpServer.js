@@ -55,16 +55,13 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   
   let makeHttpSession = (key, req) => {
     
-    //let session = HttpSession({ key, req });
-
     let session = Tmp({
       
       key,
       desc: () => `HttpSession(http${secure ? 's' : ''}://${netAddr}:${port} / ${key})`,
       currentCost: () => session.queueRes.length ? 0.5 : 0.75,
-      
       timeout: null,
-      knownNetAddrs: req ? Set([ req.connection.remoteAddress ]) : Set(),
+      netAddr: req.connection.remoteAddress,
       
       queueRes: [],
       queueMsg: [],
@@ -478,8 +475,13 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
           sessions.add(session.key, session);
           session.endWith(() => sessions.rem(session.key));
           tmp.src.send(session);
-        } else {
-          session.knownNetAddrs.add(req.connection.remoteAddress); // Record seeing this Session from this NetworkAddress
+        }
+        
+        if (session.netAddr !== req.connection.remoteAddress) {
+          errSubcon(() => `Session "${session.key}" uses NetworkAddress "${session.netAddr}" but also keyed by "${req.connection.remoteAddress}"`);
+          res.socket.destroy();
+          session.end(); // Session probably isn't safe to use anymore...
+          return;
         }
         
       }

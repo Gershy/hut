@@ -431,7 +431,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', props: (forms, Form)
   async getKidNames(fp, data) {
     
     this.checkFp(fp);
-    return this.doLocked({ name: 'getKidNames', locks: [{ type: 'nodeRead' }], fn: async () => {
+    return this.doLocked({ name: 'getKidNames', locks: [{ type: 'nodeRead', fp }], fn: async () => {
       
       try         { return await fs.readdir(fp.fsp()); }
       catch (err) { if (err.code !== 'ENOENT') throw err; }

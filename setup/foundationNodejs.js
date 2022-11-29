@@ -539,7 +539,9 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
     
     Object.assign(this, {
       resetCmpPrm: this.seek('keep', 'compiledFileSystem').setContent(null),
-      confReadyPrm: null
+      confReadyPrm: null,
+      netAddrRepRec: null,
+      subconRec: null
     });
     
   },
@@ -587,9 +589,11 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       })
       .then(async ({ conf, full, raw, keep }) => {
         
+        global.gsc = this.subcon('dev');
+        
         /// {DEBUG=
         this.subcon('conf.provided')({ raw, keep, full });
-        await this.subcon('conf.resolved')(async () => {
+        await this.subcon('conf.resolved')(async () => { // Show all resolved settings
           
           // TODO: Gray out options left at their default (don't be shy just store a "defVal" prop on Conf instances!)
           
@@ -687,8 +691,10 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
           
         });
         
-        let subconMillKeep = this.seek('keep', 'adminFileSystem', 'mill', 'subcon');
-        let subconKeep = this.seek('conf', 'deploy', 'subcon', 'keep').val;
+        let millKeep = this.seek('keep', 'adminFileSystem', 'mill');
+        
+        let subconMillKeep = millKeep.seek('subcon');
+        let subconKeep = this.conf('deploy.subcon.keep');
         
         if (subconKeep && subconMillKeep?.contains(subconKeep)) {
           let numSubcons = await subconMillKeep.countChildren();
@@ -696,11 +702,33 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         }
         /// =DEBUG}
         
+        let rooms = await this.getRooms([
+          'record',
+          'record.bank.TransientBank',
+          'record.bank.KeepBank'
+        ]);
+        let { Manager, Record } = rooms.record;
+        let { TransientBank, KeepBank } = rooms;
+        
+        let netAddrRepMan = Manager({ bank: KeepBank({ keep: millKeep.seek('foundationNodejs', 'netAddrRep') }) });
+        this.netAddrRepRec = netAddrRepMan.rootRec = Record({
+          type: netAddrRepMan.getType('nar.root'),
+          group: netAddrRepMan.getGroup([]),
+          uid: '!root',
+          value: {}
+        });
+        
+        let subconMan = Manager({ bank: KeepBank({ keep: millKeep.seek('foundationNodejs', 'subcon') }) });
+        this.subconRec = subconMan.rootRec = Record({
+          type: subconMan.getType('nar.root'),
+          group: subconMan.getGroup([]),
+          uid: '!root',
+          value: {}
+        });
+        
         NetworkIdentity.subcon.server = this.subcon('network.server.status');
         NetworkIdentity.subcon.sign = this.subcon('dev');
         NetworkIdentity.subcon.acme = this.subcon('dev');
-        
-        global.gsc = this.subcon('dev');
         
         return conf;
         
@@ -1790,7 +1818,11 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
     // This Route directs Hears/Tells between the Session and the Hut
     server.src.route(session => {
       
-      let { key, knownNetAddrs, desc, d=desc() } = session;
+      // Monitor the NetworkAddress associated with a Session; if its
+      // reputation turns bad close the session!
+      session.netAddrSrc.route(netAddr => {
+        
+      }, 'prm');
       
       let naRep = hut.netAddrReputation;
       let netAddrs = session.knownNetAddrs;
@@ -1802,40 +1834,35 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         return session.end();
       }
       
-      if (session.key === null) {
-        
-        // Note that if `session.key === null` then `sessionMsg.msg.trn`
-        // will always be "anon" - there will be exactly 1 Send from the
-        // TellSrc, and it must be Replied to!
-        session.hear.route(sessionMsg => {
-          let { replyable, ms, msg } = sessionMsg;
-          hut.hear({
-            src: { ...anonHut, parHut: hut, desc: () => `AnonHut(${session.knownNetAddrs.toArr(v=>v).join(', ')})` },
-            road: session, reply: replyable(), ms, msg
-          });
-        }, 'prm');
-        
-      } else {
-        
-        // At this point `session.key` is either the preexisting hid of
-        // a Hut, or a never-before-seen hid that we can be certain is
-        // authenticated to be used as the hid of a new Hut
-        let srcHut = hut.getRoadedHut(server, session, session.key).hut;
-        if (!srcHut) return session.end();
-        
-        /// {ASSERT=
-        if (!srcHut) throw Error('OWWWaaaooofoffofo');
-        /// =ASSERT}
-        
-        // Messages from the Session propagate to the Hut
-        session.hear.route(sessionMsg => {
-          let { replyable, ms=this.getMs(), msg } = sessionMsg;
-          if (msg.command === 'bp') return; // Don't process "bp" ("bank poll") commands
-          let reply = (msg.trn === 'sync') ? replyable() : null;
-          hut.hear({ src: srcHut, road: session, reply, ms, msg });
-        }, 'prm');
-        
-      }
+      // Note that if `session.key === null` then `sessionMsg.msg.trn`
+      // is always "anon" - there will be exactly 1 Send from the
+      // TellSrc and it must be Replied to!
+      if (session.key === null) return session.hear.route(sessionMsg => {
+        let { replyable, ms, msg } = sessionMsg;
+        hut.hear({
+          src: { ...anonHut, parHut: hut, desc: () => `AnonHut(${session.knownNetAddrs.toArr(v=>v).join(', ')})` },
+          road: session, reply: replyable(), ms,
+          msg
+        });
+      }, 'prm');
+      
+      // At this point `session.key` is either the preexisting hid of
+      // a Hut, or a never-before-seen hid that we can be certain is
+      // authenticated to be used as the hid of a new Hut
+      let srcHut = hut.getRoadedHut(server, session, session.key).hut;
+      if (!srcHut) return session.end();
+      
+      /// {ASSERT=
+      if (!srcHut) throw Error('OWWWaaaooofoffofo');
+      /// =ASSERT}
+      
+      // Messages from the Session propagate to the Hut
+      session.hear.route(sessionMsg => {
+        let { replyable, ms=this.getMs(), msg } = sessionMsg;
+        if (msg.command === 'bp') return; // Don't process "bp" ("bank poll") commands
+        let reply = (msg.trn === 'sync') ? replyable() : null;
+        hut.hear({ src: srcHut, road: session, reply, ms, msg });
+      }, 'prm');
       
     });
     
@@ -2249,6 +2276,6 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         return { roomName, lineInd: parseInt(lineInd, 10), charInd: null };
       }
     };
-  },
+  }
   
 })});

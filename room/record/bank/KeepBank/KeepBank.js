@@ -144,6 +144,12 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
         
         // Either load or do initial storing for `rec` depending on if it
         // was seen before
+        // TODO: HEEERE! I think everything is working but `getContent`
+        // used to return `null` and now it returns `Buffer.alloc(0)` -
+        // this means `serToVal` used to parse empty keep data, but
+        // can't anymore. So do something like the fetch api where
+        // the data is accessed with a "type" and decodes as necessary;
+        // in case of json, no data results in `null`!
         let meta = serToVal(await this.keep.access([ 'rec', casedUid, 'm' ]).getContent());
         if (meta) {
           

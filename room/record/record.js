@@ -11,8 +11,6 @@ global.rooms['record'] = async foundation => {
     
     init({ rootRec=null, bank=null }) {
       
-      if (!rootRec) throw Error(`Missing "rootRec"`);
-      
       if (bank === null) bank = TransientBank();
       
       Object.assign(this, {
@@ -26,7 +24,7 @@ global.rooms['record'] = async foundation => {
         // available in RAM, and not to be re-created in a separate
         // instance) it is in only one of two places:
         // 1. In the RecordTree of `this.rootRec`, or
-        // 2. Resolving from a Promise keyed in `this.recPrms`
+        // 2. Pending resolution from a Promise keyed in `this.recPrms`
         recPrmCacheMs: 5000,
         recPrms: Object.plain({ /* uid -> Promise(Record(...)) */ }),
         recPrmTimeouts: Object.plain({ /* uid -> Timeout */ }),
@@ -52,7 +50,7 @@ global.rooms['record'] = async foundation => {
     getRecordForm({ type, group, value }) { return Record; },
     addRecord(...args /* type, group, value, uid, volatile | { type, group, value, uid, volatile } */) {
       
-      let { type=null, group=Group(type.manager, {}), value=null, uid: specifiedUid=null, volatile=false } =
+      let { type=null, group=Group(this, {}), value=null, uid: specifiedUid=null, volatile=false } =
         (args.length === 1 && isForm(args[0], Object))
           ? args[0]
           : [ 'type', 'group', 'value', 'uid', 'volatile' ].toObj((key, n) => [ key, args[n] ]);

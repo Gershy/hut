@@ -337,6 +337,7 @@ Object.assign(global, {
       
       let reflectMessageChangeInStack = true
         && this.stack
+        && this.message
         && message !== this.message
         && this.stack.has(this.message);
       if (reflectMessageChangeInStack) this.stack = this.stack.replace(this.message, message);

@@ -19,10 +19,17 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       key,
       desc: () => `SoktSession(ws${secure ? 's' : ''}://${netAddr}:${port} / ${key})`,
       currentCost: () => 0.3,
-      knownNetAddrs: Set([ socket.remoteAddress ]),
+      netAddr: socket.remoteAddress,
+      
       tell: Src(),
       hear: Src(),
       timeout: setTimeout(() => session.end(), heartbeatMs)
+      
+    });
+    
+    session.netAddrSrc.route(netAddr => session.netAddrs.add(netAddr));
+    Object.defineProperty(session.netAddrSrc, 'newRoute', {
+      value: fn => session.netAddrs.each(netAddr => fn(netAddr))
     });
     
     let state = { frames: [], size: 0, buff: Buffer.alloc(0) };
