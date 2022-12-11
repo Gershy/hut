@@ -490,23 +490,6 @@ Object.assign(global, {
   U: global,
   
   // Debug
-  debugUtil: {
-    
-    globalEndableRegistry: Set.stub,
-    timings: null,
-    addTiming: Function.stub,
-    timingInterval: null
-    
-    // globalEndableRegistry: Set(),
-    // timings: [ 'defineForm', 'createFact' ].toObj(v => [ v, { num: 0, ms: 0 } ]),
-    // addTiming: (term, ms, obj=debug.timings[term]) => { obj.num++; obj.ms += ms; },
-    // timingInterval: setInterval(() => {
-    //   console.log('Debug timings:');
-    //   for (let [ term, { num, ms } ] of debug.timings)
-    //     console.log(`  ${term}: ${(!ms && !num ? 0 : (ms / num)).toFixed(2)}ms (total: ${ms.toFixed(2)}ms; num: ${num})`);
-    // }, 5000)
-    
-  },
   dbgCnt: name => C.dbgCntMap[name] = (C.dbgCntMap.has(name) ? C.dbgCntMap[name] + 1 : 0),
   
   // Flow controls, sync/async interoperability
@@ -749,9 +732,6 @@ Object.assign(global, {
   },
   
   // Util
-  // TODO: These should have "json" in their names (there are cases that
-  // could use these functions, but should explicitly signify that the
-  // resulting value is JSON - e.g. for 3rd party json api requests)
   valToJson: JSON.stringify,
   jsonToVal: JSON.parse,
   
@@ -778,10 +758,6 @@ Object.assign(global, {
       
       // Allow Endable.prototype.cleanup to be masked
       if (fn) Object.defineProperty(this, 'cleanup', { value: fn, enumerable: true, writable: true, configurable: true });
-      
-      /// {DEBUG=
-      debugUtil.globalEndableRegistry.add(this);
-      /// =DEBUG}
       
     },
     onn() { return true; },
@@ -836,7 +812,6 @@ Object.assign(global, {
       if (this['~refCount'] && --this['~refCount'] > 0) return false;
       
       Object.defineProperty(this, 'onn', Form.turnOffDefProp);
-      debugUtil.globalEndableRegistry.rem(this);
       this.cleanup(); mmm(this.zzz ?? this.Form.name, -1);
       return true;
       
@@ -994,26 +969,12 @@ Object.assign(global, {
         srcInit.call(this);
         endableInit.call(this);
         
-        if (arg) {
+        if      (arg instanceof Function) this.route(arg, 'prm');
+        else if (arg) {
           
-          // Function arg is treated as permanent end Route
-          if (hasForm(arg, Function)) {
-            
-            this.route(arg, 'prm');
-            
-          } else if (isForm(arg, Object)) {
-            
-            /// {DEBUG=
-            for (let k in arg) if (this[k]) throw Error(`Conflicting prop "${k}" on ${getFormName(this)}`);
-            /// =DEBUG}
-            
-            Object.assign(this, arg);
-            
-          } else {
-            
-            throw Error(`Unexpected arg: ${getFormName(arg)}`);
-            
-          }
+          let { cleanup=null, ...args } = arg;
+          Object.assign(this, args);
+          if (cleanup) this.route(cleanup, 'prm');
           
         }
         

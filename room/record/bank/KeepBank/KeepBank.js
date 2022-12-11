@@ -4,7 +4,6 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
   
   return form({ name: 'KeepBank', has: { AbstractBank }, props: (forms, Form) => ({
     
-    $getSelectedValue: async keep => serToVal(await keep.access('v').getContent()),
     $casedCmp: term => {
       
       if (term.length > 32) throw Error(`Term "${term}" is too long (max 32 chars)`);
@@ -27,12 +26,13 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
       
     },
     
-    init({ keep, lockTimeoutMs=500, ...args }) {
+    init({ keep, lockTimeoutMs=500, encoding='json', subcon=foundation.subcon('bank.keep'), ...args }) {
       
       forms.AbstractBank.init.call(this, args);
       Object.assign(this, {
         
         keep,
+        encoding,
         
         // Note intentional use of `Math.random()` instead of an
         // instantiated Random Form; this "lock" value is hopefully as
@@ -42,7 +42,7 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
         
         nextUid: null,
         readyPrm: null,
-        debug: foundation.conf('bank.keep.debug.on') ? console.log : Function.stub,
+        subcon,
         
         // Even a Keep-based Bank occasionally requires "hot" references
         // to Records; a "hot" reference is simply a synchronously
@@ -56,7 +56,7 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
         //    is queried for; if there was no hot reference it may not
         //    show up in the query, and then be created immediately
         //    after)
-        hotRecs: Object.plain({}) // p{ type: p{ uid1: rec1, uid2: rec2, ... } }
+        hotRecs: Object.plain({}) // { type: { uid1: rec1, uid2: rec2, ... } }
         
       });
       
@@ -72,10 +72,10 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
         let accessKeep = await this.keep.seek([ 'meta', 'access' ]);
         let nextKeep = await this.keep.seek([ 'meta', 'next' ]);
         
-        if (!(await infoKeep.getContent())) await infoKeep.setContent( valToSer({ v: '0.0.1', created: Date.now() }) );
-        if (!(await lockKeep.getContent())) await lockKeep.setContent(this.lock);
-        if (!(await accessKeep.getContent())) await accessKeep.setContent(Date.now().encodeStr());
-        if (!(await nextKeep.getContent())) await nextKeep.setContent((0).toString(16));
+        if (!(await infoKeep.getContent(this.encoding)))  await infoKeep.setContent({ v: '0.0.1', created: Date.now() }, this.encoding);
+        if (!(await lockKeep.getContent()))               await lockKeep.setContent(this.lock, null);
+        if (!(await accessKeep.getContent()))             await accessKeep.setContent(Date.now().encodeStr());
+        if (!(await nextKeep.getContent()))               await nextKeep.setContent((0).toString(16));
         
         let lock = await lockKeep.getContent('utf8');
         if (lock !== this.lock) {
@@ -104,7 +104,7 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
     getNextUid() {
       
       this.keep.access([ 'meta', 'next' ]).setContent( (this.nextUid + 1).encodeStr() );
-      this.debug(`KeepBank generated uid: ${(this.nextUid + 1).encodeStr(String.base62, 8)}`);
+      this.subcon(`KeepBank generated uid: ${(this.nextUid + 1).encodeStr(String.base62, 8)}`);
       return this.nextUid++;
       
     },
@@ -124,7 +124,7 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
     },
     async syncRec(rec) {
       
-      this.debug(`Holding ${rec.desc()}...`);
+      this.subcon(`Holding ${rec.desc()}...`);
       
       // Immediately hold this `rec` reference. If `rec` is truly
       // volatile we'll only drop this reference when `rec` ends, but if
@@ -135,38 +135,32 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
       // Always hold volatile Record in memory
       if (rec.volatile) return rec.endWith(endAvailFn);
       
+      let casedUid = Form.casedCmp(rec.uid);
+      
       // Make `rec` retrievable by RelHandlers; need to hold `rec` in
       // `this.volatileRecs` until it has been persisted, at which point
       // it should be immediately removed from `this.volatileRecs`
       try {
         
-        let casedUid = Form.casedCmp(rec.uid);
-        
         // Either load or do initial storing for `rec` depending on if it
         // was seen before
-        // TODO: HEEERE! I think everything is working but `getContent`
-        // used to return `null` and now it returns `Buffer.alloc(0)` -
-        // this means `serToVal` used to parse empty keep data, but
-        // can't anymore. So do something like the fetch api where
-        // the data is accessed with a "type" and decodes as necessary;
-        // in case of json, no data results in `null`!
-        let meta = serToVal(await this.keep.access([ 'rec', casedUid, 'm' ]).getContent());
+        let meta = await this.keep.access([ 'rec', casedUid, 'm' ]).getContent(this.encoding);
         if (meta) {
           
-          let val = serToVal(await this.keep.access([ 'rec', casedUid, 'v' ]).getContent());
-          this.debug(`${rec.desc()} has a preexisting value`, val);
+          let val = await this.keep.access([ 'rec', casedUid, 'v' ]).getContent(this.encoding);
+          this.subcon(`${rec.desc()} has a preexisting value`, val);
           rec.setValue(val);
           
         } else {
           
-          this.debug(`${rec.desc()} is being synced from scratch...`);
+          this.subcon(`${rec.desc()} is being synced from scratch...`);
           
           // Store metadata
-          await this.keep.access([ 'rec', casedUid, 'm' ]).setContent(valToSer({
+          await this.keep.access([ 'rec', casedUid, 'm' ]).setContent({
             type: rec.type.name,
             uid: rec.uid,
             mems: rec.group.mems.map(mem => mem.uid),
-          }));
+          }, this.encoding);
           
         }
         
@@ -175,13 +169,13 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
       // Reflect any changes to `rec`'s value in the Keep
       rec.valueSrc.route(delta => {
         let value = rec.getValue();
-        this.keep.access([ 'rec', casedUid, 'v' ]).setContent(valToSer(value));
-        this.debug(`Synced ${rec.desc()}.getValue():`, value);
+        this.keep.access([ 'rec', casedUid, 'v' ]).setContent(value, this.encoding);
+        this.subcon(`Synced ${rec.desc()}.getValue():`, value);
       }, 'prm');
       
       rec.endWith(() => {
         rec.endedPrm = this.keep.access([ 'rec', casedUid ]).setContent(null);
-        this.debug(`Removed ${rec.desc()}`);
+        this.subcon(`Removed ${rec.desc()}`);
       }, 'prm');
       
     },
@@ -189,13 +183,13 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
       
       let childKeep = this.keep.seek('rec', Form.casedCmp(uid));
       let metaKeep = childKeep.access('m');
-      let meta = serToVal(await metaKeep.getContent());
-      
+      let meta = await metaKeep.getContent(this.encoding);
       if (!meta) return null;
       
-      return { rec: null, ...meta, getValue: Form.getSelectedValue.bind(null, childKeep) };
+      return { rec: null, ...meta, getValue: () => childKeep.access('v').getContent(this.encoding) };
       
     },
+    
     async* select({ activeSignal, relHandler }) {
       
       let { rec: memRec, type, term } = relHandler;
@@ -206,35 +200,53 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
       let seen = Set();
       for (let uid in this.hotRecs[type.name] ?? {}) {
         
-        let rec = this.hotRecs[type][uid];
+        if (activeSignal.off()) break;
+        
+        let rec = this.hotRecs[type.name][uid];
         if (rec.group.mems[term] !== memRec) continue;
         seen.add(uid);
-        yield { rec, uid, type: type.name, mems: rec.group.mems.map(mem => mem.uid) };
+        yield {
+          rec,
+          uid,
+          type: type.name,
+          mems: rec.group.mems.map(mem => mem.uid),
+          getValue: () => rec.getValue()
+        };
         
       }
       
-      for await (let [ casedCmp, childKeep ] of this.keep.seek('rec').iterateChildren()) {
+      if (activeSignal.onn()) {
         
-        let uid = Form.uncasedCmp(casedCmp);
-        if (seen.has(uid)) continue;
-        
-        let meta = serToVal(await childKeep.access('m').getContent());
-        if (!meta) continue; // `meta` can return as `null` if it was deleted recently
-        
-        // Filter out any Records whose Type doesn't match
-        if (type.name !== meta.type) continue;
-        
-        // Only accept Records that have `rec` as a Member under `term`,
-        // or under the default term (`rec.type.name`)
-        if (meta.mems[term] !== rec.uid) continue;
-        
-        yield {
-          rec: null,
-          uid,
-          type: meta.type,
-          mems: meta.mems,
-          getValue: Form.getSelectedValue.bind(null, childKeep)
-        };
+        let keeps = await this.keep.seek('rec').iterateChildren();
+        try { for await (let [ casedCmp, childKeep ] of keeps) {
+          
+          if (activeSignal.off()) break;
+          
+          // It's possible the Record is Banked but also Hot, and would
+          // have already been yielded earlier - don't yield it again!
+          let uid = Form.uncasedCmp(casedCmp);
+          if (seen.has(uid)) continue;
+          
+          // Don't return children with `null` "m" ("meta") content
+          let meta = await childKeep.access('m').getContent(this.encoding);
+          if (!meta) continue; // `meta` may be `null` if it was deleted recently
+          
+          // Filter out any Records whose Type doesn't match
+          if (type.name !== meta.type) continue;
+          
+          // Only accept Records that have `rec` as a Member under `term`,
+          // or under the default term (`rec.type.name`)
+          if (meta.mems[term] !== uid) continue;
+          
+          yield {
+            rec: null,
+            uid,
+            type: meta.type,
+            mems: meta.mems,
+            getValue: () => childKeep.access('v').getContent(this.encoding)
+          };
+          
+        }} finally { keeps.close(); }
         
       }
       

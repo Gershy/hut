@@ -58,6 +58,18 @@ let Filepath = form({ name: 'Filepath', props: (forms, Form) => ({
     }
     return this.fspVal;
     
+  },
+  * getLineage(fp) {
+    
+    // Yield every Filepath from `this` up to (excluding) `fp`
+    if (!this.contains(fp)) throw Error('Provided Filepath isn\'t a child');
+    
+    let ptr = this;
+    while (!ptr.equals(fp)) {
+      yield ptr;
+      ptr = ptr.kid(fp.cmps[ptr.count()]);
+    }
+    
   }
   
 })});
@@ -93,7 +105,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', props: (forms, Form)
     throw Error(`Unexpected filesystem entity`).mod({ stat });
     
   },
-  async xSwapLeafToNode(fp, { tmpCmp=`~${getUid()}`, valCmp='~' }={}) {
+  async xSwapLeafToNode(fp, { tmpCmp=`~${getUid()}` }={}) {
     
     // We want a dir to replace an existing file (without reads on
     // that previously existing file to fail) - so we replace the
@@ -104,7 +116,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', props: (forms, Form)
     
     let fsp = fp.fsp();                // Path to original file
     let tmpFsp = fp.sib(tmpCmp).fsp(); // Path to temporary file (sibling of original file)
-    let valFsp = fp.kid(valCmp).fsp(); // Path to final file
+    let valFsp = fp.kid('~').fsp();    // Path to final file
     
     await fs.rename(fsp, tmpFsp);    // Move file out of the way
     await fs.mkdir(fsp);             // Set directory where file used to be
@@ -150,47 +162,6 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', props: (forms, Form)
     
     let collTypeKey = `${lock0.type}/${lock1.type}`;
     
-    if (collTypeKey === 'lineageWrite/lineageWrite') {
-      
-      // Lineage writes collide if there's any overlap between the nodes
-      // they're trying to create
-      
-      return false
-        || lock0.headFp.contains(lock1.tailFp)
-        || lock1.headFp.contains(lock0.tailFp);
-      
-    }
-    
-    if (collTypeKey === 'lineageWrite/nodeRead') {
-      
-      // Lineage writes affect reads because they may wind up swapping a
-      // file to a directory; a lineage contains a node if its head
-      // contains it and its tail doesn't contain it!
-      
-      return true
-        &&  lock0.headFp.contains(lock1.fp)
-        && !lock0.tailFp.contains(lock1.fp);
-      
-    }
-    
-    if (collTypeKey === 'lineageWrite/nodeWrite') {
-      
-      // Same as "lineageWrite/nodeRead"
-      
-      return true
-        &&  lock0.headFp.contains(lock1.fp)
-        && !lock0.tailFp.contains(lock1.fp);
-      
-    }
-    
-    if (collTypeKey === 'lineageWrite/subtreeWrite') {
-      
-      return false
-        || lock0.headFp.contains(lock1.fp)
-        || lock1.fp.contains(lock0.tailFp);
-      
-    }
-    
     if (collTypeKey === 'nodeRead/nodeRead') return false; // Reads never collide with each other!
     
     if (collTypeKey === 'nodeRead/nodeWrite') {
@@ -222,6 +193,12 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', props: (forms, Form)
       
     }
     
+    if (collTypeKey === 'subtreeWrite/subtreeWrite') {
+      
+      return lock0.fp.contains(lock1.fp) || lock1.fp.contains(lock0.fp);
+      
+    }
+    
     throw Error(`Collision type "${collTypeKey}" not implemented`);
     
   },
@@ -249,14 +226,14 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', props: (forms, Form)
     
     let err = Error('');
     
-    // Wait for all collisions to dissipate...
+    // Wait for all collisions to resolve...
     let uid = getUid();
     await Promise.all(collLocks.map(lk => lk.prm)); // Won't reject because it's a Promise.all over Locks, and no `Lock(...).prm` ever rejects!
     
     // We now own the locked context!
     try           { return await fn(); }
     catch (cause) { throw err.mod({ cause, msg: `Failed locked op: "${name}"` }); }
-    finally       { for (let lock of locks) lock.prm.resolve(); } // Ensure all Locks resolve
+    finally       { for (let lock of locks) lock.prm.resolve(); } // Force any remaining Locks to resolve
     
   },
   async transact({ name='?', fp, fn }) {
@@ -269,13 +246,22 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', props: (forms, Form)
     
     this.checkFp(fp);
     
-    let rootLock = { type: 'lineageWrite', headFp: this.fp, tailFp: fp };
+    let lineageLocks = this.fp.getLineage(fp).toArr(fp => ({ type: 'nodeWrite', fp }));
     let nodeLock = { type: 'subtreeWrite', fp };
     
-    return this.doLocked({ name: `trn/${name}`, locks: [ rootLock, nodeLock ], fn: async () => {
+    return this.doLocked({ name: `trn/${name}`, locks: [ ...lineageLocks, nodeLock ], fn: async () => {
       
-      await this.xEnsureNode(fp);
-      rootLock.prm.resolve(); // Release the lineage lock
+      // Ensure all lineage items exist as Nodes, and resolve each
+      // lineage lock after the Node is created
+      for (let { fp, prm } of lineageLocks) {
+        
+        let type = await this.xGetType(fp);
+        if (type === null)        await fs.mkdir(fp.fsp());
+        else if (type === 'leaf') await this.xSwapLeafToNode(fp);
+        
+        prm.resolve();
+        
+      }
       
       return fn(FilesysTransaction(fp));
       
@@ -317,31 +303,52 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', props: (forms, Form)
         // For leafs simply unlink the leaf
         if (type === 'leaf') {
           try         { await fs.unlink(fp.fsp()); }
-          catch (err) { if (err !== 'ENOENT') throw err; }
+          catch (err) { if (err.code !== 'ENOENT') throw err; }
         }
         
         // For nodes try to unlink the "~" child
         if (type === 'node') {
           try         { await fs.unlink(fp.kid('~').fsp()); }
-          catch (err) { if (err !== 'ENOENT') throw err; }
+          catch (err) { if (err.code !== 'ENOENT') throw err; }
         }
         
       }});
       
     } else {
-      
       // Setting a non-zero amount of data requires ensuring that all
       // ancestor nodes exist and finally writing the data
       
-      let rootLock = { type: 'lineageWrite', headFp: this.fp, tailFp: fp };
+      let lineageLocks = this.fp.getLineage(fp).toArr(fp => ({ type: 'nodeWrite', fp }));
       let nodeLock = { type: 'nodeWrite', fp };
-      return this.doLocked({ name: 'setData', locks: [ rootLock, nodeLock ], fn: async () => {
+      
+      return this.doLocked({ name: 'setData', locks: [ ...lineageLocks, nodeLock ], fn: async () => {
         
-        // We only need the lineage lock to ensure the node exists
-        await this.xEnsureNode(fp);
-        rootLock.prm.resolve();
+        let type = await this.xGetType(fp);
         
-        await fs.writeFile(fp.fsp(), data);
+        if (type === null) {
+          
+          // Ensure lineage; once this loop is over we know `fp.par()`
+          // certainly exists, and `fp` itself doesn't
+          for (let { fp, prm } of lineageLocks) {
+            
+            let type = await this.xGetType(fp);
+            if (type === null)        await fs.mkdir(fp.fsp());
+            else if (type === 'leaf') await this.xSwapLeafToNode(fp);
+            
+            prm.resolve();
+            
+          }
+          await fs.writeFile(fp.fsp(), data);
+          
+        } else {
+          
+          // `fp` is pre-existing! immediately resolve all lineage locks
+          // and simply write to either the plain file or "~" kid
+          for (let { prm } of lineageLocks) prm.resolve();
+          if (type === 'node') fp = fp.kid('~');
+          await fs.writeFile(fp.fsp(), data);
+          
+        }
         
       }});
       
@@ -383,12 +390,20 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', props: (forms, Form)
     
     let streamPrm = Promise.later();
     
-    let rootLock = { type: 'lineageWrite', headFp: this.fp, tailFp: fp };
+    let lineageLocks = this.fp.getLineage(fp).toArr(fp => ({ type: 'nodeWrite', fp }));
     let nodeLock = { type: 'nodeWrite', fp };
-    let prm = this.doLocked({ name: 'getHeadStream', locks: [ rootLock, nodeLock ], fn: async () => {
+    let prm = this.doLocked({ name: 'getHeadStream', locks: [ ...lineageLocks, nodeLock ], fn: async () => {
       
-      await this.xEnsureNode(fp);
-      rootLock.prm.resolve();
+      // Ensure lineage
+      for (let { fp, prm } of lineageLocks) {
+        
+        let type = await this.xGetType(fp);
+        if (type === null)        await fs.mkdir(fp.fsp());
+        else if (type === 'leaf') await this.xSwapLeafToNode(fp);
+        
+        prm.resolve();
+        
+      }
       
       let stream = fs.createWriteStream(fp.fsp());
       streamPrm.resolve(stream);
@@ -433,7 +448,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', props: (forms, Form)
     this.checkFp(fp);
     return this.doLocked({ name: 'getKidNames', locks: [{ type: 'nodeRead', fp }], fn: async () => {
       
-      try         { return await fs.readdir(fp.fsp()); }
+      try         { let names = await fs.readdir(fp.fsp()); names.rem('~'); return names; }
       catch (err) { if (err.code !== 'ENOENT') throw err; }
       return [];
       
@@ -452,17 +467,17 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', props: (forms, Form)
     }});
     
   },
-  async iterateNode(fp, { bufferSize=150 }={}) {
+  async iterateNode(fp, { map=v=>v, bufferSize=150 }={}) {
     
     this.checkFp(fp);
     
     let itPrm = Promise.later();
     
-    let prm = this.doLocked({ name: 'iterateNode', locks: [{ type: 'nodeRead' }], fn: async () => {
+    let prm = this.doLocked({ name: 'iterateNode', locks: [{ type: 'nodeRead', fp }], fn: async () => {
       
       let dir = null;
       try         { dir = await fs.opendir(fp.fsp(), { bufferSize }); }
-      catch (err) { if (err !== 'ENOENT') return itPrm.reject(err); } // Note that `prm` still succeeds in this case!
+      catch (err) { if (err.code !== 'ENOENT') return itPrm.reject(err); } // Note that `prm` still succeeds in this case!
       
       if (!dir) return itPrm.resolve({
         async* [Symbol.asyncIterator]() { itCompletePrm.resolve(); }, // No yields, just completion
@@ -473,13 +488,17 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', props: (forms, Form)
       // until the iterator is exhausted or closed!
       let itCompletePrm = Promise.later();
       itPrm.resolve({
-        async* [Symbol.asyncIterator]() {
-          for await (let { name } of dir) if (name !== '~') yield name;
+        [Symbol.asyncIterator]: async function*() {
+          for await (let ent of dir) {
+            if (ent.name === '~') continue;
+            ent = map(ent.name);
+            if (ent !== skip) yield ent;
+          }
           itCompletePrm.resolve();
         },
-        async close() {
-          try         { await Promise(r => dir.close(r)); }
-          catch (err) { if (err !== 'ERR_DIR_CLOSED') return itCompletePrm.reject(err); }
+        close: async () => {
+          try         { await Promise((rsv, rjc) => dir.close(err => err ? rjc(err) : rsv())); }
+          catch (err) { if (err.code !== 'ERR_DIR_CLOSED') return itCompletePrm.reject(err); }
           itCompletePrm.resolve();
         }
       });

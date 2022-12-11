@@ -4,8 +4,8 @@
 // appearing outside any loop - the stack trace isn't handled well!
 
 require('./foundation.js');
-let { Foundation } = global;
 
+let { Foundation } = global;
 let NetworkIdentity = require('./nodejs/NetworkIdentity.js');
 let niceRegex = (...args) => {
   
@@ -100,9 +100,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
     
     $HoneyPotKeep: form({ name: 'HoneyPotKeep', has: { Keep }, props: (forms, Form) => ({
       init(data=[ 'passwords', 'keys', 'tokens', 'secrets', 'credentials', 'bitcoin', 'wallet', 'honey' ]) { this.data = data; },
-      
       access() { return this; },
-      
       exists() { return true; },
       setContentType() { return this; },
       getContentType() { return 'application/json; charset=utf-8'; },
@@ -163,8 +161,33 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       
     },
     
-    async getContent(opts={}) { return hutTrn.getData(this.fp, opts); },
-    async setContent(content) { return content ? hutTrn.setData(this.fp, content) : hutTrn.remSubtree(this.fp); },
+    async getContent(opts={}) {
+      
+      if (isForm(opts, String)) opts = { encoding: opts };
+      let { encoding=null } = opts ?? {};
+      if (encoding === 'json') opts = { ...opts, encoding: null };
+      
+      let content = await hutTrn.getData(this.fp, opts);
+      if (!content.length) return null;
+      
+      if (encoding === 'json') return jsonToVal(content);
+      return content;
+      
+    },
+    async setContent(content, opts={}) {
+      
+      if (isForm(opts, String)) opts = { encoding: opts };
+      let { encoding=null } = opts ?? {};
+      if (encoding === 'json') opts = { ...opts, encoding: 'utf8' };
+      
+      // Note that only `null` will delete the subtree; empty Strings/Buffers
+      // simply clear the Leaf
+      if (content === null) return hutTrn.remSubtree(this.fp);
+      
+      if (encoding === 'json') content = valToJson(content);
+      return hutTrn.setData(this.fp, content);
+      
+    },
     async getContentByteLength() { return hutTrn.getDataBytes(this.fp); },
     async exists() { return (await this.getContentByteLength()) > 0; },
     async getChildNames(opts={}) {
@@ -172,20 +195,23 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       return names.map(fp => this.blacklist.has(fp) ? skip : fp);
     },
     async countChildren(opts={}) { return hutTrn.getKidNames(this.fp).then(names => names.length); },
-    async* iterateChildren(dbg=Function.stub) {
-      
-      let it = await hutTrn.iterateNode(this.fp);
-      try     { for await (let n of dir) if (!this.blacklist.has(n)) yield [ n, this.access(n) ]; }
-      finally { dir.close(); }
-      
-    },
     async getHeadPipe() { return hutTrn.getDataHeadStream(this.fp); },
-    async getTailPipe() { return hutTrn.getDataTailStream(this.fp); }
+    async getTailPipe() { return hutTrn.getDataTailStream(this.fp); },
+    async listChildren() {
+      let names = await hutTrn.getKidNames(this.fp);
+      return names.map(n => this.blacklist.has(n) ? skip : [ n, this.access(n) ]);
+    },
+    iterateChildren(dbg=Function.stub) {
+      
+      // Returns { [Symbol.asyncIterator]: fn, close: fn }
+      return hutTrn.iterateNode(this.fp, { map: n => this.blacklist.has(n) ? skip : [ n, this.access(n) ] });
+      
+    }
     
   })}),
   
   // Note that "#", a totally irrelevant character, is replaced with "`"
-  // making it simple to insert literal backtick chars
+  // making it simpler to insert literal backtick chars
   $captureLineCommentRegex: niceRegex(String.baseline(`
     | (?<=                                  )
     |     ^(      |       |       |       )*
@@ -227,8 +253,14 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
   },
   $defSubconsVal: {
     
-    'dev': { enabled: true }, // Installed at `global.gsc` during `FoundationNodejs(...).configure`
-    'warning': { enabled: true },
+    'dev': { // Installed at `global.gsc` during `FoundationNodejs(...).configure`
+      enabled: true,
+      therapist: false
+    },
+    'warning': {
+      enabled: true,
+      therapist: true
+    },
     
     'bank': {
       desc: String.baseline(`
@@ -591,6 +623,34 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         
         global.gsc = this.subcon('dev');
         
+        let rooms = await this.getRooms([ 'record', 'record.bank.TransientBank', 'record.bank.KeepBank' ]);
+        let { Manager, Record } = rooms.record;
+        let { KeepBank } = rooms;
+        
+        // "nar" = "NetworkAddressReputation"
+        // "sc" = "Subconscious"
+        let millKeep = this.seek('keep', 'adminFileSystem', 'mill');
+        let [ netAddrRepRec, subconRec ] = [ 'nar/netAddrRep', 'sc/subcon' ].map(term => {
+          
+          let [ pfx, name ] = term.cut('/');
+          let man = Manager({
+            bank: KeepBank({
+              keep: millKeep.seek('foundationNodejs', name),
+              subcon: this.subcon(`internal.bank.keep.${name}`)
+            })
+          });
+          return man.rootRec = Record({
+            type: man.getType(`${pfx}.root`),
+            group: man.getGroup([]),
+            uid: '!root',
+            value: {}
+          });
+          
+        });
+        Object.assign(this, { netAddrRepRec, subconRec });
+        
+        await Promise.all([ netAddrRepRec, subconRec ].map(v => v.bankedPrm));
+        
         /// {DEBUG=
         this.subcon('conf.provided')({ raw, keep, full });
         await this.subcon('conf.resolved')(async () => { // Show all resolved settings
@@ -691,40 +751,13 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
           
         });
         
-        let millKeep = this.seek('keep', 'adminFileSystem', 'mill');
-        
         let subconMillKeep = millKeep.seek('subcon');
         let subconKeep = this.conf('deploy.subcon.keep');
-        
         if (subconKeep && subconMillKeep?.contains(subconKeep)) {
           let numSubcons = await subconMillKeep.countChildren();
           if (numSubcons > 200) this.subcon('warning')(`${subconMillKeep.desc()} has a large number of children (${numSubcons})`);
         }
         /// =DEBUG}
-        
-        let rooms = await this.getRooms([
-          'record',
-          'record.bank.TransientBank',
-          'record.bank.KeepBank'
-        ]);
-        let { Manager, Record } = rooms.record;
-        let { TransientBank, KeepBank } = rooms;
-        
-        let netAddrRepMan = Manager({ bank: KeepBank({ keep: millKeep.seek('foundationNodejs', 'netAddrRep') }) });
-        this.netAddrRepRec = netAddrRepMan.rootRec = Record({
-          type: netAddrRepMan.getType('nar.root'),
-          group: netAddrRepMan.getGroup([]),
-          uid: '!root',
-          value: {}
-        });
-        
-        let subconMan = Manager({ bank: KeepBank({ keep: millKeep.seek('foundationNodejs', 'subcon') }) });
-        this.subconRec = subconMan.rootRec = Record({
-          type: subconMan.getType('nar.root'),
-          group: subconMan.getGroup([]),
-          uid: '!root',
-          value: {}
-        });
         
         NetworkIdentity.subcon.server = this.subcon('network.server.status');
         NetworkIdentity.subcon.sign = this.subcon('dev');
@@ -1734,10 +1767,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
   },
   createSubcon(term, data) {
     
-    let keep = this.seek('conf', 'deploy', 'subcon', 'keep').val;
-    let pipe = keep && keep.seek(term).getHeadPipe(); // TODO: HEEERE This is the LEAK! I bet it's because of persistent Promises in filesys...
-    let q = pipe ? Promise.resolve(pipe) : null;
-    keep = null;
+    let { therapist=true } = data ?? {};
     
     return Object.assign((...args) => {
       
@@ -1752,17 +1782,30 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
           args = args.slice(1);
         }
         
-        // TODO: Put metadata like current time into that logged json??
         let now = Date.nowStr();
-        if (q) q = q.then(async pipe => {
-          try {
-            await Promise(rsv => pipe.write(valToJson({ t: now, a: args }), rsv));
-            await Promise(rsv => pipe.write('\n', rsv));
-          } catch (err) {
-            gsc(`Failed to persist to subcon (probably because of circular structure of Array containing ${args.map(getFormName).join(' + ')})`);
-          }
-          return pipe;
-        });
+        
+        if (therapist && this.subconRec) (async () => {
+          
+          let man = this.subconRec.type.manager;
+          
+          let streamRec = await this.subconRec.withRh({
+            type: 'sc.stream',
+            opts: { filter: sel => then(sel.getValue(), t => t === term) },
+            fn: 'one'
+          });
+          if (!streamRec) streamRec = man.addRecord('sc.stream', [ this.subconRec ], term);
+          
+          let notionRec = man.addRecord('sc.notion', [ streamRec ], { t: now, term, args });
+          
+          // Note we should avoid using a Subcon with "therapist"
+          // enabled to indicate any Banking error because if there's a
+          // deeper reason for Errors here trying to Bank the error
+          // indication could result in an awful loop that consumes the
+          // Bank's resources
+          notionRec.bankedPrm
+            .fail(err => gsc(`WARNING: Failed to Bank for Therapist (probably circular args?)`, { args, err }));
+          
+        })();
         
         // Note if "format" is defined it needs to resolve all given
         // args to a single String
@@ -1820,19 +1863,20 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       
       // Monitor the NetworkAddress associated with a Session; if its
       // reputation turns bad close the session!
-      session.netAddrSrc.route(netAddr => {
-        
-      }, 'prm');
-      
-      let naRep = hut.netAddrReputation;
-      let netAddrs = session.knownNetAddrs;
-      let badNetAddr = netAddrs.find(na => naRep.get(na)?.window >= 1).val; // "window" refers to the reputational damage within some timeframe (as opposed to "total" reputational damage)
-      let badRep = badNetAddr && naRep.get(badNetAddr);
-      
-      if (badRep) {
-        this.subcon('warning')(`Reject ${session.desc()} @ ${netAddrs.toArr(v => v).join(' + ')}`, Set(badRep.strikes.map(v => v.reason)).toArr(v => v));
-        return session.end();
-      }
+      // TODO: HEEERE note that now there is only `session.netAddr`;
+      // if clients from multiple NetworkAddresses try to give the
+      // same hid the NetworkAddress which comes second will simply be
+      // rejected!
+      // 
+      // let naRep = hut.netAddrReputation;
+      // let netAddrs = session.knownNetAddrs;
+      // let badNetAddr = netAddrs.find(na => naRep.get(na)?.window >= 1).val; // "window" refers to the reputational damage within some timeframe (as opposed to "total" reputational damage)
+      // let badRep = badNetAddr && naRep.get(badNetAddr);
+      // 
+      // if (badRep) {
+      //   this.subcon('warning')(`Reject ${session.desc()} @ ${netAddrs.toArr(v => v).join(' + ')}`, Set(badRep.strikes.map(v => v.reason)).toArr(v => v));
+      //   return session.end();
+      // }
       
       // Note that if `session.key === null` then `sessionMsg.msg.trn`
       // is always "anon" - there will be exactly 1 Send from the
@@ -2075,32 +2119,31 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
     if (isForm(srcLines, String)) srcLines = srcLines.split('\n');
     if (!isForm(srcLines, Array)) throw Error(`Param "srcLines" is invalid type: ${getFormName(srcLines)}`);
     
-    let variantDef = {
+    let variantDef = Object.plain({
       above: variantName === 'above',
       below: variantName === 'below',
       debug: false
-        || this.seek('conf', 'deploy', 'maturity').val === 'dev'
-        || this.seek('conf', 'deploy', 'stability', 'errorDiagnose').val > 0
-    };
+        || this.conf('deploy.maturity') === 'dev'
+        || this.conf('deploy.stability.errorDiagnose') > 0
+    });
     
     let blocks = [];
     let curBlock = null;
     
     for (let i = 0; i < srcLines.length; i++) {
+      
       let line = srcLines[i].trim();
       
-      if (curBlock) { // In a block, check for the block end
-        if (line.has(`=${curBlock.type.upper()}}`)) {
-          curBlock.end = i;
-          blocks.push(curBlock);
-          curBlock = null;
-        }
+      if (curBlock && line.has(`=${curBlock.type.upper()}}`)) { // In a block, check for the block end
+        curBlock.end = i;
+        blocks.push(curBlock);
+        curBlock = null;
       }
       
-      if (!curBlock) { // Outside a block, check for start of any block
-        for (let k in variantDef) {
-          if (line.has(`{${k.upper()}=`)) { curBlock = { type: k, start: i, end: -1 }; break; }
-        }
+      // Outside a block, check for start of any block
+      if (!curBlock) for (let k in variantDef) if (line.has(`{${k.upper()}=`)) {
+        curBlock = { type: k, start: i, end: -1 };
+        break;
       }
       
     }
@@ -2187,7 +2230,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         // `console.log('EXECUTE ${fileNameForDebug}');`,
       
         // Open a scope (e.g. `{ console.log('hi'); };`); requirement #1
-        '{',
+        (`{`),
         
         // Remove any previous strict-mode declaration
         filteredLines[0].replace(/['"`]use strict['"`];[ ]*/g, '') // TODO: Replace all instances? Or just the 1st??
@@ -2195,7 +2238,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       ].join('');
       
       // End the scope for requirement #1
-      filteredLines[filteredLines.length - 1] += '};';
+      filteredLines[filteredLines.length - 1] += (`};`);
       
     }
     

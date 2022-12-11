@@ -141,9 +141,7 @@ global.Foundation = form({ name: 'Foundation', pars: { Endable, Slots }, props: 
   
   // Config
   configure(data) {
-    return then(this.getRootConf(), rootConf => {
-      return then(rootConf.setVal(data), () => rootConf);
-    });
+    return then(this.getRootConf(), rc => then(rc.setVal(data), () => rc));
   },
   conf(term) { return this.seek('conf', ...term.split('.')).val; },
   

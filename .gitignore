@@ -1,6 +1,1 @@
-.old/
 mill/
-*.above.js
-*.below.js
-*.between.js
-*.alone.js

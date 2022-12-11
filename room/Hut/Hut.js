@@ -253,6 +253,7 @@ global.rooms['Hut'] = async foundation => {
       
       /// {ABOVE=
       if (this.isHere) {
+        this.ownedHutRh = Tmp.stub;
         this.ownedHutRh = this.relHandler('hut.owned/par'); // Get 'hut.owned' Recs where `this` is the Par
         this.bankedPrm = this.bankedPrm.then(() => this.ownedHutRh.ready());
       }
@@ -369,7 +370,8 @@ global.rooms['Hut'] = async foundation => {
       
       let roadedHut = this.parHut.roadedHuts.get(this.uid);
       if (!roadedHut) return Set();
-      return Set(roadedHut.roads.toArr(road => road.knownNetAddrs.toArr(v => v)).flat(1));
+      
+      return Set(roadedHut.roads.toArr(road => road.netAddr));
       
     },
     strike(amt, reason=null) {

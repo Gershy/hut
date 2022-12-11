@@ -21,9 +21,7 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
     }
   })}),
   $KeepStatic: form({ name: 'KeepStatic', has: { Keep }, props: forms => ({
-    init(urlResourceKeep) {
-      Object.assign(this, { urlResourceKeep });
-    },
+    init(urlResourceKeep) { Object.assign(this, { urlResourceKeep }); },
     access(fpCmps) {
       return this.urlResourceKeep.access({ path: [ '!static', ...fpCmps ].join('/') });
     }

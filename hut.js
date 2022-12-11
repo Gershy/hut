@@ -102,7 +102,7 @@ if (1) { // Setup basic process monitoring
   
   let origExit = process.exit;
   process.exit = (...args) => {
-    log(`Process explicitly ended`, args, Error('trace'));
+    log(Error('Process explicitly ended'), { args });
     return origExit.call(process, ...args);
   };
   
@@ -119,9 +119,9 @@ if (1) { // Setup basic process monitoring
   
 }
 
-if (1) { // Low-level debug
+if (0 || process.cwd() === '/hut') { // Low-level debug
   
-  let intervalMs = 10 * 1000;
+  let intervalMs = (process.cwd() === '/hut' ? 10 : 30) * 1000;
   let showThreshold = 1;
   let maxMetrics = 22; // Consider `Infinity`
   let metrics = {};

@@ -27,11 +27,6 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
     });
     
-    session.netAddrSrc.route(netAddr => session.netAddrs.add(netAddr));
-    Object.defineProperty(session.netAddrSrc, 'newRoute', {
-      value: fn => session.netAddrs.each(netAddr => fn(netAddr))
-    });
-    
     let state = { frames: [], size: 0, buff: Buffer.alloc(0) };
     session.endWith(() => state = null);
     

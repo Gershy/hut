@@ -473,20 +473,14 @@ global.rooms['record'] = async foundation => {
         : `${getFormName(this)}( ${this.rec.desc()} <-- ${this.type.name} )`;
     },
     
-    srcFlags: {
-      memory: true,
-      singleton: false,
-      tmpsOnly: true
-    },
+    srcFlags: { memory: true, singleton: false, tmpsOnly: true },
     newRoute(fn) { for (let hrec of this.hrecs.values()) fn(hrec); },
     countSent() { return this.hrecs.size; },
     getSent() { return this.hrecs.values(); },
     
     getAuditSrc() {
-      
       if (!this.auditSrc) this.auditSrc = Form.AuditSrc(this);
       return this.auditSrc;
-      
     },
     
     async mod({ filter=null, offset, limit }) {
@@ -518,9 +512,20 @@ global.rooms['record'] = async foundation => {
         if (precompRh && precompRh.off()) precompRh = null;              // Can't use it if it's off
         if (precompRh && precompRh.activeSignal.onn()) precompRh = null; // Can't use it if it's mid-selection
         
-        if (precompRh) {
+        if (!precompRh) {
           
-          let recs = precompRh.hrecs.toArr(hrec => hrec.rec); // Need to take a snapshot
+          // If no "precomputed" RelHandler already exists we need to
+          // process the full selection using our Bank
+          
+          selection = await this.manager.bank.select({ activeSignal, relHandler: this });
+          
+        } else {
+          
+          // We have a precomputed RelHandler which already has refs to
+          // the exhaustive list of relevant Records
+          
+          // Take a snapshot of these Records
+          let recs = precompRh.hrecs.toArr(hrec => hrec.rec);
           
           selection = filter
             // Need to provide full range of `selected` properties if a
@@ -539,23 +544,20 @@ global.rooms['record'] = async foundation => {
             // If no filter was provided all we need is a "rec" property
             // which is already conveniently set on each `hrec`!
             : (function*() { for (let rec of recs) yield { rec }; })();
-          
-        } else {
-          
-          selection = this.manager.bank.select({ activeSignal, relHandler: this });
-          
+            
         }
-        
+          
         // Skip `offset` items! (Note that filtered items don't count
         // towards offset items)
         let count = 0;
         for await (let selected of selection) {
           
-          // Completely ignore `selected` if it gets filtered out
-          if (filter && !(await filter(selected))) continue;
-          
           // Stop selecting if `activeSignal` is no longer active
           if (activeSignal.off()) return;
+          
+          // Completely ignore `selected` if it gets filtered out (it
+          // doesn't count towards the `offset` either!)
+          if (filter && !(await filter(selected))) continue;
           
           count++;
           
@@ -654,15 +656,17 @@ global.rooms['record'] = async foundation => {
       return hrec;
       
     },
-    ready() { return Promise(rsv => this.activeSignal.route(rsv)); },
     
+    ready() {
+      if (!this.activeSignal['~prm']) this.activeSignal['~prm'] = Promise(rsv => this.activeSignal.route(rsv, 'prm'));
+      return this.activeSignal['~prm'];
+    },
     async getRecs() {
-      let route = null;
-      try { await Promise(rsv => route = this.activeSignal.route(rsv)); } finally { route.end(); }
+      await this.ready();
       return this.hrecs.toArr(hrec => hrec.rec);
     },
     async getRec() {
-      await Promise(rsv => this.activeSignal.route(rsv));
+      await this.ready();
       for (let hrec of this.hrecs.values()) return hrec.rec;
       return null;
     },
@@ -681,8 +685,9 @@ global.rooms['record'] = async foundation => {
       mmm('relHandlerRef', -1);
       delete this.rec.relHandlers[this.key];
       
-      for (let [ uid, hrec ] of this.hrecs) hrec.end();
+      let hrecs = this.hrecs;
       this.hrecs = Map.stub;
+      for (let [ uid, hrec ] of hrecs) hrec.end();
       this.activeSignal.end();
       
     }
@@ -1041,7 +1046,7 @@ global.rooms['record'] = async foundation => {
       if (defaultLimit1) args[0].limit = 1;
       
       if (fn?.constructor === String) fn = Form.relHandlerMethods[fn];
-      if (!isForm(fn, Function)) throw Error(`"fn" should be Function but got ${getFormName(fn)}`).mod({ fn });
+      if (!hasForm(fn, Function)) throw Error(`"fn" should be Function but got ${getFormName(fn)}`).mod({ fn });
       
       let rh = this.rh(...rhArgs);
       try     { return await fn(rh); }
