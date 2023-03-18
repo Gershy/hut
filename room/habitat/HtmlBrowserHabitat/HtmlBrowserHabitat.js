@@ -3,15 +3,14 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
   // TODO: All road names should be overridable - in fact if there are
   // multiple HtmlBrowserHabitat instances, no two should share a road
   // name. This would be easier by simply providing a unique prefix
-  // for all road names, but "syncInit" won't work if prefixed. Could
-  // be the best solution requires changing how the Hut form handles
-  // "syncInit"
+  // for all road names, but "hutify" won't work if prefixed. Maybe the
+  // best solution requires changing how the Hut form handles "hutify"
   
-  init({ rootRoadSrcName='syncInit', prefix='html', debug=false, ...moreOpts }={}) {
+  init({ rootRoadSrcName='hutify', prefix='html', debug=false, ...moreOpts }={}) {
     
     /// {ABOVE=
     let { multiUserSim=null } = moreOpts;
-    if (multiUserSim === null) multiUserSim = foundation.conf('deploy.maturity') === 'dev';
+    if (multiUserSim === null) multiUserSim = conf('deploy.maturity') === 'dev';
     /// =ABOVE}
     
     Object.assign(this, {
@@ -38,7 +37,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       'Hut',
       'record',
       'record.bank.AbstractBank',
-      'record.bank.TransientBank',
+      'record.bank.WeakBank',
       'Hinterland',
       'habitat.HtmlBrowserHabitat',
       'logic.Scope',
@@ -48,19 +47,18 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
     ]);
     
     // Omit "trn" to have it default to "anon" (cacheable)
-    let urlFn = v => foundation.getUrl(v);
     
     tmp.endWith(hut.roadSrc(this.rootRoadSrcName).route(async ({ src, reply, msg }) => {
       
-      // TODO: If supporting outdated browsers, useragent agent
-      // detection at this point has an opportunity to send html which
-      // initiates, e.g., FoundationBrowserIE9 (which would provide a
-      // completely overhauled clearing.js with only IE9 syntax)
+      // TODO: Useragent detection at this point could theoretically
+      // replace the following content with a different html body that
+      // requests, e.g., IE9-compatible resources
       
       // The AfarHut immediately has its state reset, requiring a full
       // sync to update. Then this full sync is consumed here, to be
       // included within the html response (the initial html and sync
       // data will always arrive together)
+      
       let initSyncTell = src.consumePendingSync(hut);
       
       let depRooms = Set([
@@ -70,26 +68,25 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       ]);
       
       let roomScript = (room, loadType='async') => {
-        
-        let type = [ 'clearing', 'foundation', 'foundationBrowser' ].has(room) ? 'setup' : 'room'; // TODO: Sloppy!!
-        
-        let src = urlFn({ command: `${this.prefix}.room`, type, room });
-        
-        return `<script ${loadType} type="text/javascript" src="${src}" data-room="${type}/${room}"></script>`;
-        
+        let src = url({ path: `${this.prefix}.room`, query: { room } });
+        return `<script ${loadType} type="text/javascript" src="${src}" data-room="${room}"></script>`;
       };
       
-      let argsForBelow = foundation.getBelowConfArgs();
+      let belowConf = hut.getBelowConf();
+      let protocolsDef = belowConf.deploy.loft.hosting.protocols;
+      let protocolRooms = Set(protocolsDef.toArr(v => v.protocol))
+        .toArr(v => `habitat.HtmlBrowserHabitat.hutify.protocol.${v}`);
       
       let { textSize='100%' } = msg;
       reply(String.multiline(`
         <!doctype html>
         <html lang="en" spellcheck="false">
           <head>
+            
             <meta charset="utf-8" />
             <title>${roomName.split('.').slice(-1)[0].upper()}</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-            <link rel="shortcut icon" type="image/x-icon" href="${urlFn({ command: this.prefix + '.icon' })}" />
+            <link rel="shortcut icon" type="image/x-icon" href="${url({ path: this.prefix + '.icon' })}" />
             <style type="text/css">
               html, body, body > div {
                 position: absolute; left: 0; top: 0; width: 100%; height: 100%;
@@ -98,50 +95,30 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
               html > body * { position: relative; }
               body { opacity: 0; font-size: ${textSize}; transition: opacity 200ms linear; }
               body.loaded { opacity: 1; }
-              body > a.view {
-                position: absolute; width: 100%; height: 100%;
-                line-height: 100vh; text-align: center; font-size: calc(60% + 1.5vw);
-              }
             </style>
             
-            <script type="text/javascript">Object.assign(window.global = window, { roomDebug: Object.create(null), rooms: Object.create(null) });</script>
+            <script type="text/javascript">Object.assign(window.global=window,{rooms:Object.create(null)});</script>
+            <script type="text/javascript">window.addEventListener('DOMContentLoaded',e=>rooms['habitat.HtmlBrowserHabitat.hutify.init']().init(e));</script>
+            ${roomScript('setup.clearing', 'defer')}
+            ${roomScript('habitat.HtmlBrowserHabitat.hutify.init', 'defer')}
+            ${protocolRooms.toArr(n => roomScript(n, 'defer')).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
+            ${depRooms.toArr(n => roomScript(n, 'async')).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
+
+            <link rel="stylesheet" type="text/css" href="${url({ path: this.prefix + '.css' })}" />
             
-            ${roomScript('clearing', 'defer')}
-            ${roomScript('foundation', 'defer')}
-            ${roomScript('foundationBrowser', 'defer')}
-            ${depRooms.toArr(n => roomScript(n, 'async')).join('\n') /* TODO: This is unindented when it shouldn't be :( */ }
-            
-            <link rel="stylesheet" type="text/css" href="${urlFn({ command: this.prefix + '.css' })}" />
-            
-            <script type="text/javascript">window.addEventListener('DOMContentLoaded', async loadedEvt => {
+            <script type="text/javascript">Object.assign(global,{rawConf:JSON.parse('${valToJson({
               
-              let body = document.body;
-              body.classList.add('focus');
-              window.addEventListener('load', () => body.classList.add('loaded'));
-              window.addEventListener('beforeunload', () => body.classList.remove('loaded'));
-              window.addEventListener('focus', evt => body.classList.add('focus'));
-              window.addEventListener('blur', evt => body.classList.remove('focus'));
-              window.focus();
+              // This is json-encoded (which actually speeds up loadtime
+              // due to the limited parse-tree within a string), sent,
+              // and decoded client-side
               
-              let { FoundationBrowser } = global;
-              let foundation = FoundationBrowser();
-              await foundation.configure(serToVal('${valToSer({
-                
-                // This is json-encoded (which actually speeds up
-                // page load due to limited parsing options within a
-                // string), shipped, and unencoded client-side
-                
-                hutId: src.uid,
-                ...foundation.getBelowConfArgs(),
-                ageMs: foundation.getMs(),
-                utcMs: Date.now(),
-                syncTell: initSyncTell
-                
-              }).replace(/[\\']/g, '\\$&')}')); // Escape literal backslashes and quotes
+              hid: src.uid,
+              ...belowConf,
+              ageMs: getMs(),
+              utcMs: getMs(),
+              initSyncTell
               
-              await foundation.hoist();
-              
-            });</script>
+            }).replace(/[\\']/g, '\\$&') /* The payload will be single-quoted, so escape it appropriately */ }')})</script>
           </head>
           <body></body>
         </html>
@@ -150,15 +127,13 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
     }));
     tmp.endWith(hut.roadSrc(`${this.prefix}.room`).route(async ({ src, reply, msg }) => {
       
-      if (!msg.has('type')) throw Error(`Missing "type"`);
-      if (!isForm(msg.type, String)) throw Error(`Invalid "type" is ${getFormName(type)} (should be String)`);
-      if (![ 'setup', 'room' ].has(msg.type)) throw Error(`Invalid type "${msg.type}" (should be "setup" or "room")`);
-      
-      // Return compiled logic if type is "room"
-      if (msg.type === 'room') reply(await foundation.getCompiledKeep('below', msg.room));
-      
-      // Return raw contents if type is "setup"
-      if (msg.type === 'setup') reply(await foundation.getCompiledKeep('setup', msg.room));
+      // TODO: Watch out for traversal with room name??
+      // TODO: Parameterize debug??
+      try {
+        reply(await hut.getCompiledKeep('below', msg.room));
+      } catch (err) {
+        reply(`'use strict';throw Error('Failed to load "${msg.room}"');`);
+      }
       
     }));
     tmp.endWith(hut.roadSrc(`${this.prefix}.rooms`).route(async ({ src, reply, msg }) => {
@@ -172,11 +147,11 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       });
       
       // TODO: Ideally could stream every desired room in order. The
-      // offsets from those rooms (under `global.roomDebug`) reflect
-      // the line information in that single room's file. As each file
-      // is being streamed, need to count number of lines in that file
-      // and after all files are streamed can stream additional json
-      // representing the offset of each room relative to the batch.
+      // offsets from those rooms reflect the line information in that
+      // single room's file. As each file is being streamed, need to
+      // count number of lines in that file and after all files are
+      // streamed can stream additional json representing the offset of
+      // each room relative to the batch.
       
       let compiledRoomsData = await Promise.all(
         roomNames.map(r => foundation.getCompiledKeep('below', r).then(keep => keep.getContent('utf8')))
@@ -205,7 +180,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
     
     tmp.endWith(hut.roadSrc(`${this.prefix}.icon`).route(async ({ src, reply, msg }) => {
       
-      reply(foundation.seek('keep', 'fileSystem', [ 'setup', 'asset', 'hut.ico' ]));
+      reply(keep(`[file:repo]->room->setup->asset->hut.ico`));
       
     }));
     tmp.endWith(hut.roadSrc(`${this.prefix}.css`).route(async ({ src, reply, msg }) => {
@@ -267,7 +242,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
           id: `multi${n}`,
           title: `Multi #${n + 1}`,
           width: w, height: h,
-          src: `/?trn=sync&hutId=${names[n]}&textSize=${textSize}`
+          src: `/?trn=sync&hid=${names[n]}&textSize=${textSize}`
         }).toArr((v, k) => `${k}="${v}"`).join(' ');
         return `<iframe ${paramStr}></iframe>`
       }
@@ -278,7 +253,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
             <meta charset="utf-8" />
             <title>${roomName.split('.').slice(-1)[0].upper()}</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-            <link rel="shortcut icon" type="image/x-icon" href="${urlFn({ command: this.prefix + '.icon' })}" />
+            <link rel="shortcut icon" type="image/x-icon" href="${url({ path: this.prefix + '.icon' })}" />
             <style type="text/css">
               body, html { padding: 0; margin: 0; }
               body { margin: 2px; text-align: center; }

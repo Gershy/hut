@@ -1,4 +1,4 @@
-global.Foundation = form({ name: 'Foundation', pars: { Endable, Slots }, props: (forms, Form) => ({
+global.Foundation = form({ name: 'Foundation', has: { Endable, Slots }, props: (forms, Form) => ({
   
   $protocols: {
     http: { secure: false, defaultPort: 80 },
@@ -38,7 +38,6 @@ global.Foundation = form({ name: 'Foundation', pars: { Endable, Slots }, props: 
   initDateMs: Date.now(), // Marks when the class was defined, not when the instance was instantiated
   getMs() { return Date.now() - this.initDateMs; },
   getUid() { return (Number.int64 * Math.random()).encodeStr(String.base62, 10); }, // Avg. string length is 10.95
-  soon() { return Promise.resolve(); },
   getRawUrl({ path='', command=path, ...query }) {
     
     // Returns a url without any consideration of caching
@@ -64,7 +63,7 @@ global.Foundation = form({ name: 'Foundation', pars: { Endable, Slots }, props: 
     // TODO: No caching in alpha?
     else if (maturity === 'alpha') ver = null;
     
-    return this.getRawUrl(ver ? { '!': ver, command, ...query } : { command, ...query });
+    return this.getRawUrl(ver ? { '!': ver, path: command, ...query } : { path: command, ...query });
     
   },
   parseUrl(url) {
@@ -130,7 +129,7 @@ global.Foundation = form({ name: 'Foundation', pars: { Endable, Slots }, props: 
     if (arg === 'conf') return this.getRootConf();
     return null;
   },
-  getRootHut(opts)  { return this.hutPrm  || (this.hutPrm  = then(this.createHut(opts),  v => this.hutPrm  = v)); },
+  getRootHut(opts)  { return this.hutPrm  || (this.hutPrm  = gsc(Error('CREATE HUT')) ?? then(this.createHut(opts),  v => this.hutPrm  = v)); },
   getRootKeep(opts) { return this.keepPrm || (this.keepPrm = then(this.createKeep(opts), v => this.keepPrm = v)); },
   getRootReal(opts) { return this.realPrm || (this.realPrm = then(this.createReal(opts), v => this.realPrm = v)); },
   getRootConf(opts) { return this.confPrm || (this.confPrm = then(this.createConf(opts), v => this.confPrm = v)); },
@@ -214,7 +213,7 @@ global.Foundation = form({ name: 'Foundation', pars: { Endable, Slots }, props: 
           // Add context for case #2
           let content = then(orig.content,
             v => v,
-            cause => err.propagate({ cause, msg: `Failed to resolve room "${name}"` })
+            cause => err.propagate({ cause, msg: `Failed to resolve content of room "${name}"` })
           );
           
           return { ...orig, content };
@@ -362,7 +361,7 @@ global.Foundation = form({ name: 'Foundation', pars: { Endable, Slots }, props: 
     let trace = stack.slice(traceBegins);
     let lines = trace.split('\n').map(line => {
       
-      let parseCmpLine = safe(() => this.parseErrorLine(line), null);
+      let parseCmpLine = safe(() => this.parseErrorLine(line), () => null);
       
       // Return early if the line couldn't be parsed
       if (!parseCmpLine) return verbose ? `?(1) - ${line.trim()}` : skip;
@@ -376,7 +375,7 @@ global.Foundation = form({ name: 'Foundation', pars: { Endable, Slots }, props: 
       // If line mapped successfully return the mapped line
       let result = safe(
         () => this.cmpRoomLineToSrcLine(roomName, lineInd, charInd).disp,
-        err => console.log({ ow: 'OW!', err }) || null
+        err => console.log({ ow: 'yikes', err }) || null
       );
       if (result) return result;
       

@@ -1,8 +1,14 @@
-global.rooms['chess2'] = async foundation => {
+global.rooms['chess2'] = async () => {
   
-  let c2Subcon = foundation.subcon('chess2.gameplay', {});
+  let c2Subcon = subcon('chess2.gameplay', {});
   
-  let rooms = await foundation.getRooms([
+  let rooms = await getRooms([
+    
+    /// {ABOVE=
+    'TermBank',
+    'random',
+    /// =ABOVE}
+    
     'logic.TmpAny',
     'logic.Chooser',
     'logic.SetSrc',
@@ -10,11 +16,11 @@ global.rooms['chess2'] = async foundation => {
     'logic.TimerSrc',
     'habitat.HtmlBrowserHabitat',
     'Hinterland'
+    
   ]);
   let { TmpAny, Chooser, SetSrc, MemSrc, TimerSrc, Hinterland, HtmlBrowserHabitat } = rooms;
   
-  let staticKeep = foundation.seek('keep', 'static');
-  let isDev = (foundation.conf('deploy.maturity') || foundation.conf('maturity')) === 'dev';
+  let isDev = conf('deploy.maturity') === 'dev';
   let pieceStyle = 'classic';
   let layoutStyle = 'classic';
   let moveMs = (isDev ? 12 : 60) * 1000;
@@ -166,7 +172,7 @@ global.rooms['chess2'] = async foundation => {
   };
   
   /// {ABOVE=
-  let TermBank = await foundation.getRoom('TermBank');
+  let { TermBank } = rooms;
   let termBank = TermBank();
   let applyMoves = (match, pieces, playerMoves) => {
     
@@ -280,6 +286,7 @@ global.rooms['chess2'] = async foundation => {
   /// =ABOVE}
   
   return Hinterland('c2', 'chess2', {
+    
     habitats: [ HtmlBrowserHabitat() ],
     above: async (hut, chess2, real, dep) => {
       
@@ -288,7 +295,7 @@ global.rooms['chess2'] = async foundation => {
       hut.addKnownRoomDependencies([
         'Hut',
         'record.bank.AbstractBank',
-        'record.bank.TransientBank',
+        'record.bank.WeakBank',
         'Hinterland',
         'habitat.HtmlBrowserHabitat',
         'logic.Chooser',
@@ -313,10 +320,8 @@ global.rooms['chess2'] = async foundation => {
         'Transform'
       ]);
       
-      let { FastRandom } = await foundation.getRoom('random');
+      let { random: { FastRandom } } = rooms;
       let random = FastRandom();
-      
-      staticKeep.hut = hut; // TODO: Is this necessary? Isn't it already happening in `Foundation.prototype.hoist`?
       
       // Config values
       let pieceLayouts = {
@@ -864,12 +869,12 @@ global.rooms['chess2'] = async foundation => {
             
             pieceReal.mod({
               ...tileCoord(col, row),
-              imgKeep: foundation.seek('keep', 'static', [ 'room', 'chess2', 'img', pieceStyle, fp ]),
+              imgKeep: keep('asset', hut.par, `room.chess2.img.${pieceStyle}.${fp}`), 
               colour: (wait > 0) ? 'rgba(255, 110, 0, 0.4)' : null
             });
             
           }));
-          dep(() => pieceReal.mod({ scale: 4, opacity: 0 })); // Ghostly explosion upon capture
+          dep(() => pieceReal.mod({ scale: 4, opacity: 0 })); // Ghosty explosion upon capture
           
           let pieceControl = dep(Tmp({ piece, pieceReal }));
           pieceControls.mod(pieceControl);
@@ -1189,6 +1194,7 @@ global.rooms['chess2'] = async foundation => {
       });
       
     }
+    
   });
   
 };

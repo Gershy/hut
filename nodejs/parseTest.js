@@ -1,7 +1,7 @@
 require('./clearing.js');
 
 let dim = text => `\x1b[37m${text}\x1b[0m`;
-let log = (...v) => { let depth = 6; if (U.isForm(v[0], Number)) { [ depth, ...v ] = v; } console.log(...v.map(v => require('util').inspect(v, { depth, colors: true }))); };
+let log = (...v) => { let depth = 6; if (isForm(v[0], Number)) { [ depth, ...v ] = v; } console.log(...v.map(v => require('util').inspect(v, { depth, colors: true }))); };
 let doTests = 1;
 let testSpecific = 0 && { depth: 8, name: 'jsPropsDynamic', input: 'a[1]=2;' };
 let debugLiveAttempts = 0;
@@ -62,9 +62,9 @@ let parse = (parser, input, trace) => {
       // single { type: 'repeat', minReps: n, maxReps: n } child
       
       // Convert string regex to regex object
-      if (p.type === 'regex' && U.isForm(p.regex, String)) {
+      if (p.type === 'regex' && isForm(p.regex, String)) {
         if (!p.regex.hasHead('^')) p.regex = `^(${p.regex})`;
-        p.regex = new RegExp(p.regex.replace(/\\/g, '\\\\')); // Escape all backslashes
+        p.regex = RegExp(p.regex.replace(/\\/g, '\\\\')); // Escape all backslashes
       } else if (p.type === 'regex' && !p.regex.toString().startsWith('/^')) {
         throw Error(`Regex "${p.regex.toString()}" doesn't begin with "^" matcher`);
       }
@@ -1218,14 +1218,14 @@ let simplifyParsed = parsed => {
     let resultType = result == null ? null : result.constructor;
     if (expectType !== resultType) return false;
     
-    if (U.isForm(expect, Object)) {
+    if (isForm(expect, Object)) {
       for (let k in expect) {
         if (!result.has(k)) return false;
         if (!verify(result[k], expect[k])) return false;
       }
       return true;
     }
-    if (U.isForm(expect, Array)) {
+    if (isForm(expect, Array)) {
       if (expect.length !== result.length) return false;
       for (let i = 0; i < expect.length; i++) {
         if (expect[i] === C.skip) continue;

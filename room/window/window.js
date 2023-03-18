@@ -28,7 +28,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
     b: c1.b * (1 - amt) + c2.b * amt
   });
   
-  let Vals2d = U.form({ name: 'Vals2d', props: (forms, Form) => ({
+  let Vals2d = form({ name: 'Vals2d', props: (forms, Form) => ({
     
     init: function({ w, h, xOff=0, yOff=0, rect=null, format, mode='lenient' }) {
       if (Math.floor(w) !== w) throw Error('Width should be integer');
@@ -78,7 +78,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
     
   })});
   
-  let TerminalReal = U.form({ name: 'TerminalReal', has: { Tmp }, props: (forms, Form) => ({
+  let TerminalReal = form({ name: 'TerminalReal', has: { Tmp }, props: (forms, Form) => ({
     
     $ansi: (...codes) => `\x1b[${codes.flat(Infinity).join(';')}m`,
     $ansiFgRgb: (r, g, b) => {
@@ -167,7 +167,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
     }
     
   })});
-  let TerminalMainReal = U.form({ name: 'TerminalMainReal', has: { TerminalReal }, props: (forms, Form) => ({
+  let TerminalMainReal = form({ name: 'TerminalMainReal', has: { TerminalReal }, props: (forms, Form) => ({
     
     init: function({ inn, ctrlPaneH=10, ...args }) {
       
@@ -276,10 +276,10 @@ global.rooms['window'] = foundation => ({ open: async () => {
       try {
         
         let args = eval(`(${cmd})`);
-        if (U.isForm(args, String)) args = { cmd: args };
-        if (!U.isForm(args, Object)) throw Error(`Expected Object; got ${U.getFormName(args)}`);
+        if (isForm(args, String)) args = { cmd: args };
+        if (!isForm(args, Object)) throw Error(`Expected Object; got ${getFormName(args)}`);
         if (!args.has('cmd')) throw Error(`Missing "cmd" property`);
-        if (!U.isForm(args.cmd, String)) throw Error(`Expected "cmd" to be String; got ${U.getFormName(args.command)}`);
+        if (!isForm(args.cmd, String)) throw Error(`Expected "cmd" to be String; got ${getFormName(args.command)}`);
         
         if (args.cmd === 'ansiTest') {
           
@@ -304,7 +304,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
     
   })});
   
-  let TerminalRenderer = U.form({ name: 'TerminalRenderer', has: { Src }, props: (forms, Form) => ({
+  let TerminalRenderer = form({ name: 'TerminalRenderer', has: { Src }, props: (forms, Form) => ({
     init: function({ x, y, w, h, z=0, bg=' ' }) {
       forms.Src.init.call(this);
       Object.assign(this, { x, y, w, h, z, bg });
@@ -313,15 +313,15 @@ global.rooms['window'] = foundation => ({ open: async () => {
     fillRenderRect: C.noFn('fillRenderRect', (w, h) => {}),
     render: function(real, canvas) {
       this.fillRenderRect(canvas.sub(
-        ...[ this.x, this.y, this.w, this.h ].map(v => Math.round(U.isForm(v, Function) ? v(real) : v))
+        ...[ this.x, this.y, this.w, this.h ].map(v => Math.round(isForm(v, Function) ? v(real) : v))
       ));
     }
   })});
-  let TerminalPixelsRenderer = U.form({ name: 'TerminalPixelsRenderer', has: { TerminalRenderer }, props: (forms, Form) => ({
+  let TerminalPixelsRenderer = form({ name: 'TerminalPixelsRenderer', has: { TerminalRenderer }, props: (forms, Form) => ({
     init: function({ pixels, mode={ type: 'brightness' }, chrW=1, chrH=1, ...args }) {
       
       if (mode.type === 'brightness') {
-        mode = { type: 'brightness', chrs: ' -~+2#$'.split(''), colour: true, ...mode };
+        mode = { type: 'brightness', chrs: ' -~+#@%$'.split(''), colour: true, ...mode };
       } else if (mode.type === 'binary') {
         mode = { type: 'binary', onn: '$', off: ' ', ...mode };
       }
@@ -376,7 +376,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
       
     }
   })});
-  let TerminalTextRenderer = U.form({ name: 'TerminalTextRenderer', has: { TerminalRenderer }, props: (forms, Form) => ({
+  let TerminalTextRenderer = form({ name: 'TerminalTextRenderer', has: { TerminalRenderer }, props: (forms, Form) => ({
     $strToLns: str => {
       return str.replace(/\r/g, '')                     // Ignore '\r'
         .split('\n')                                    // Split by line
@@ -392,7 +392,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
         ...args
       });
       
-      if (U.isForm(text, String)) text = Form.strToLns(text);
+      if (isForm(text, String)) text = Form.strToLns(text);
       Object.assign(this, { text, vertOff });
     },
     mod: function(args) {
@@ -405,9 +405,9 @@ global.rooms['window'] = foundation => ({ open: async () => {
     }
   })});
   
-  let Adapter = U.form({ name: 'Adapter', props: (forms, Form) => ({
+  let Adapter = form({ name: 'Adapter', props: (forms, Form) => ({
     init: function({ name=null, transform=null }) {
-      this.name = name || `Anon${U.getFormName(this)}`
+      this.name = name || `Anon${getFormName(this)}`
       this.transform = transform;
     },
     convertFwd: async function(bak, ctx={}) {
@@ -432,7 +432,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
     convertFwd0: C.noFn('convertFwd0', (b, ctx) => {}),
     convertBak0: C.noFn('convertBak0', (v, buff, ctx) => {})
   })});
-  let AdapterVal = U.form({ name: 'AdapterVal', has: { Adapter }, props: (forms, Form) => ({
+  let AdapterVal = form({ name: 'AdapterVal', has: { Adapter }, props: (forms, Form) => ({
     
     $getBuffFnSuffix: function (type, bLen, endn) {
       
@@ -476,7 +476,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
       buff[`write${this.fnSuffix}`](value);
     }
   })});
-  let AdapterObj = U.form({ name: 'AdapterObj', has: { Adapter }, props: (forms, Form) => ({
+  let AdapterObj = form({ name: 'AdapterObj', has: { Adapter }, props: (forms, Form) => ({
     init: function({ mems, defaults={}, ...args }) {
       if (!mems) throw Error(`Must provide "mems"`);
       forms.Adapter.init.call(this, args);
@@ -489,7 +489,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
       let offBLen = 0;
       for (let [ name, mem ] of this.mems) {
         
-        if (U.isForm(mem, Function)) mem = mem(ctx, this);
+        if (isForm(mem, Function)) mem = mem(ctx, this);
         
         let bLen = mem.getBLen(ctx);
         let result = await mem.convertFwd(b.subarray(offBLen >> 3, (offBLen + bLen) >> 3), ctx);
@@ -527,7 +527,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
       let offBLen = 0;
       let memsWithBuffs = []
       for (let [ name, mem ] of this.mems) {
-        if (U.isForm(mem, Function)) mem = mem({ ...this.defaults, ...ctx, ...memVals }, this);
+        if (isForm(mem, Function)) mem = mem({ ...this.defaults, ...ctx, ...memVals }, this);
         
         mems[name] = mem;
         let bLen = mem.getBLen(ctx);
@@ -557,7 +557,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
     getBLen: function(ctx) {
       let bLen = 0;
       for (let [ k, mem ] of this.mems) {
-        if (U.isForm(mem, Function)) mem = mem(ctx, this);
+        if (isForm(mem, Function)) mem = mem(ctx, this);
         let bl = mem.getBLen(ctx);
         if (bl === null) return null;
         bLen += bl;
@@ -565,7 +565,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
       return bLen;
     }
   })});
-  let AdapterArr = U.form({ name: 'AdapterArr', has: { Adapter }, props: (forms, Form) => ({
+  let AdapterArr = form({ name: 'AdapterArr', has: { Adapter }, props: (forms, Form) => ({
     init: function({ reps, format, ...args }) {
       if (!format) throw Error('Must provide "format"');
       forms.Adapter.init.call(this, args);
@@ -588,7 +588,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
     },
     convertBak0: async function(values, buff, ctx) {
       
-      if (!U.isForm(buff, Buffer)) throw Error(`Expected Buffer; got ${U.getFormName(buff)}`);
+      if (!isForm(buff, Buffer)) throw Error(`Expected Buffer; got ${getFormName(buff)}`);
       
       let offBLen = 0;
       let c = 0;
@@ -823,8 +823,8 @@ global.rooms['window'] = foundation => ({ open: async () => {
   let complexChars = Set([ 0, 7, 8, 9, 10, 13, 27, 32, 155 ]);
   let charReplace = c => complexChars.has(c.charCodeAt(0)) ? ' ' : c;
   let cmpSeq = (seq1, seq2) => {
-    if (U.isForm(seq1, String)) seq1 = seq1.split('').map(c => c.code());
-    if (U.isForm(seq2, String)) seq2 = seq2.split('').map(c => c.code());
+    if (isForm(seq1, String)) seq1 = seq1.split('').map(c => c.code());
+    if (isForm(seq2, String)) seq2 = seq2.split('').map(c => c.code());
     
     if (seq1.count() !== seq2.count()) return false;
     if (seq1.find((v, n) => v !== seq2[n]).found) return false;
@@ -995,7 +995,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
       }).join('')).join('\n'));
     };
     
-    let AsciiPicker = U.form({ name: 'PixelPicker', props: (forms, Form) => ({
+    let AsciiPicker = form({ name: 'PixelPicker', props: (forms, Form) => ({
       
       init: function(w, h, numLums=10) {
         this.w = w;
@@ -1040,7 +1040,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
         for (let y = 0; y < dims1.h; y++) { for (let x = 0; x < dims1.w; x++) {
           let v1 = image1[y][x];
           let v2 = image2[y][x];
-          if (!U.isForm(v1, Number) || !U.isForm(v2, Number)) {
+          if (!isForm(v1, Number) || !isForm(v2, Number)) {
             throw Error(`Invalid @ ${x},${y} (${v1}, ${v1}) (${dims1.w} x ${dims1.h})`);
           }
           diff += (v1 - v2) * (v1 - v2);
@@ -1192,7 +1192,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
   for (let row of rows) console.log(row.join(''));
   process.exit(0);
   
-  let Real = U.form({ name: 'Real', props: (forms, Form) => ({
+  let Real = form({ name: 'Real', props: (forms, Form) => ({
     init: function({ name=null, size={ w: 3, h: 3 } }) {
       this.name = name;
       this.updateSrc = Src();
@@ -1200,7 +1200,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
     },
     render: function(setBuff, x, y, w, h) { return C.noFn('render').call(this); }
   })});
-  let RealFlow = U.form({ name: 'RealFlow', has: { Real }, props: (forms, Form) => ({
+  let RealFlow = form({ name: 'RealFlow', has: { Real }, props: (forms, Form) => ({
     init: function({ name, axis='y', dir='+', elems=[], fillElem=null, borderChars={} }) {
       forms.Real.init.call(this, { name });
       this.axis = axis;
@@ -1253,7 +1253,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
       
     }
   })});
-  let RealTextBox = U.form({ name: 'RealTextBox', has: { Real }, props: (forms, Form) => ({
+  let RealTextBox = form({ name: 'RealTextBox', has: { Real }, props: (forms, Form) => ({
     init: function({ name, size, bgChar=String.fromCharCode(721) }) {
       forms.Real.init.call(this, { name, size });
       this.text = '';
@@ -1271,7 +1271,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
       
     }
   })});
-  let RealFill = U.form({ name: 'RealFill', has: { Real }, props: (forms, Form) => ({
+  let RealFill = form({ name: 'RealFill', has: { Real }, props: (forms, Form) => ({
     init: function({ name, size, bgChar='#', bgMods=[] }) {
       forms.Real.init.call(this, { name, size });
       this.bgChar = bgChar;
@@ -1371,9 +1371,9 @@ global.rooms['window'] = foundation => ({ open: async () => {
       }
       
       try {
-        disp.text = (U.isForm(result, String) ? result : valToSer(result, null, 2)) || '';
+        disp.text = (isForm(result, String) ? result : valToSer(result, null, 2)) || '';
       } catch (err) {
-        disp.text = `Couldn't format value of type ${U.getFormName(result)}`;
+        disp.text = `Couldn't format value of type ${getFormName(result)}`;
       }
       
     } else if (cmpSeq(seq, [ 13 ])) { // return (line feed)

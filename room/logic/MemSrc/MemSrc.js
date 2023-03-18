@@ -1,4 +1,4 @@
-global.rooms['logic.MemSrc'] = foundation => {
+global.rooms['logic.MemSrc'] = () => {
   
   let MemSrc = form({ name: 'MemSrc', has: { Endable, Src }, props: (forms, Form) => ({
     init() {

@@ -1,11 +1,11 @@
 global.rooms['internal.real.htmlBrowser.TextFlow'] = async foundation => {
   
   let Layout = await foundation.getRoom('internal.real.generic.Layout');
-  return U.form({ name: 'TextFlow', has: { Layout }, props: (forms, Form) => ({
+  return form({ name: 'TextFlow', has: { Layout }, props: (forms, Form) => ({
     
     init: function({ text=null, size=null, align=null, style='' }) {
       
-      if (U.isForm(style, String)) style = style.split(',');
+      if (isForm(style, String)) style = style.split(',');
       Object.assign(this, { text, size, align, style: Set(style) });
       
     },
@@ -17,7 +17,7 @@ global.rooms['internal.real.htmlBrowser.TextFlow'] = async foundation => {
       
     },
     
-    $Item: U.form({ name: 'TextFlow.Item', has: { Layout }, props: (forms, Form) => ({
+    $Item: form({ name: 'TextFlow.Item', has: { Layout }, props: (forms, Form) => ({
       
       init: function(par) { Object.assign(this, { par }); },
       

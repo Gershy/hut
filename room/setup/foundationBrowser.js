@@ -154,7 +154,13 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
       for (let child of children) child.remove();
       
       let anchor = document.createElement('a');
-      anchor.classList.add('view');
+      Object.assign(anchor.style, {
+        position: 'absolute',
+        width: '100%', height: '100%',
+        lineHeight: '100vh',
+        textAlign: 'center',
+        fontSize: 'calc(60% + 1.5vw)'
+      });
       anchor.setAttribute('href', this.getFoundationUrlPath());
       anchor.textContent = 'To use this tab click or refresh';
       document.body.appendChild(anchor);
@@ -209,7 +215,7 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
     return pathname + search;
   },
   getMs() { return performance.now() + this.aboveOffsetMs; },
-  getUrl(arg /* { command, query } */, { fixed=false }={}) {
+  getUrl(arg /* { command, ...query } */, { fixed=false }={}) {
     
     // Note that providing "fixed" will ensure that, if the same url has
     // been seen before with some cache-version-value, the same version
@@ -218,7 +224,8 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
     
     if (!fixed) return forms.Foundation.getUrl.call(this, arg);
     
-    let raw = this.getRawUrl(arg);
+    let { command, ...query } = arg;
+    let raw = this.getRawUrl({ path: command, ...query });
     return this.fixedUrls[raw] || (this.fixedUrls[raw] = forms.Foundation.getUrl.call(this, arg));
     
   },
@@ -573,13 +580,13 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
   async installRoom(name, { bearing='below' }={}) {
     
     if (global.rooms[name]) return { debug: global.roomDebug[name], content: global.rooms[name](this) };
-      
-    let script = document.head.querySelector(`:scope > script[data-room="room/${name}"]`);
+    
+    let script = document.head.querySelector(`:scope > script[data-room="${name}"]`);
     if (!script) {
       script = document.createElement('script'); // Note that dynamically created scripts don't need an "async" attribute as they are always async
       script.setAttribute('type', 'text/javascript');
       script.setAttribute('src', this.getUrl({ command: 'html.room', type: 'room', room: name }));
-      script.setAttribute('data-room', `room/${name}`);
+      script.setAttribute('data-room', name);
       document.head.appendChild(script);
     }
     

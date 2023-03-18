@@ -1,68 +1,5 @@
 global.rooms['Hut'] = async foundation => {
   
-  /* BUNCH OF COMMENTS TODOS IDEAS ETC
-  // Huts are describable by the following terms:
-  // AFAR/HERE: Indicates whether the Hut instance represents a local or
-  //   far-away (remote) identity. For example, two HereHuts do not
-  //   require any transport tech to communicate with each other because
-  //   they exist side-by-side in shared memory!
-  // PAR/KID: Indicates whether the Hut was created as the child of
-  //   another Hut. KidHuts are instantiated when a ParHut receives a
-  //   "sync" that includes a Hut as one of the items to "add".
-  //   ParHuts are always instantiated directly (for example, from the
-  //   root hut.js file). Note that ancestry heirarchies should only
-  //   have parents and children; no grandchildren (a directly
-  //   instantiated Hut manages all other Huts, in a flat heirarchy).
-  //   (TODO: Amend this comment? ParHuts simply run server-side logic
-  //   independently while KidHuts are reliant on ParHuts to function)
-  
-  // How communication happens based on Src/Trg Locality
-  // | SrcHut  | TrgHut  | Road
-  // |---------|---------|-------------------------------------
-  // | Here    | Here    | Not needed - direct is possible
-  // | Here    | Afar    | Default to cheapest Road available
-  // | Afar    | Here    | REQUIRED - Afar must have used Road
-  // | Afar    | Afar    | N/A - we cannot direct two AfarHuts!
-  // | None    | Here    | Road must not be provided
-  // | None    | Afar    | N/A - Error!
-  // | Either  | None    | N/A - Error!
-  
-  // Related vs Foreign - Huts A and B are "related" if one is the
-  // other's ParHut, otherwise they are Foreign. Only Related Huts are
-  // ever intended to communicate
-  
-  // Neighbour vs Distanced - Huts A and B are "neighbours" if they are
-  // running in the same javascript context (which entails that message
-  // passing is trivial - functions can be called directly), otherwise
-  // they are "distanced", and will need to use some network and
-  // protocol to communicate
-  */
-  
-  // WOW ok the modelling is really annoying:
-  // - Need to be able to call "addRecord" from somewhere - probably
-  //   from a Hut or Manager instance
-  // - Need to have a Rec to represent the Hut (the Hut could BE a Rec,
-  //   but that leads to... complexity)
-  // - Can the Manager remain totally unrelated from the Hut? (Simply
-  //   pass the Hut a Manager instance? What about `getRecordForm`?)
-  // - Are Banks and Managers separate concepts...????
-  // - What if EVERYTHING was simply separate??
-  //   - Manager, Bank, Hut, and Rec-representing-Hut (ok maybe Bank and
-  //     Manager can be merged together into one Form)
-  //   - Make the Manager, Hut, and Rec-representing-Hut all available
-  //     to the above/below function
-  //     - (Oh lord, is it even necessary to have a Rec which represents
-  //       the Hut? I know its membership in Groups allows Recs to end
-  //       when the Hut ends, but doesn't `hut.endWith(rec)` work too?
-  //   - Nature/Psyche (gosh those need to be renamed) use:
-  //     - Manager to create new Records
-  //     - Hut to enable Actions
-  //     - Rec as a Member to create Records whose lifetime is tied to
-  //       the Hut
-  //   - Problems:
-  //     - The Manager/Bank will need a reference to the HereHut to find
-  //       pre-existing Record instances (because HereHuts do Following)
-  
   let { Manager: RecordManager, Record } = await foundation.getRoom('record');
   
   return form({ name: 'Hut', has: { RecordManager, Record }, props: (forms, Form) => ({
@@ -70,8 +7,6 @@ global.rooms['Hut'] = async foundation => {
     init({ uid=null, parHut=null, isHere, isManager, isRec=true, ...moreArgs }={}) {
       
       if (!uid) throw Error('A uid is required');
-      if (!isForm(isHere, Boolean)) throw Error(`"isHere" must be Boolean`);
-      if (!isForm(isManager, Boolean)) throw Error(`"isManager" must be Boolean`);
       
       // TODO: `foundation` is only used to determine here/afar!!
       Object.assign(this, { uid, parHut, isHere, isAfar: !isHere, isManager }); // TODO: are `isHere` and `isManager` always the same?? (Can they be simplified?)
@@ -236,8 +171,8 @@ global.rooms['Hut'] = async foundation => {
       }
       /// =ABOVE}
       
-      // Only initialize as a RecordManager if we're the ParentHut
-      if (this.isManager) forms.RecordManager.init.call(this, { rootRec: this, ...moreArgs });
+      // Only initialize as a RecordManager as required
+      if (this.isManager) forms.RecordManager.init.call(this, { ...moreArgs });
       
       // Always initialize as a Record
       if (isRec) forms.Record.init.call(this, {
@@ -287,12 +222,13 @@ global.rooms['Hut'] = async foundation => {
         .join('');
       
     },
-    getRoadedHut(server, road, hutId=null) {
+    getRoadedHut(server, road, hutId=this.getHutUid()) {
+      
+      // Note that this always returns a RoadedHut; potentially a fresh
+      // instance if `hutId` doesn't correspond to an existing RH. Note
+      // that a custom `hutId` can be specified to allow for spoofage.
       
       let trafficSubcon = foundation.subcon('road.traffic');
-      
-      // Generate a stock `hutId` if `null` provided
-      if (hutId === null) hutId = this.getHutUid();
       
       let newHut = null;
       if (!this.roadedHuts.has(hutId)) {
@@ -523,7 +459,7 @@ global.rooms['Hut'] = async foundation => {
     actOnTell({ src, road, reply, ms, msg }) {
       
       // Huts act on a Tell by applying the RoadSrc which corresponds to
-      // the Tell's
+      // the Tell's Message's "command" property
       
       let { command: cmd=null } = msg ?? {};
       if (!cmd) throw Error(`No Command provided`);
@@ -559,7 +495,7 @@ global.rooms['Hut'] = async foundation => {
       // `Object.assign(tmp, { src: this.roadSrcs[command] });` to
       // expose the RoadSrc to the consumer. Then this function can
       // become the single point where `this.roadSrcs` is populated (as
-      // of writing this there's an another instance in "enableAction")
+      // of writing this there's another instance in "enableAction")
       if (!this.roadSrcs[command]) this.roadSrcs[command] = Object.assign(Src(), { desc: () => `Hut ComSrc for "${command}"` });
       return this.roadSrcs[command];
       
@@ -651,7 +587,7 @@ global.rooms['Hut'] = async foundation => {
       tmp.endWith(hearSrc.route(async ({ msg, reply, ms, src, trg }) => {
         
         // `result` is either response data or resulting Error
-        let result = await safe( () => fn(msg, { ms, src, trg }) );
+        let result = await safe( () => fn(msg, { ms, src, trg }), err => err );
         if (result === skip) return reply(null);
         if (result === null) return reply(null);
         

@@ -7,7 +7,7 @@
 // TODO: Https servers should always be accompanied to an Http server
 // that redirects to https!!
 
-require('../clearing.js');
+require('../room/setup/clearing/clearing.js');
 
 let dbg = (...args) => gsc(...args);
 
@@ -242,8 +242,6 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   $remFp: (fp) => require('fs').promises.unlink(fp),
   $defaultDetails: Object.plain({
     
-    networkAddresses: [],
-    
     // Geographic heirarchical identifiers (and shortforms)
     geo0: 'earth', // planet
     geo1: '',      // continent/tectonic plate/hemisphere
@@ -294,18 +292,6 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
         details[`geoShort${n}`] = details[`geo${n}`].slice(0, 2);
     
     for (let n of 6) if (details[`geoShort${n}`].length > 2) throw Error(`Short geo names must be max 2 chars (got "${details['geoShort' + n]}")`);
-    
-    for (let addr of details.networkAddresses) {
-      if (!isForm(addr, String)) throw Error(`Addresses must be Strings (got ${getFormName(addr)})`);
-      if (/[\s]/.test(addr)) throw Error(`Domain "${addr.replace(/\r/g, '\\r').replace(/\n/g, '\\n')}" contains invalid whitespace`);
-    }
-    
-    details.networkAddresses = details.networkAddresses
-      .map(addr => addr.trim() || skip)
-      .sort((a, b) => a.localCompare(b));
-    
-    if (Set(details.networkAddresses).count() !== details.networkAddresses.count())
-      throw Error(`Make sure every provided network address is unique`);
     
     return details.map((v, k) => (k in Form.defaultDetails) ? v : skip);
     
@@ -387,22 +373,20 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
   },
   
-  // Note that for highly sensitive keys the given Keep should direct
-  // to a location on removable media (like a USB key) providing natural
-  // physical isolation
+  // Note that for sensitive keys the given Keep should be removable
+  // media (like a USB key) for physical isolation
   
-  init({ name, details={}, keep=null, secureBits=2048, crtType='selfSigned', ...more }={}) {
+  init({ name, details={}, keep=null, secureBits=2048, crtType='selfSigned', servers, getSessionKey, ...more }={}) {
     
     // Details that must be consistent across initializations:
-    // - name,
-    // - crtType,
-    // - secureBits,
-    // - requirePhysicalSafety,
-    // - org,
-    // - geo,
-    // - email,
-    // - password,
-    // - networkAddresses
+    // - name
+    // - crtType
+    // - secureBits
+    // - requirePhysicalSafety
+    // - org
+    // - geo
+    // - email
+    // - password
     
     if (secureBits && secureBits < 512) throw Error(`Use at least 512 secure bits`);
     if (!isForm(name, String) || !name) throw Error(`Must provide "name"`);
@@ -433,7 +417,6 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       // Misc
       subcon: Function.stub,
       
-      // Server management
       servers: []
       
     });
@@ -478,9 +461,11 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   desc() {
     
     let desc = getFormName(this);
+    
     let props = {};
     if (this.keep) props.keep = this.keep.desc();
-    if (this.details.networkAddresses.length) props.addrs = '[' + this.details.networkAddresses.join(', ') + ']';
+    let networkAddresses = this.servers.map(server => server.netAddr);
+    if (networkAddresses.length) props.addrs = '[' + networkAddresses.join(', ') + ']';
     
     return props.empty()
       ? `${getFormName(this)}( ${this.name} (${this.secureBits}) )`
@@ -615,12 +600,12 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     return Object.assign(prm, { proc, rawShellStr });
     
   },
-  getOsslConfigFileContent() {
+  getOsslConfigFileContent(networkAddresses=this.details.networkAddresses) {
     
     // TODO: Where does `this.details.password` go??
     
-    let [ commonName, ...altNames ] = this.details.networkAddresses;
-    if (!commonName) throw Error(`Require at least 1 domain`)
+    let [ commonName, ...altNames ] = networkAddresses;
+    if (!commonName) throw Error(`Supply at least 1 NetworkAddress`)
     
     return String.baseline(`
       | #.pragma [=] abspath:true
@@ -834,7 +819,15 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       
       // A SGN (as opposed to PRV, CSR, CRT) is a combination of all the
       // values needed to manage a server with  a certified identity, as
-      // well as some simple functionality to manage that identity
+      // well as some simple functionality to manage that identity:
+      //    | {
+      //    |   prv, csr, crt, invalidate,
+      //    |   validity: {
+      //    |     msElapsed,
+      //    |     msRemaining,
+      //    |     expiryMs
+      //    |   }
+      //    | }
       
       Form.subcon.sign('GET CERT', this.crtType);
       
@@ -849,10 +842,12 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       let validity = null
         ?? deets.data?.validity
         ?? deets.signatureAlgorithmShaWithrsaencryption?.validity;
+      if (!validity) throw Error(`Couldn't resolve "validity" from SGN`).mod({ deets });
+      
       let { notBefore, notAfter } = validity;
       
       let now = Date.now();
-      let preemptMs = 2 * 60 * 60 * 1000; // Consider expired 2hrs before expiry, in order to allow timely renewal
+      let preemptMs = 6 * 60 * 60 * 1000; // Consider expired 6hrs before expiry, in order to allow timely renewal
       return Object.assign(sgn, { validity: {
         msElapsed: (now - notBefore.getTime()),
         msRemaining: (notAfter.getTime() - now) - preemptMs,
@@ -906,8 +901,8 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       
       // Note this doesn't invalidate `prv`, which can safely be reused!
       await Promise.all([
-        this.keep.seek('selfSign', 'csr').setContent(null),
-        this.keep.seek('selfSign', 'crt').setContent(null)
+        this.keep.seek('selfSign', 'csr').rem(),
+        this.keep.seek('selfSign', 'crt').rem()
       ]);
       
     }};
@@ -1245,8 +1240,8 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       
       // Note this doesn't invalidate `prv`, which can safely be reused!
       await Promise.all([
-        this.keep.seek('acme', type, 'csr').setContent(null),
-        this.keep.seek('acme', type, 'crt').setContent(null)
+        this.keep.seek('acme', type, 'csr').rem(),
+        this.keep.seek('acme', type, 'crt').rem()
       ]);
       
     }};
@@ -1284,47 +1279,42 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     return Promise.all(servers.map(server => server.serverShut()));
     
   },
-  manageServer(server) {
+
+  async startServers() {
     
-    // This is a "permanent" operation; no way to "unmanage"
+    // TODO: Certify every NetworkAddress in `this.servers`
     
-    let canManageServer = false
-      || this.secureBits === 0
-      || this.details.networkAddresses.has(server.netAddr);
-    if (!canManageServer) throw Error(`${this.desc()} doesn't support NetworkAddress "${server.netAddr}"`);
-    
-    this.servers.push(server);
-    
-    return server;
+    return this.runManagedServers();
     
   },
-  runManagedServers() {
+  addServer(server) { this.servers.add(server); },
+  runOnNetwork() {
     
     let sc = Form.subcon.server;
     
-    if (this.redirectHttp80 && !this.servers.find(server => server.port === 80).found) {
+    // Try to redirect http->https if port 80 isn't otherwise used
+    // TODO: A NetworkIdentity can't know if *another* NetworkIdentity
+    // is occupying a port
+    
+    let httpsServer = this.servers.find(server => server.secure && server.protocol === 'http').val;
+    let port80Server = this.servers.find(server => server.port === 80);
+    if (this.redirectHttp80 && !port80Server && httpsServer) {
       
-      let httpsServer = this.servers.find(server => server.secure && server.protocol === 'http').val;
-      if (httpsServer) {
-        
-        sc(`Will redirect http port 80 to -> ${httpsServer.desc()}`);
-        let { netAddr, port: httpsPort } = httpsServer;
-        let redirectServer = require('./httpServer.js')({
-          secure: false, netAddr, port: 80,
-          doCaching: false,
-          msFn: () => Date.now(),
-          processCookie: () => null,
-          processBody: () => null,
-          getKeyedMessage: () => ({ key: null, msg: null })
-        });
-        redirectServer.intercepts.push((req, res) => {
-          res.writeHead(302, { 'Location': `https://${netAddr}:${httpsPort}${req.url}` }).end();
-          return true;
-        });
-        
-        this.servers.push(redirectServer);
-        
-      }
+      sc(`Will redirect http port 80 to -> ${httpsServer.desc()}`);
+      let { netAddr, port: httpsPort } = httpsServer;
+      let redirectServer = require('./httpServer.js')({
+        secure: false, netAddr, port: 80,
+        doCaching: false,
+        msFn: () => Date.now(),
+        getKeyedMessage: () => ({ key: null, msg: null }),
+        errSubcon: global.subcon('warning')
+      });
+      redirectServer.intercepts.push((req, res) => {
+        res.writeHead(302, { 'Location': `https://${netAddr}:${httpsPort}${req.url}` }).end();
+        return true;
+      });
+      
+      this.servers.push(redirectServer);
       
     }
     

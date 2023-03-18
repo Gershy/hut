@@ -6,7 +6,7 @@ global.rooms['timeStepWorld2'] = async foundation => {
     'record'
   ]);
   
-  let TimeStepper = U.form({ name: 'TimeStepper', props: (forms, Form) => ({
+  let TimeStepper = form({ name: 'TimeStepper', props: (forms, Form) => ({
     
     init: function({ fps=60, fn }) {
       
@@ -121,7 +121,7 @@ global.rooms['timeStepWorld2'] = async foundation => {
       
       //console.log('REASON:', reason);
       let undoFn = this.fn(this.steppedMs, ms, inputState);
-      if (!U.hasForm(undoFn, Function)) throw Error(`Step function must return Function (got ${U.getFormName(undoFn)})`);
+      if (!hasForm(undoFn, Function)) throw Error(`Step function must return Function (got ${getFormName(undoFn)})`);
       this.undos.add({ headMs: this.steppedMs, tailMs: ms, fn: undoFn });
       return this.steppedMs = ms;
       
@@ -150,17 +150,17 @@ global.rooms['timeStepWorld2'] = async foundation => {
     
   })});
   
-  let TimeStepWorld = U.form({ name: 'TimeStepWorld', has: { Tmp }, props: (forms, Form) => ({
+  let TimeStepWorld = form({ name: 'TimeStepWorld', has: { Tmp }, props: (forms, Form) => ({
     
     init: function({ dep, hut, world, real, fps, stepFn, renderFn, ...moreArgs }) {
       
       if (!world.getValue().has('ctrlSet')) throw Error(`World missing direct "ctrlSet" value`);
-      if (!U.hasForm(world.getValue().ctrlSet, Object)) throw Error(`World "ctrlSet" value should be Object (got ${U.getFormName(world.getValue().ctrlSet)})`);
-      if (world.getValue().ctrlSet.find(v => !U.isForm(v, Number)).found) throw Error(`World "ctrlSet" value should have every prop set to a number (key code)`);
+      if (!hasForm(world.getValue().ctrlSet, Object)) throw Error(`World "ctrlSet" value should be Object (got ${getFormName(world.getValue().ctrlSet)})`);
+      if (world.getValue().ctrlSet.find(v => !isForm(v, Number)).found) throw Error(`World "ctrlSet" value should have every prop set to a number (key code)`);
       if (world.getValue().ctrlSet.find(v => v !== Math.floor(v)).found) throw Error(`World "ctrlSet" value should have every prop set to an integer`);
       
       if (!world.getValue().has('ms')) throw Error(`World missing direct "ms" value`);
-      if (!U.isForm(world.getValue().ms, Number)) throw Error(`World "ms" value should be Number (got ${U.getFormName(world.getValue().ms)})`)
+      if (!isForm(world.getValue().ms, Number)) throw Error(`World "ms" value should be Number (got ${getFormName(world.getValue().ms)})`)
       
       let { artLayoutParams={ pixelDensityMult: 1 } } = moreArgs;
       
@@ -203,12 +203,12 @@ global.rooms['timeStepWorld2'] = async foundation => {
           
           /// {ABOVE=
           
-          if (!U.isForm(vals, Object)) throw Error(`Ctrl vals should be Object`);
+          if (!isForm(vals, Object)) throw Error(`Ctrl vals should be Object`);
           
           let initSet = hutController.getValue().ctrlSet;
           let issues = vals.toArr((v, k) => {
             if (!initCtrlSet.has(k)) return `Unexpected ctrl term "${k}"`;
-            if (!U.isForm(v, Number)) return `Ctrl term "${k}" is non-numeric`;
+            if (!isForm(v, Number)) return `Ctrl term "${k}" is non-numeric`;
             if (v !== Math.floor(v)) return `Ctrl term "${k}" is non-integer`;
             if (v < 0 || v > 1000) return `Ctrl term "${k}" out of bounds`;
             return C.skip;

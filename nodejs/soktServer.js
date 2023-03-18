@@ -1,9 +1,11 @@
 'use strict';
 
+require('../room/setup/clearing/clearing.js');
+
 module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   
   let { subcon=Function.stub, errSubcon=Function.stub } = opts;
-  let { msFn=Date.now, getKey, heartbeatMs=60*1000 } = opts;
+  let { getKey, heartbeatMs=60*1000 } = opts;
   if (!getKey) throw Error(String.baseline(`
     | Must provide "getKey":
     | It must be a Function like: ({ query }) => key
@@ -221,10 +223,10 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     let readableFn = null;
     let closeFn = null;
     let errorFn = null;
-    global.setImmediate(() => { wsIncoming(initialBuff, msFn()); initialBuff = null; });
+    global.setImmediate(() => { wsIncoming(initialBuff, getMs()); initialBuff = null; });
     socket.on('readable', readableFn = () => {
       
-      let ms = msFn();
+      let ms = getMs();
       let buff = socket.read();
       if (!buff) return socket.end(); // `socket.read` can return `null` to indicate end of stream
       wsIncoming(buff, ms);

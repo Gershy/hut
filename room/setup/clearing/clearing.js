@@ -4,9 +4,6 @@
 
 /// {ASSERT=
 if (!global) throw Error(`"global" must be available`);
-if (!global.gsc) global.gsc = console.log;
-if (!global.rooms) { global.rooms = {}; gsc(`Notice: defaulted global.rooms`); }
-if (!global.mmm) global.mmm = v => v;
 /// =ASSERT}
 
 Object.assign(global, {
@@ -19,7 +16,9 @@ Object.assign(global, {
       function() { throw Error(`${getFormName(this)} does not implement "${name}"`); },
       { '~noFormCollision': true /* TODO: Use Symbol instead? */ }
     ),
+    /// {DEBUG=
     dbgCntMap: {},
+    /// =DEBUG}
     'Promise.all': Promise.all.bind(Promise)
   }),
   skip: undefined
@@ -61,7 +60,7 @@ Object.assign(global, {
     Object.defineProperties(Cls.prototype, Object.fromEntries(
       keys
         .filter(key => key[0] !== '$')
-        .map(key => [ key, { value: vals[key], enumerable: false, writable: true } ])
+        .map(key => [ key, { enumerable: false, writable: true, value: vals[key] } ])
     ));
     
   };
@@ -111,9 +110,8 @@ Object.assign(global, {
       for (let [ k, v ] of o) {
         
         // Non-Object properties are simple
-        if (!isForm(v, Object)) { this[k] = v; continue; }
-        
-        if (!isForm(this[k], Object) || !this.has(k)) this[k] = {};
+        if (v?.constructor !== Object) { this[k] = v; continue; }
+        if (this[k]?.constructor !== Object || !this.has(k)) this[k] = {};
         this[k].merge(v);
         
       }
@@ -215,6 +213,7 @@ Object.assign(global, {
       
     },
     $base32: '0123456789abcdefghijklmnopqrstuv',
+    $base36: '0123456789abcdefghijklmnopqrstuvwxyz',
     $base62: '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ',
     $base64: '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ=-',
     
@@ -318,7 +317,8 @@ Object.assign(global, {
   protoDefs(Function, {
     
     $stub: v => v,
-    $createStub: v => () => v
+    $createStub: v => () => v,
+    bound: function(...args) { return this.bind(null, ...args); }
     
   });
   protoDefs(Error, {
@@ -327,55 +327,86 @@ Object.assign(global, {
     
     mod(props={} /* { cause, msg, message, ...more } */) {
       
-      if (isForm(props, Function)) props = props(this.message);
+      if (isForm(props, Function)) props = props(this.message, this);
       if (isForm(props, String)) props = { message: props };
       
       let { cause=null, msg=null, message=msg??this.message, ...moreProps } = props;
       
-      if (cause && !message)    message = cause.message;
-      if (cause && !this.stack) this.stack = cause.stack;
-      
-      let reflectMessageChangeInStack = true
-        && this.stack
-        && this.message
-        && message !== this.message
-        && this.stack.has(this.message);
-      if (reflectMessageChangeInStack) this.stack = this.stack.replace(this.message, message);
-      
-      // Assign `cause` to transfer props like "code", etc.
+      // Assign `cause` to transfer props like fs "code" props, etc.
       // Assign `moreProps` to transfer any other properties
       // Add `message` prop
       // Only add `cause` prop if `cause` is non-null
-      return Object.assign(this, cause, moreProps, { message }, cause ? { cause } : null);
+      return Object.assign(this, cause, moreProps, cause ? { message, cause } : { message });
       
     },
-    propagate(props /* { cause, msg, message, ...more } */) { throw this.mod(props); }
+    propagate(props /* { cause, msg, message, ...more } */) { throw this.mod(props); },
     
-  });
-  protoDefs(Date, {
-    
-    $now: Date.now,
-    $nowStr: (...args) => (new Date()).format(...args),
-    
-    format(dateSep='-', sep=' ', timeSep=':', msSep='.') {
+    desc(seen=Set()) {
       
-      return [
-        this.getUTCFullYear(),
-        dateSep,
-        (this.getUTCMonth() + 1).toString(10).padHead(2, '0'),
-        dateSep,
-        this.getUTCDate().toString(10).padHead(2, '0'),
-        sep,
-        this.getUTCHours().toString(10).padHead(2, '0'),
-        timeSep,
-        this.getUTCMinutes().toString(10).padHead(2, '0'),
-        timeSep,
-        this.getUTCSeconds().toString(10).padHead(2, '0'),
-        msSep,
-        this.getUTCMilliseconds().toString(10).padHead(3, '0')
-      ].join('');
+      // Errors have a Message and a Stack
+      // Stacks are a Preamble followed by a Trace
+      // A Trace is a sequence of Codepoints
       
-    }
+      // Note that Error -> String conversion expects the Message and
+      // Stack to be formatted according to these principles:
+      // - Within the Stack, the Preamble is separated from the Trace
+      //   using the string "\n<trace begin>\n"
+      
+      if (seen.has(this)) return '<circ>';
+      seen.add(this);
+      
+      let { message: msg, stack, cause, ...props } = this;
+      let [ preamble, lines ] = stack.cut('\n<trace begin>\n');
+      
+      // We want to show the Message and Preamble; depending how the
+      // Error is generated one may contain the other - if so we show
+      // whichever is the superset, otherwise we concatenate them (we
+      // always show *all* information)
+      [ msg, preamble ] = [ msg, preamble ].map(v => v.trim());
+      let fullMsg = null;
+      if (preamble.has(msg))      fullMsg = preamble;
+      else if (msg.has(preamble)) fullMsg = msg;
+      else                        fullMsg = `${msg}\n${preamble}`;
+      
+      // Replace any filepaths within `fullMsg`
+      fullMsg = fullMsg.trim().split('\n').map(line => {
+        
+        let match = line.trim().match(/^((?:[/]|[A-Z][:][/\\])[^:]+)[:]([0-9]+)(?:[:]([0-9]+))?$/);
+        if (!match) return line;
+        let [ , file, row, col=null ] = match;
+        return col
+          ? `${file.replace(/[\\]+/g, '/')} [${row}:${col}]`
+          : `${file.replace(/[\\]+/g, '/')} [${row}]`;
+        
+      }).join('\n');
+      
+      lines = lines.split('\n').map(ln => {
+        let [ fnName, file, row, col ] = ln.split(' + ');
+        let obj = mapSrcToCmp(file, row, col); // `{ file, row, col, context }`
+        return { ...obj, row: obj.row.toString(10), col: obj.col.toString(10) };
+      });
+      
+      let fileChars = Math.max(...lines.map(line => line.file.length));
+      let rowChars = Math.max(...lines.map(line => line.row.length));
+      let colChars = Math.max(...lines.map(line => line.col.length));
+      lines = lines.map(({ file, row, col }) => `${file.padTail(fileChars)} [${row.padHead(rowChars)}:${col.padHead(colChars)}]`);
+      
+      let desc = `${fullMsg || getFormName(this)}\n${lines.join('\n').indent('\u2022 ')}`;
+      
+      if (!props.empty()) try { desc += `\nPROPS:\n${valToJson(props).indent(2)}`; } catch (err) {}
+      
+      if (cause) {
+        
+        if (hasForm(cause, Error)) cause = cause.desc(seen);
+        else                       cause = cause.map(err => err.desc(seen)).join('\n');
+        desc += `\nCAUSE:\n${cause.indent(2)}`;
+        
+      }
+      
+      return desc;
+      
+    },
+    toString() { return this.desc(); }
     
   });
   
@@ -485,42 +516,57 @@ Object.assign(global, {
 }
 
 // Define Hut's native global functionality
-Object.assign(global, {
+Object.assign(global, global.rooms['setup.clearing'] = {
   
-  U: global,
+  // To truly initialize the Clearing need to override:
+  // - global.formatAnyValue
+  // - global.subconOutput
+  // - global.getMs
+  // - global.getRooms
+  // - global.mapSrcToCmp
+  // - global.keep
+  // - global.conf
   
+  /// {DEBUG=
   // Debug
   dbgCnt: name => C.dbgCntMap[name] = (C.dbgCntMap.has(name) ? C.dbgCntMap[name] + 1 : 0),
+  /// =DEBUG}
   
   // Flow controls, sync/async interoperability
-  onto: (val, ...fns) => (fns.each(fn => fn(val)), val),
-  safe: (fn, onErr=e=>e) => {
+  onto: (val, ...fns) => { for (let fn of fns) fn(val); return val; },
+  safe: (fn, onErr) => {
     
-    // Allow `onErr` to be provided as a constant
-    if (!isForm(onErr, Function)) onErr = Function.createStub(onErr);
-    try         { let r = fn(); return isForm(r, Promise) ? r.fail(onErr) : r; }
+    // Returns `fn()` with error handling provided by `onErr` regardless
+    // of whether `fn()` results in a Promise or an immediate value
+    
+    /// {DEBUG=
+    if (!isForm(onErr, Function)) throw Error('Api: "onErr" must be a Function');
+    /// =DEBUG}
+    
+    try         { let val = fn(); return isForm(val, Promise) ? val.fail(onErr) : val; }
     catch (err) { return onErr(err); }
     
   },
-  then: (v, rsv=Function.stub, rjc=null) => {
+  soon: fn => fn ? Promise.resolve().then(fn) : Promise.resolve(),
+  then: (val, rsv=Function.stub, rjc=null) => {
     
-    // Act on `v` regardless of whether it's a Promise or an immediate
-    // value. This function will return the result of `rsv(v)` either
-    // immediately, or as a Promise.
+    // Act on `val` regardless of whether it's a Promise or an immediate
+    // value; return `rsv(val)` either immediately or as a Promise;
     
     // Promises are returned with `then`/`fail` handling
-    if (v instanceof Promise) return v.then(rsv).catch(rjc);
+    if (val instanceof Promise) return val.then(rsv).catch(rjc);
     
     // No `rjc` means no `try`/`catch` handling
-    if (!rjc) return rsv(v);
+    if (!rjc) return rsv(val);
     
-    try         { return rsv(v); }
-    catch (err) { return rjc(err); }
+    try { return rsv(val); } catch (err) { return rjc(err); }
     
   },
-  thenAll: (v, ...args /* rsv, rjc */) => {
-    if (v.find(v => v instanceof Promise).found) v = Promise.all(v);
-    return then(v, ...args);
+  thenAll: (vals, ...args /* rsv, rjc */) => {
+    
+    if (vals.find(v => v instanceof Promise).found) vals = Promise.all(vals);
+    return then(vals, ...args);
+    
   },
   
   // Forms
@@ -684,12 +730,17 @@ Object.assign(global, {
     return Form;
     
   },
-  isFormFn: Form => Form && Form['~forms'],
+  getFormName: f => {
+    if (f === null) return 'Null';
+    if (f === undefined) return 'Undefined';
+    if (f !== f) return 'UndefinedNumber';
+    return f?.constructor?.name ?? 'Prototypeless'; // e.g. `getFormName(Object.plain()) === 'Prototypeless'`
+  },
   isForm: (fact, Form) => {
     
     // NaN only matches against the NaN primitive (not the Number Form)
     if (fact !== fact) return Form !== Form;
-    if (Form === null) return fact === null;
+    if (fact === null) return Form === null;
     
     // Prefer to compare against `FormNative`. Some native Cls
     // references represent the hut-altered form (e.g. they have an
@@ -724,25 +775,81 @@ Object.assign(global, {
     return (fact instanceof (FormOrCls.Native || FormOrCls));
     
   },
-  getFormName: f => {
-    if (f === null) return 'Null';
-    if (f === undefined) return 'Undefined';
-    if (f !== f) return 'NaN';
-    return f?.constructor?.name ?? 'Prototypeless'; // e.g. `getFormName(Object.plain()) === 'Prototypeless'`
+  
+  // Keep access
+  keep: () => null,
+  
+  // Configuration
+  conf: () => null,
+  
+  // Network
+  createServer: () => null,
+  
+  // Timing
+  getMs: Date.now,
+  getDate: (n=getMs()) => (new Date(n)).toLocaleString().replace(',', '').replace(' a.m.', 'am').replace(' p.m.', 'pm'),
+  
+  // Room loading
+  getRooms: (names, { shorten=true, ...opts }={}) => { throw Error('Not implemented'); },
+  getRoom: (name, opts={}) => then(getRooms([ name ], { ...opts, shorten: false }), batch => batch[name]),
+  mapSrcToCmp: (file, row, col) => gsc('yikes') ?? ({ file, row, col, context: null }),
+  
+  // Subcon debug
+  subcon: (term, opts={}) => {
+    term = term.replace(/[.]/g, '->');
+    let sc = (...args) => subconOutput(sc, ...args);
+    return Object.assign(sc, { term, opts, kid: (kt, o={}) => subcon(`${term}->${kt}`, { ...opts, ...o }) });
+  },
+  subconOutput: (sc, ...args) => {
+    console.log(`\nSubcon "${sc.term}": ${global.formatAnyValue(args)}`);
+  },
+  
+  // Urls
+  urlRaw: ({ path='', query }) => {
+    query = query.toArr((v, k) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+    return query ? `/${path}?${query}` : `/${path}`; // TODO: Sanitize `path`? (But note it needs to be allowed to have "/" - e.g. "/!static/path/to/resource.jpg")
+  },
+  url: ({ path='', query }) => {
+    
+    let maturity = conf('deploy.maturity');
+    
+    let ver = null;
+    
+    // In "dev" use a random version to dodge the cache
+    if      (maturity === 'dev')   ver = (Number.int32 * Math.random()).encodeStr(String.base32, 7);
+    
+    // In "beta" use process uid (refreshes once when Above restarts)
+    else if (maturity === 'beta')  ver = conf('deploy.loft.uid');
+    
+    // TODO: How are we caching in alpha?
+    else if (maturity === 'alpha') ver = null;
+    
+    return global.urlRaw(ver ? { path, query: { ...query, '!': ver } } : { path, query });
+    
   },
   
   // Util
+  formatAnyValue: val => { try { return valToJson(val); } catch (err) { return '<unformattable>'; } },
   valToJson: JSON.stringify,
   jsonToVal: JSON.parse,
-  
   valToSer: JSON.stringify,
   serToVal: JSON.parse
   
 });
 
-{ // Define global Forms: Endable, Src, Tmp, etc.
+/// {ASSERT=
+if (!global.mmm)   global.mmm = Function.stub;
+if (!global.gsc)   global.gsc = subcon('gsc'); // "global subcon"
+if (!global.rooms) global.rooms = gsc(`Notice: defaulted global.rooms`) ?? Object.create(null);
+/// =ASSERT}
 
+{ // Define global Forms: Endable, Src, Tmp, etc.
+  
   let Endable = form({ name: 'Endable', props: (forms, Form) => ({
+    
+    // An entity that can become permanently invalidated; no properties
+    // are required, but a "cleanup" property may get defined by passing
+    // a Function to the `init` method
     
     $turnOffDefProp: { value: () => false, enumerable: true, writable: true, configurable: true },
     
@@ -782,7 +889,7 @@ Object.assign(global, {
       //    |   uponSomeCondition(() => e.end());
       //    | };
       // 
-      // If "~refCount" initialized to 1, it would be necessary for
+      // If "~refCount" initialized to 1 it would be necessary for
       // `initMyEndable` to be aware that the `e` it is initializing is
       // destined to be ref'd (by `doThingThatRefsEndable`). This is
       // because `doThingThatRefsEndable` will call `e.ref()`, setting
@@ -821,7 +928,10 @@ Object.assign(global, {
   
   let Src = form({ name: 'Src', props: (forms, Form) => ({
     
-    init() { this.fns = Set(); },
+    init(newRoute) {
+      this.fns = Set();
+      newRoute && Object.defineProperty(this, 'newRoute', { value: newRoute });
+    },
     newRoute(fn) {},
     route(fn, mode='tmp') {
       
@@ -1071,7 +1181,11 @@ Object.assign(global, {
     
   })});
   
-  let Keep = form({ name: 'Keep', pars: { Slots }, props: (forms, Form) => ({
+  let Keep = form({ name: 'Keep', has: { Slots }, props: (forms, Form) => ({
+    
+    // Ansi red
+    $separator: '\u0010', //'\u22b3', //'\u25b8', // '\u00bb', //'\u25bb', //'\u25b7', //'\u25b8', //'\u2192', //'\u25b7',
+    $components: str => str.split(Form.sep).slice(1),
     
     init() {},
     
@@ -1091,87 +1205,6 @@ Object.assign(global, {
     
   })});
   
-  let Conf = form({ name: 'Conf', pars: { Slots }, props: (forms, Form) => ({
-    
-    $stub: Object.freeze({
-      name: 'stub',
-      desc: () => '<stub>',
-      setVal: Function.stub,
-      val: null,
-      seek: () => Form.stub,
-      access: () => Form.stub
-    }),
-    
-    init({ name, schema=Object.plain(), val=null }={}) {
-      
-      /// {ASSERT=
-      if (schema === null) throw Error(`Schema can't be null`);
-      if (!name) throw Error(`Must provide "name"`);
-      /// =ASSERT}
-      
-      forms.Slots.init.call(this);
-      Object.assign(this, { name, schema, val, par: null, kids: Object.plain() });
-      
-    },
-    chain(ret=[], ptr=this) {
-      while (ptr) { ret.unshift(ptr); ptr = ptr.par; }
-      return ret;
-    },
-    cname() { return this.chain().slice(1).map(c => c.name).join('.'); },
-    access(name) {
-      // Accessing a non-existing `name` results in a Stub
-      return this.kids[name] || Form.stub;
-    },
-    
-    setVal(val=null) {
-      
-      // Set `this.val` (using `this.schema.fn` if possible). Note we're
-      // careful to immediately set `this.val` to non-null, in case
-      // `this.schema.fn` winds up recursively calling `this.setVal` we
-      // don't instantiate a 2nd process to resolve `this.val`!
-      
-      if (this.schema.fn) val = this.schema.fn(val, this);
-      
-      // Immediately initialize `this.val` to a deferred-style Promise.
-      // Silence rejections from `this.val`; `setVal` will still return
-      // a rejected Promise if anything fails asynchronously, and any
-      // attempt by the consumer to interface with the silenced rejected
-      // result will still result in an Error because the following
-      // causes an unhandled rejection:
-      //    | let rejected = Promise((rsv, rjc) => setTimeout(rjc, 100));
-      //    | rejected.catch(err => {});     // Silenced
-      //    | rejected.then(val => { ... }); // Causes unhandled rejection regardless of previous silencing
-      let prm = this.val = Promise.later();
-      prm.catch(() => {});
-      
-      return then(val,
-        val => { prm.resolve(val); return this.val = val; },
-        err => { prm.reject(err); throw err; }
-      );
-      
-    },
-    
-    addKid(kid) {
-      
-      if (isForm(kid, Object)) kid = new this.Form(kid);
-      
-      /// {DEBUG=
-      if (kid.par) throw Error(`Kid "${kid.name}" already has parent`);
-      if (this.kids[kid.name]) throw Error(`Already have child named "${kid.name}"`);
-      /// =DEBUG}
-      
-      if (this.schema.kids) kid.schema = this.schema.kids[kid.name] ?? this.schema.kids['*'] ?? Object.plain();
-      
-      kid.par = this;
-      this.kids[kid.name] = kid;
-      
-      return kid;
-      
-    },
-    getKid(name) { return this.kids[name] || this.addKid({ name }); }
-    
-  })});
-  
-  Object.assign(global, { Endable, Src, Tmp, Slots, Keep, Conf });
+  Object.assign(global, { Endable, Src, Tmp, Slots, Keep });
   
 }

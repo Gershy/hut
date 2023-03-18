@@ -27,12 +27,12 @@ global.rooms['timeStepWorld'] = async foundation => {
     
   };
   
-  let Entity = U.form({ name: 'Entity', has: { Rec }, props: (forms, Form) => ({
+  let Entity = form({ name: 'Entity', has: { Rec }, props: (forms, Form) => ({
     
     // TODO: This is SO JANKY, but doesn't look like there's another way
     // to achieve the same effect (preventing conflicting prop names).
     // Note that this is awkward to maintain; properties may be renamed,
-    // added or removed from U.logic.Endable, U.logic.Src, and
+    // added or removed from logic.Endable, logic.Src, and
     // foundation.getRoom('record').Rec - in such cases, this list would
     // need to be altered as well! The missing ingredient to implement
     // this correctly is information available on Forms (not on Facts)
@@ -55,28 +55,28 @@ global.rooms['timeStepWorld'] = async foundation => {
     relProps: function() { return []; },
     init: function(rt, uid, mems, val) {
       
-      if (!val) throw Error(`${U.getFormName(this)} missing "val" param`);
+      if (!val) throw Error(`${getFormName(this)} missing "val" param`);
       
       // Get props, and list of sync prop names
       let props = this.initProps(val);
-      if (!U.isForm(props, Object)) throw Error(`${U.getFormName(this)}.prototype.initProps should return Object; get ${U.getFormName(props)}`);
+      if (!isForm(props, Object)) throw Error(`${getFormName(this)}.prototype.initProps should return Object; get ${getFormName(props)}`);
       
       // Prevent any properties whose names conflict with the member
       // properties of Rec (and Endable and Tmp, inherited by Rec).
       for (let k in props) if (this[k] !== C.skip || Form.conflictPropNames.has(k))
-        throw Error(`Conflicting prop name for ${U.getFormName(this)}: "${k}"`);
+        throw Error(`Conflicting prop name for ${getFormName(this)}: "${k}"`);
       
       // Move properties from `props` to `syncProps` as appropriate
       let syncProps = {};
       let sProps = this.syncProps();
-      if (Set(sProps).size !== sProps.length) throw Error(`${U.getFormName(this)} defines sync properties multiple times (potentially through polymorphism)`);
-      for (let spn of sProps) if (!props.has(spn)) throw Error(`${U.getFormName(this)} missing sync prop "${spn}"`);
+      if (Set(sProps).size !== sProps.length) throw Error(`${getFormName(this)} defines sync properties multiple times (potentially through polymorphism)`);
+      for (let spn of sProps) if (!props.has(spn)) throw Error(`${getFormName(this)} missing sync prop "${spn}"`);
       for (let spn of sProps) { syncProps[spn] = props[spn]; delete props[spn]; }
       
       let relProps = {};
       let rProps = this.relProps();
-      if (Set(rProps).count() !== rProps.count()) throw Error(`${U.getFormName(this)} defines rel properties multiple times (potentially through polymorphism)`);
-      for (let rpn of rProps) if (!props.has(rpn)) throw Error(`${U.getFormName(this)} missing rel prop "${rpn}");`);
+      if (Set(rProps).count() !== rProps.count()) throw Error(`${getFormName(this)} defines rel properties multiple times (potentially through polymorphism)`);
+      for (let rpn of rProps) if (!props.has(rpn)) throw Error(`${getFormName(this)} missing rel prop "${rpn}");`);
       for (let rpn of rProps) { relProps[rpn] = props[rpn]; delete props[rpn]; }
       
       // Attach all local properties
@@ -85,7 +85,7 @@ global.rooms['timeStepWorld'] = async foundation => {
       // Define getter+setter for synced properties
       for (let spn in syncProps) Object.defineProperty(this, spn, {
         get: function() { return this.getValue()[spn]; },
-        set: function(v) { if (v !== v) { console.log(foundation.formatError(Error(`${U.getFormName(this)}.${spn} = NaN;`))); process.exit(0); } this.mod({ [spn]: v }); },
+        set: function(v) { if (v !== v) { console.log(foundation.formatError(Error(`${getFormName(this)}.${spn} = NaN;`))); process.exit(0); } this.mod({ [spn]: v }); },
         enumerable: true,
         configurable: true
       });
@@ -98,7 +98,7 @@ global.rooms['timeStepWorld'] = async foundation => {
       // given a WorldState
       for (let rpn in relProps) Object.defineProperty(this, rpn, {
         get: Form.rpnFn.bind(this, rpn), // So e.g. `ParEnt(...).child(ws) === ChildEnt(...)`
-        set: function(entity) { return this.mod({ [rpn]: entity && (U.isForm(entity, String) ? entity : entity.uid) }); },
+        set: function(entity) { return this.mod({ [rpn]: entity && (isForm(entity, String) ? entity : entity.uid) }); },
         enumerable: true,
         configurable: true
       });
@@ -108,9 +108,9 @@ global.rooms['timeStepWorld'] = async foundation => {
       // would prevent any need for `Form.conflictPropNames`...
       
       forms.Rec.init.call(this, rt, uid, mems, {
-        form: U.getFormName(this),
+        form: getFormName(this),
         ...syncProps,
-        ...relProps.map( v => v && (U.isForm(v, String) ? v : v.uid) )
+        ...relProps.map( v => v && (isForm(v, String) ? v : v.uid) )
       });
       
     },
@@ -120,11 +120,11 @@ global.rooms['timeStepWorld'] = async foundation => {
     
   })});
   
-  let TreeEntity = U.form({ name: 'TreeEntity', has: { Entity }, props: (forms, Form) => ({
+  let TreeEntity = form({ name: 'TreeEntity', has: { Entity }, props: (forms, Form) => ({
     getParNode: function(ws) { return null; },
   })});
   
-  let GeomEntity = U.form({ name: 'GeomEntity', has: { TreeEntity }, props: (forms, Form) => ({
+  let GeomEntity = form({ name: 'GeomEntity', has: { TreeEntity }, props: (forms, Form) => ({
     
     initProps: fa(forms, 'initProps', (i, arr, val) => {
       
@@ -150,15 +150,15 @@ global.rooms['timeStepWorld'] = async foundation => {
     
   })});
   
-  let World = U.form({ name: 'World', has: { Entity }, props: (forms, Form) => ({
+  let World = form({ name: 'World', has: { Entity }, props: (forms, Form) => ({
     
     initProps: fa(forms, 'initProps', (i, arr, val) => {
       
       let { ms=foundation.getMs(), lastMs=ms, hut=null, huts=[], random=null, fps=60, updFps=fps, rndFps=60 } = val;
       
       /// {ABOVE=
-      if (hut    === null) throw Error(`${U.getFormName(i)} requires "hut" param`);
-      if (random === null) throw Error(`${U.getFormName(i)} requires "random" param`);
+      if (hut    === null) throw Error(`${getFormName(i)} requires "hut" param`);
+      if (random === null) throw Error(`${getFormName(i)} requires "random" param`);
       /// =ABOVE}
       
       return ({}).gain(...arr, { hut, huts, random, ms, lastMs, fps, updFps, rndFps });
@@ -290,12 +290,12 @@ global.rooms['timeStepWorld'] = async foundation => {
       let modCtrlValsAct = dep(hut.enableAction(`${pfx}.modCtrlVals`, ({ vals }) => {
         /// {ABOVE=
         
-        if (!U.isForm(vals, Object)) throw Error(`Ctrl vals should be Object`);
+        if (!isForm(vals, Object)) throw Error(`Ctrl vals should be Object`);
         
         let initSet = this.getInitCtrlSet();
         let issues = vals.toArr((v, k) => {
           if (!initSet.has(k)) return `Unexpected ctrl term "${k}"`;
-          if (!U.isForm(v, Number)) return `Ctrl term "${k}" is non-numeric`;
+          if (!isForm(v, Number)) return `Ctrl term "${k}" is non-numeric`;
           if (v < 0 || v > 1000) return `Ctrl term "${k}" out of bounds`;
           return C.skip;
         });

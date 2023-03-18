@@ -19,7 +19,7 @@ let niceRegex = (...args) => {
   for (let col of cols) if (col.size > 1) throw Error(`Conflicting values at column ${num}: [${[ ...col ].join('')}]`);
   /// =DEBUG}
   
-  return new RegExp(cols.map(col => [ ...col ][0]).join(''), flags);
+  return RegExp(cols.map(col => [ ...col ][0]).join(''), flags);
   
 };
 
@@ -99,7 +99,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
     },
     
     $HoneyPotKeep: form({ name: 'HoneyPotKeep', has: { Keep }, props: (forms, Form) => ({
-      init(data=[ 'passwords', 'keys', 'tokens', 'secrets', 'credentials', 'bitcoin', 'wallet', 'honey' ]) { this.data = data; },
+      init(data=[ 'passwords', 'keys', 'tokens', 'secrets', 'credentials', 'bitcoin', 'wallet', 'vault', 'config' ]) { this.data = data; },
       access() { return this; },
       exists() { return true; },
       setContentType() { return this; },
@@ -194,13 +194,8 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       let names = await hutTrn.getKidNames(this.fp);
       return names.map(fp => this.blacklist.has(fp) ? skip : fp);
     },
-    async countChildren(opts={}) { return hutTrn.getKidNames(this.fp).then(names => names.length); },
     async getHeadPipe() { return hutTrn.getDataHeadStream(this.fp); },
     async getTailPipe() { return hutTrn.getDataTailStream(this.fp); },
-    async listChildren() {
-      let names = await hutTrn.getKidNames(this.fp);
-      return names.map(n => this.blacklist.has(n) ? skip : [ n, this.access(n) ]);
-    },
     iterateChildren(dbg=Function.stub) {
       
       // Returns { [Symbol.asyncIterator]: fn, close: fn }
@@ -211,7 +206,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
   })}),
   
   // Note that "#", a totally irrelevant character, is replaced with "`"
-  // making it simpler to insert literal backtick chars
+  // making it simpler to indicate literal backtick chars
   $captureLineCommentRegex: niceRegex(String.baseline(`
     | (?<=                                  )
     |     ^(      |       |       |       )*
@@ -570,7 +565,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
     forms.Foundation.init.call(this);
     
     Object.assign(this, {
-      resetCmpPrm: this.seek('keep', 'compiledFileSystem').setContent(null),
+      resetCmpPrm: this.seek('keep', 'compiledFileSystem').rem(),
       confReadyPrm: null,
       netAddrRepRec: null,
       subconRec: null
@@ -598,7 +593,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
             ? `Loading additional args from ${confKeep.desc()}`
             : `No additional Configuration loaded from Keep (check 'conf.keep.value')`
           );
-            
+          
           keepData = keepData.replace(/[;\s]+$/, ''); // Remove tailing whitespace and semicolons
           keepData = await eval(`(${keepData})`);
           
@@ -623,7 +618,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         
         global.gsc = this.subcon('dev');
         
-        let rooms = await this.getRooms([ 'record', 'record.bank.TransientBank', 'record.bank.KeepBank' ]);
+        let rooms = await this.getRooms([ 'record', 'record.bank.WeakBank', 'record.bank.KeepBank' ]);
         let { Manager, Record } = rooms.record;
         let { KeepBank } = rooms;
         
@@ -707,8 +702,8 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
             // at the end of the string if their previous index was removed!
             
             let ansiRegStr = '[\u001B][[][0-9]{2}m'; // We need this regex twice but once with "g" and once without
-            let ansiBits = withAnsi.match(new RegExp(ansiRegStr, 'g')) || [];
-            let split = withAnsi.split(new RegExp(ansiRegStr));
+            let ansiBits = withAnsi.match(RegExp(ansiRegStr, 'g')) || [];
+            let split = withAnsi.split(RegExp(ansiRegStr));
             
             let totalLen = split.map(str => str.length).reduce((m, v) => m + v);
             let excess = totalLen - maxChars;
@@ -753,8 +748,8 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         
         let subconMillKeep = millKeep.seek('subcon');
         let subconKeep = this.conf('deploy.subcon.keep');
-        if (subconKeep && subconMillKeep?.contains(subconKeep)) {
-          let numSubcons = await subconMillKeep.countChildren();
+        if (subconKeep && subconMillKeep?.fp.contains(subconKeep.fp)) {
+          let numSubcons = (await subconMillKeep.getChildNames()).length;
           if (numSubcons > 200) this.subcon('warning')(`${subconMillKeep.desc()} has a large number of children (${numSubcons})`);
         }
         /// =DEBUG}
@@ -912,8 +907,8 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       addReal(real) { return this; },
       mod() {},
       addLayout: lay => Tmp({ layout: { src: Src.stub, route: Function.stub } }),
-      getLayout() { return this.fakeLayout || (this.fakeLayout = fakeReal.getLayoutForm('FakeBoi')()); },
-      getLayoutForm(name) { return fakeReal.tech.getLayoutForm(name); },
+      getLayout() { return this.fakeLayout || (this.fakeLayout = this.getLayoutForm('FakeBoi')()); },
+      getLayoutForm(name) { return this.tech.getLayoutForm(name); },
       getTech() { return this.tech; },
       addNavOption() { return { activate: () => {} }; },
       render() {}
@@ -937,7 +932,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
     
     return {
       access: name => {
-        if (name === 'primary') return fakeReal;
+        if (name === 'main') return fakeReal;
         throw Error(`Invalid access for Real -> "${name}"`);
       }
     };
@@ -1055,7 +1050,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       
     }});
     schema('deploy.processUid', { fn: (val, conf) => {
-      return val ?? this.getUid().slice(0, 4); // Only bother with 4 bytes (chance of collision is 1/(62^4) = 1/14776336)
+      return val ?? this.getUid().slice(0, 6); // Only bother with 6 bytes (chance of collision is 1/(62^6) = 1/56800235584)
     }});
     
     let deployStabilityFn = (num, conf) => {
@@ -1711,7 +1706,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         keep = this.seek('keep', 'adminFileSystem', keep);
         
         // Use any previously existing reference
-        if (conf.val && keep.equals(conf.val)) keep = conf.val;
+        if (conf.val && keep.fp.equals(conf.val.fp)) keep = conf.val;
         
       }
       
@@ -1863,7 +1858,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
       
       // Monitor the NetworkAddress associated with a Session; if its
       // reputation turns bad close the session!
-      // TODO: HEEERE note that now there is only `session.netAddr`;
+      // Note that now there is only `session.netAddr`;
       // if clients from multiple NetworkAddresses try to give the
       // same hid the NetworkAddress which comes second will simply be
       // rejected!
@@ -1933,34 +1928,24 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         
         msFn: () => this.getMs(),
         heartbeatMs: this.conf('network.heartbeat.ms'),
+        
         doCaching: this.conf('deploy.maturity') !== 'dev',
-        processCookie: cookie => {
-          
-          // Only permissible cookie key is "hut"; if present, the value
-          // must be valid base64-encoded json
-          
-          let { hut: val=null, ...more } = cookie;
-          
-          if (!more.empty()) throw Error(`Invalid cookie; only the "hut" key is allowed; got [ ${more.toArr((v, k) => k).join(', ')} ]`);
-          
-          try         { val = val ? jsonToVal(Buffer.from(val, 'base64')) : {}; }
-          catch (err) { throw Error(`Cookie must be base64 encoded json`); }
-          
-          if (!isForm(val, Object)) throw Error(`Overall cookie value must be Object (got ${getFormName(val)})`);
-          
-          return val;
-          
-        },
-        processBody: body => {
-          
-          // Body must be a json object
-          
-          body = body ? jsonToVal(body) : {};
-          if (!isForm(body, Object)) throw Error(`Http body must be an Object; got ${getFormName(body)}`).mod({ body });
-          return body;
-          
-        },
         getKeyedMessage: ({ path, query, fragment, cookie, body }) => {
+          
+          // Ensure `body` is json Object
+          body = body ? jsonToVal(body) : {};
+          if (!isForm(body, Object)) throw Error(`Http body must resolve to Object; got ${getFormName(body)}`).mod({ body, http: { code: 400 } });
+          
+          // Ensure `cookie` has only a "hut" key storing base64+json
+          // encoded Object value
+          let { hut: cookieHut=null, ...cookieMore } = cookie;
+          if (!cookieMore.empty())
+            throw Error(`Invalid cookie; only the "hut" key is allowed; got [ ${cookieMore.toArr((v, k) => k).join(', ')} ]`).mod({ http: { code: 400 } });
+          
+          try         { cookie = cookieHut ? jsonToVal(Buffer.from(cookieHut, 'base64')) : {}; }
+          catch (err) { throw Error(`Cookie must be base64 encoded json`).mod({ cause: err, http: { code: 400 } }); }
+          
+          if (!isForm(cookie, Object)) throw Error(`Overall cookie value must resolve to Object; got ${getFormName(cookie)}`).mod({ http: { code: 400 } });
           
           // We can basically always ignore the `ver` value - but we can
           // be suspicious of any requests for static resources which
@@ -1968,7 +1953,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
           let { hutId=null, ['!']: ver, ...msg } = { trn: 'anon', ...cookie, ...body, ...query };
           
           if (!msg.has('command')) {
-            if (path === '')                 Object.assign(msg, { trn: 'sync', command: 'syncInit' });
+            if (path === '')                 Object.assign(msg, { trn: 'sync', command: 'hutify' });
             else if (path === 'favicon.ico') Object.assign(msg, { trn: 'anon', command: 'html.icon' });
             else                             Object.assign(msg, { command: path });
           }
@@ -2020,6 +2005,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
         
         msFn: () => this.getMs(),
         heartbeatMs: this.conf('network.heartbeat.ms'),
+        
         getKey: ({ query: { trn='async', hutId=null } }) => {
           
           if (trn === 'anon') return null;
@@ -2109,9 +2095,9 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
   compileContent(variantName, srcLines, fileNameForDebug='<unknown file>') {
     
     // Note that a "variant" is not exactly the same as a "bearing";
-    // "bearing" simply refers to Hut positionality. "Variants" can be
-    // used for logical decisions based on Hut positionality, but also
-    // other factors (e.g. debug vs production mode)!
+    // "bearing" simply refers to Hut altitude. "Variants" can be
+    // used for logical decisions based on Hut altitude, but also other
+    // factors (e.g. debug vs production mode)!
     
     let t = this.getMs();
     
@@ -2215,7 +2201,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
     // 2. We want to ensure top-level strict mode
     // 
     // 3. Ensure there is no additional strict mode declaration (some
-    // source code includes "use strict" - e.g. setup/clearing.js)
+    // source code has "'use strict';" embedded)
     // 
     // 4. Don't change the line count (only change the prefix of the 1st
     // line and the suffix of the last line!)

@@ -1,8 +1,6 @@
 global.rooms['record.bank.KeepBank'] = async foundation => {
   
-  let AbstractBank = await foundation.getRoom('record.bank.AbstractBank');
-  
-  return form({ name: 'KeepBank', has: { AbstractBank }, props: (forms, Form) => ({
+  return form({ name: 'KeepBank', has: { Endable }, props: (forms, Form) => ({
     
     $casedCmp: term => {
       
@@ -28,7 +26,7 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
     
     init({ keep, lockTimeoutMs=500, encoding='json', subcon=foundation.subcon('bank.keep'), ...args }) {
       
-      forms.AbstractBank.init.call(this, args);
+      forms.Endable.init.call(this, args);
       Object.assign(this, {
         
         keep,
@@ -73,9 +71,9 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
         let nextKeep = await this.keep.seek([ 'meta', 'next' ]);
         
         if (!(await infoKeep.getContent(this.encoding)))  await infoKeep.setContent({ v: '0.0.1', created: Date.now() }, this.encoding);
-        if (!(await lockKeep.getContent()))               await lockKeep.setContent(this.lock, null);
-        if (!(await accessKeep.getContent()))             await accessKeep.setContent(Date.now().encodeStr());
-        if (!(await nextKeep.getContent()))               await nextKeep.setContent((0).toString(16));
+        if (!(await lockKeep.getContent()))               await lockKeep.setContent(this.lock, 'utf8');
+        if (!(await accessKeep.getContent()))             await accessKeep.setContent(Date.now().encodeStr(), 'utf8');
+        if (!(await nextKeep.getContent()))               await nextKeep.setContent((0).toString(16), 'utf8');
         
         let lock = await lockKeep.getContent('utf8');
         if (lock !== this.lock) {
@@ -89,8 +87,8 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
           nextKeep.getContent('utf8').then(uid => this.nextUid = uid.encodeInt()),
           
           // Mark the Keep as "locked"
-          lockKeep.setContent(this.lock),
-          accessKeep.setContent(Date.now().encodeStr())
+          lockKeep.setContent(this.lock, 'utf8'),
+          accessKeep.setContent(Date.now().encodeStr(), 'utf8')
           
         ]);
         
@@ -103,7 +101,7 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
     
     getNextUid() {
       
-      this.keep.access([ 'meta', 'next' ]).setContent( (this.nextUid + 1).encodeStr() );
+      this.keep.access([ 'meta', 'next' ]).setContent((this.nextUid + 1).encodeStr(), 'utf8');
       this.subcon(`KeepBank generated uid: ${(this.nextUid + 1).encodeStr(String.base62, 8)}`);
       return this.nextUid++;
       
@@ -174,7 +172,7 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
       }, 'prm');
       
       rec.endWith(() => {
-        rec.endedPrm = this.keep.access([ 'rec', casedUid ]).setContent(null);
+        rec.endedPrm = this.keep.access([ 'rec', casedUid ]).rem();
         this.subcon(`Removed ${rec.desc()}`);
       }, 'prm');
       
@@ -255,8 +253,8 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
     cleanup() {
       
       // Unmark the Keep as "locked"
-      this.keep.seek([ 'meta', 'lock' ]).then( lockKeep => lockKeep.setContent(null) );
-      this.keep.seek([ 'meta', 'access' ]).then( accessKeep => accessKeep.setContent(null) );
+      this.keep.seek([ 'meta', 'lock' ]).then( lockKeep => lockKeep.rem() );
+      this.keep.seek([ 'meta', 'access' ]).then( accessKeep => accessKeep.rem() );
       
     }
     

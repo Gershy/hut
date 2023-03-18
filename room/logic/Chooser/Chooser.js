@@ -1,6 +1,6 @@
-global.rooms['logic.Chooser'] = async foundation => {
+global.rooms['logic.Chooser'] = async () => {
   
-  let MemSrc = await foundation.getRoom('logic.MemSrc');
+  let MemSrc = await getRoom('logic.MemSrc');
   
   return form({ name: 'Chooser', has: { Endable, Src }, props: forms => ({
     

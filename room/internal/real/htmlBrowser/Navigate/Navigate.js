@@ -6,7 +6,7 @@ global.rooms['internal.real.htmlBrowser.Navigate'] = async foundation => {
     'internal.real.generic.Real'
   ]);
   
-  return U.form({ name: 'Navigate', has: { Layout }, props: (insp, Insp) => ({
+  return form({ name: 'Navigate', has: { Layout }, props: (insp, Insp) => ({
     init: function({ target }={}) {
       Object.assign(this, { target });
     },
@@ -28,23 +28,23 @@ global.rooms['internal.real.htmlBrowser.Navigate'] = async foundation => {
       let target = this.getParam(real, 'target');
       let anchor = domNode.querySelector(':scope > a._nav');
       
-      if (U.hasForm(target, Array)) {
+      if (hasForm(target, Array)) {
         
         anchor.setAttribute('href', `#${target.join('/')}`);
         
-      } else if (U.hasForm(target, Real)) {
+      } else if (hasForm(target, Real)) {
         
         let fragment = target.getNavChain().map(n => n.term).join('/');
         anchor.setAttribute('href', `#${fragment}`);
         
-      } else if (U.hasForm(target, Real.NavOpt)) {
+      } else if (hasForm(target, Real.NavOpt)) {
         
         let fragment = target.getChain().map(n => n.term).join('/');
         anchor.setAttribute('href', `#${fragment}`);
         
       } else {
         
-        console.log(`Non-Real target: ${U.getFormName(target)}`, target);
+        console.log(`Non-Real target: ${getFormName(target)}`, target);
         
       }
       

@@ -27,7 +27,7 @@ global.rooms['internal.docs'] = async foundation => {
   ]);
   let { Hinterland, HtmlBrowserHabitat, Chooser } = rooms;
   
-  let Content = U.form({ name: 'Content', props: (forms, Form) => ({
+  let Content = form({ name: 'Content', props: (forms, Form) => ({
     
     init: function(name, real=null) {
       
@@ -40,23 +40,23 @@ global.rooms['internal.docs'] = async foundation => {
     jsCodeComment: '//',
     sizedText: function(args) {
       
-      let { size, text } = U.isForm(args[0], Object)
+      let { size, text } = isForm(args[0], Object)
         ? { size: 0, text: null, ...args[0] }
-        : (U.isForm(args[0], Number)
+        : (isForm(args[0], Number)
           ? { size: args[0], text: args.length > 1 ? args[1] : null }
           : { size: 0,       text: args[0] }
         );
       
-      if (!U.isForm(size, Number)) throw Error('Invalid size');
+      if (!isForm(size, Number)) throw Error('Invalid size');
       if (size < 0 || size > 1) throw Error('Invalid size');
       
-      if (U.isForm(text, String) && text.match(/^[ \n]*[|]/)) text = String.baseline(text);
+      if (isForm(text, String) && text.match(/^[ \n]*[|]/)) text = String.baseline(text);
       
       return { size, text };
       
     },
     reference: function(target) {
-      this.real.addLayout({ form: 'Navigate', target: U.isForm(target, Content) ? target.real : target });
+      this.real.addLayout({ form: 'Navigate', target: isForm(target, Content) ? target.real : target });
       return target;
     },
     gap: function(...args) {

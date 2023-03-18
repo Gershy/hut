@@ -119,12 +119,12 @@ global.rooms['fly.models'] = async foundation => {
   };
   
   // BASE STUFF
-  let Entity = form({ name: 'Entity', pars: { Record }, props: (forms, Form) => ({
+  let Entity = form({ name: 'Entity', has: { Record }, props: (forms, Form) => ({
     
     // TODO: This is SO JANKY, but doesn't look like there's another way
     // to achieve the same effect (preventing conflicting prop names).
     // Note that this is awkward to maintain; properties may be renamed,
-    // added or removed from `U.logic.Endable`, `U.logic.Src`, and
+    // added or removed from `logic.Endable`, `logic.Src`, and
     // `foundation.getRoom('record').Record` - then this list would need
     // to be altered as well! The missing ingredient to implement this
     // correctly is information available on Forms (not on Facts)
@@ -136,18 +136,18 @@ global.rooms['fly.models'] = async foundation => {
     init(args) {
       
       let { type, uid, group, value } = args;
-      if (!value) throw Error(`${U.getFormName(this)} missing "value" param`);
+      if (!value) throw Error(`${getFormName(this)} missing "value" param`);
       
       // Get props, and list of sync prop names
       let props = this.initProps(value);
       let sProps = this.initSyncs();
-      if (Set(sProps).size !== sProps.length) throw Error(`${U.getFormName(this)} defines sync properties multiple times (potentially through polymorphism)`);
-      for (let spn of sProps) if (!props.has(spn)) throw Error(`${U.getFormName(this)} missing sync prop "${spn}"`);
+      if (Set(sProps).size !== sProps.length) throw Error(`${getFormName(this)} defines sync properties multiple times (potentially through polymorphism)`);
+      for (let spn of sProps) if (!props.has(spn)) throw Error(`${getFormName(this)} missing sync prop "${spn}"`);
       
       // Prevent any properties whose names conflict with the member
       // properties of Rec (and Endable and Tmp, inherited by Rec).
       for (let k in props) if (this[k] !== C.skip || Form.conflictPropNames.has(k))
-        throw Error(`Conflicting prop name for ${U.getFormName(this)}: "${k}"`);
+        throw Error(`Conflicting prop name for ${getFormName(this)}: "${k}"`);
       
       // Move properties from `props` to `syncProps` as appropriate
       let syncProps = {};
@@ -205,7 +205,7 @@ global.rooms['fly.models'] = async foundation => {
     }
     
   })});
-  let Mortal = form({ name: 'Mortal', pars: { Entity }, props: (forms, Form) => ({
+  let Mortal = form({ name: 'Mortal', has: { Entity }, props: (forms, Form) => ({
     initProps: utils.fa(forms, 'initProps', (i, arr) => ({}).gain(...arr, { hpDmg: 0 })),
     getMaxHp() { return 1; },
     getCurrentHp(ud) { return this.getMaxHp(ud) - this.hpDmg; },
@@ -431,13 +431,13 @@ global.rooms['fly.models'] = async foundation => {
       /// {ABOVE=
       if (!owner) throw Error('Bullet missing "owner" property');
       /// =ABOVE}
-      if (!isForm(bound, Object) || !bound.has('form') || !isForm(bound.form, String)) throw Error(`Bad bound! (${U.getFormName(bound)}, ${valToSer(bound)})`);
+      if (!isForm(bound, Object) || !bound.has('form') || !isForm(bound.form, String)) throw Error(`Bad bound! (${getFormName(bound)}, ${valToSer(bound)})`);
       return {}.gain(...arr, { team, owner, dmg, pDmg, bound, colour });
     }),
     initSyncs: utils.fa(forms, 'initSyncs', (i, arr) => [ 'bound', 'colour', 'team' ].gain(...arr)),
     init: C.noFn('init'),
     getCollideResult(ud, tail) {
-      if (!U.hasForm(tail, Mortal)) return;
+      if (!hasForm(tail, Mortal)) return;
       let dmg = this.dmg;
       if (this.pDmg[0]) {
         let maxHp = tail.getMaxHp(ud);
@@ -454,7 +454,7 @@ global.rooms['fly.models'] = async foundation => {
     }}; }
     
   })});
-  let MBullet = form({ name: 'MBullet', pars: { Entity, Mover, Bullet }, props: (forms, Form) => ({
+  let MBullet = form({ name: 'MBullet', has: { Entity, Mover, Bullet }, props: (forms, Form) => ({
     
     // A moving bullet
     
@@ -485,7 +485,7 @@ global.rooms['fly.models'] = async foundation => {
   })});
   
   // GOOD GUYS
-  let Ace = form({ name: 'Ace', pars: { Mortal, Physical }, props: (forms, Form) => ({
+  let Ace = form({ name: 'Ace', has: { Mortal, Physical }, props: (forms, Form) => ({
     
     $bound: { form: 'circle', r: 8 }, $respawnMs: 2500, $invulnMs: 1500, $spd: 170,
     
@@ -660,7 +660,7 @@ global.rooms['fly.models'] = async foundation => {
     }
     
   })});
-  let JoustMan = form({ name: 'JoustMan', pars: { Ace }, props: (forms, Form) => ({
+  let JoustMan = form({ name: 'JoustMan', has: { Ace }, props: (forms, Form) => ({
     
     $w1ChargePunishSlow: 0.4, $w1ChargePunishMs: 2000,
     $w1Charge1Ms: 500, $w1Charge2Ms: 2500, $w1Charge3Ms: 4000, // Millis of charging for various jousts
@@ -779,7 +779,7 @@ global.rooms['fly.models'] = async foundation => {
     }
     
   })});
-  let GunGirl = form({ name: 'GunGirl', pars: { Ace }, props: (forms, Form) => ({
+  let GunGirl = form({ name: 'GunGirl', has: { Ace }, props: (forms, Form) => ({
     
     $shootSteps: [
       { ms: 1000, ang: -0.01, dmgMult: 1   },  // Inwards
@@ -919,7 +919,7 @@ global.rooms['fly.models'] = async foundation => {
     }
     
   })});
-  let SlamKid = form({ name: 'SlamKid', pars: { Ace }, props: (forms, Form) => ({
+  let SlamKid = form({ name: 'SlamKid', has: { Ace }, props: (forms, Form) => ({
     
     $slamSpd: 450 / Math.sqrt(2), $slamDelay: 690,
     $slamCharge1Ms: 300, $slamCharge2Ms: 630, $slamCharge3Ms: 750,
@@ -1031,7 +1031,7 @@ global.rooms['fly.models'] = async foundation => {
     }
     
   })});
-  let SalvoLad = form({ name: 'SalvoLad', pars: { Ace }, props: (forms, Form) => ({
+  let SalvoLad = form({ name: 'SalvoLad', has: { Ace }, props: (forms, Form) => ({
     
     $comboDelayMs: 800, $comboPunishDelayMs: 1000,
     $decampDelayMs: 1200, $decampDurationMs: 350, $decampSpdMult: 0.5, $decampSpd: 430,
@@ -1214,7 +1214,7 @@ global.rooms['fly.models'] = async foundation => {
   })});
   
   // GOOD GUY UTIL
-  let JoustManBullet = form({ name: 'JoustManBullet', pars: { MBullet }, props: (forms, Form) => ({
+  let JoustManBullet = form({ name: 'JoustManBullet', has: { MBullet }, props: (forms, Form) => ({
     render(ud, draw) {
       let { x, y } = this.getAbsGeom(ud);
       let r = this.bound.r;
@@ -1222,7 +1222,7 @@ global.rooms['fly.models'] = async foundation => {
       draw.circ(x, y, r * 0.6, { fillStyle: 'rgba(255, 255, 255, 0.4)' });
     }
   })});
-  let JoustManLaserSphere = form({ name: 'JoustManLaserSphere', pars: { Entity }, props: (forms, Form) => ({
+  let JoustManLaserSphere = form({ name: 'JoustManLaserSphere', has: { Entity }, props: (forms, Form) => ({
     
     initProps: utils.fa(forms, 'initProps', (i, arr, val) => {
       let { xOff, yOff, r, dps, joustMan=null, joustManUid=joustMan.uid } = val;
@@ -1230,7 +1230,7 @@ global.rooms['fly.models'] = async foundation => {
     }),
     initSyncs: utils.fa(forms, 'initSyncs', (i, arr) => [ 'xOff', 'yOff', 'r', 'joustManUid' ].gain(...arr)),
     getCollideResult(ud, tail) {
-      if (U.hasForm(tail, Mortal)) tail.takeDamage(ud, this.rel(ud, 'joustMan'), this.dps * ud.spf);
+      if (hasForm(tail, Mortal)) tail.takeDamage(ud, this.rel(ud, 'joustMan'), this.dps * ud.spf);
     },
     getRelGeom(ud) {
       let { x, y } = this.rel(ud, 'joustMan').getRelGeom(ud);
@@ -1254,7 +1254,7 @@ global.rooms['fly.models'] = async foundation => {
     }
     
   })});
-  let JoustManLaserVert = form({ name: 'JoustManLaserVert', pars: { Entity }, props: (forms, Form) => ({
+  let JoustManLaserVert = form({ name: 'JoustManLaserVert', has: { Entity }, props: (forms, Form) => ({
     
     $dps: 23, $w: 22, $h: 1200,
     
@@ -1264,7 +1264,7 @@ global.rooms['fly.models'] = async foundation => {
     }),
     initSyncs: utils.fa(forms, 'initSyncs', (i, arr) => [ 'joustManUid' ].gain(...arr)),
     getCollideResult(ud, tail) {
-      if (U.hasForm(tail, Mortal)) tail.takeDamage(ud, this.rel(ud, 'joustMan'), Form.dps * ud.spf);
+      if (hasForm(tail, Mortal)) tail.takeDamage(ud, this.rel(ud, 'joustMan'), Form.dps * ud.spf);
     },
     getClippedHeight(ud) {
       
@@ -1338,7 +1338,7 @@ global.rooms['fly.models'] = async foundation => {
     }
     
   })});
-  let JoustManLaserJoust = form({ name: 'JoustManLaserJoust', pars: { MBullet }, props: (forms, Form) => ({
+  let JoustManLaserJoust = form({ name: 'JoustManLaserJoust', has: { MBullet }, props: (forms, Form) => ({
     $bound: { form: 'rect', w: 34, h: 20 },
     $vel: 800,
     $lsMs: 650,
@@ -1349,7 +1349,7 @@ global.rooms['fly.models'] = async foundation => {
       draw.rectCen(x, y, Form.bound.w * 0.6, Form.bound.h, { fillStyle: 'rgba(255, 255, 255, 0.4)' });
     }
   })});
-  let JoustManLaserHorz = form({ name: 'JoustManLaserHorz', pars: { Entity }, props: (forms, Form) => ({
+  let JoustManLaserHorz = form({ name: 'JoustManLaserHorz', has: { Entity }, props: (forms, Form) => ({
     
     $dps: 30, $w: 125, $h: 12,
     
@@ -1359,7 +1359,7 @@ global.rooms['fly.models'] = async foundation => {
     }),
     initSyncs: utils.fa(forms, 'initSyncs', (i, arr) => [ 'joustManUid', 'dir' ].gain(...arr)),
     getCollideResult(ud, tail) {
-      if (U.hasForm(tail, Mortal)) tail.takeDamage(ud, this.rel(ud, 'joustMan'), Form.dps * ud.spf);
+      if (hasForm(tail, Mortal)) tail.takeDamage(ud, this.rel(ud, 'joustMan'), Form.dps * ud.spf);
     },
     getRelGeom(ud) {
       let { x, y } = this.rel(ud, 'joustMan').getRelGeom(ud);
@@ -1384,7 +1384,7 @@ global.rooms['fly.models'] = async foundation => {
     }
     
   })});
-  let SlamKidSlammer = form({ name: 'SlamKidSlammer', pars: { Entity }, props: (forms, Form) => ({
+  let SlamKidSlammer = form({ name: 'SlamKidSlammer', has: { Entity }, props: (forms, Form) => ({
     
     $bound: { form: 'circle', r: 7 }, $dmg: 1.4,
     
@@ -1394,7 +1394,7 @@ global.rooms['fly.models'] = async foundation => {
     }),
     initSyncs: utils.fa(forms, 'initSyncs', (i, arr) => [ 'slamKidUid', 'xOff', 'yOff' ].gain(...arr)),
     getCollideResult(ud, tail) {
-      if (U.hasForm(tail, Mortal)) {
+      if (hasForm(tail, Mortal)) {
         tail.takeDamage(ud, this.rel(ud, 'slamKid'), Form.dmg);
         this.integrity = 0;
       }
@@ -1422,7 +1422,7 @@ global.rooms['fly.models'] = async foundation => {
     },
     
   })});
-  let SalvoLadDumbBomb = form({ name: 'SalvoLadDumbBomb', pars: { Entity, Mover }, props: (forms, Form) => ({
+  let SalvoLadDumbBomb = form({ name: 'SalvoLadDumbBomb', has: { Entity, Mover }, props: (forms, Form) => ({
     
     $r: 13,
     
@@ -1447,7 +1447,7 @@ global.rooms['fly.models'] = async foundation => {
     },
     isAlive: forms.Entity.isAlive
   })});
-  let SalvoLadKaboom = form({ name: 'SalvoLadKaboom', pars: { Entity, Physical }, props: (forms, Form) => ({
+  let SalvoLadKaboom = form({ name: 'SalvoLadKaboom', has: { Entity, Physical }, props: (forms, Form) => ({
     
     initProps: utils.fa(forms, 'initProps', (i, arr, val) => {
       let { team=null, salvoLad=null, r=0, dps=3.1, sizePerSec=30 } = val;
@@ -1455,7 +1455,7 @@ global.rooms['fly.models'] = async foundation => {
     }),
     initSyncs: utils.fa(forms, 'initSyncs', (i, arr) => [ 'sizePerSec' ].gain(...arr)),
     getCollideResult(ud, tail) {
-      if (U.hasForm(tail, Mortal)) tail.takeDamage(ud, this.salvoLad, this.dps * ud.spf);
+      if (hasForm(tail, Mortal)) tail.takeDamage(ud, this.salvoLad, this.dps * ud.spf);
     },
     getRelGeom(ud) {
       let { x, y } = forms.Physical.getRelGeom.call(this, ud);
@@ -1476,7 +1476,7 @@ global.rooms['fly.models'] = async foundation => {
     }
     
   })});
-  let SalvoLadMissile = form({ name: 'SalvoLadMissile', pars: { MBullet }, props: (forms, Form) => ({
+  let SalvoLadMissile = form({ name: 'SalvoLadMissile', has: { MBullet }, props: (forms, Form) => ({
     
     initProps: utils.fa(forms, 'initProps', (i, arr, val) => {
       
@@ -1506,14 +1506,14 @@ global.rooms['fly.models'] = async foundation => {
   let clean = 0;
   if (clean) {
     
-    let Enemy = form({ name: 'Enemy', pars: { Mortal }, props: (forms, Form) => ({
+    let Enemy = form({ name: 'Enemy', has: { Mortal }, props: (forms, Form) => ({
       
       initProps() { return { scoreDamage: 0 }; },
       initSyncs() { return []; },
       
       getCollideResult(ud, ent) {
-        console.log(`${U.getFormName(this)} -> ${U.getFormName(ent)}`);
-        if (U.hasForm(ent, Mortal)) ent.takeDamage(ud, this, 1);
+        console.log(`${getFormName(this)} -> ${getFormName(ent)}`);
+        if (hasForm(ent, Mortal)) ent.takeDamage(ud, this, 1);
       },
       getRot(ud) { return 0; },
       getImgKeep(ud) { return this.constructor.imageKeep; },
@@ -1577,13 +1577,13 @@ global.rooms['fly.models'] = async foundation => {
     
   }
   
-  let Enemy = form({ name: 'Enemy', pars: { Mortal }, props: (forms, Form) => ({
+  let Enemy = form({ name: 'Enemy', has: { Mortal }, props: (forms, Form) => ({
     
     initProps: utils.fa(forms, 'initProps', (i, arr) => ({}).gain(...arr, { scoreDamage: 0 })),
     initSyncs: utils.fa(forms, 'initSyncs', (i, arr) => [].gain(...arr)),
     getCollideResult(ud, ent) {
-      console.log(`${U.getFormName(this)} -> ${U.getFormName(ent)}`);
-      if (U.hasForm(ent, Mortal)) ent.takeDamage(ud, this, 1);
+      console.log(`${getFormName(this)} -> ${getFormName(ent)}`);
+      if (hasForm(ent, Mortal)) ent.takeDamage(ud, this, 1);
     },
     getState(ud) { return { tangibility: {
       bound: { form: 'circle', r: 30, ...this.getAbsGeom(ud) },
@@ -1665,7 +1665,7 @@ global.rooms['fly.models'] = async foundation => {
     
   })});
   
-  let Winder = form({ name: 'Winder', pars: { Enemy }, props: (forms, Form) => ({
+  let Winder = form({ name: 'Winder', has: { Enemy }, props: (forms, Form) => ({
     
     $bound: { form: 'circle', r: 20 }, $hp: 1,
     $imageKeep: foundation.seek('keep', 'static', [ 'room', 'fly', 'resource', 'enemyWinder.png' ]),
@@ -1722,13 +1722,13 @@ global.rooms['fly.models'] = async foundation => {
     }
     
   })});
-  let Weaver = form({ name: 'Weaver', pars: { Winder }, props: (forms, Form) => ({
+  let Weaver = form({ name: 'Weaver', has: { Winder }, props: (forms, Form) => ({
     
     $bound: { form: 'circle', r: 34 }, $hp: 8,
     $imageKeep: foundation.seek('keep', 'static', [ 'room', 'fly', 'resource', 'enemyWeaver.png' ]),
     
   })});
-  let Furler = form({ name: 'Furler', pars: { Winder, Spawner }, props: (forms, Form) => ({
+  let Furler = form({ name: 'Furler', has: { Winder, Spawner }, props: (forms, Form) => ({
     
     $bound: { form: 'circle', r: 24 }, $hp: 4,
     $imageKeep: foundation.seek('keep', 'static', [ 'room', 'fly', 'resource', 'enemyFurler.png' ]),
@@ -1753,7 +1753,7 @@ global.rooms['fly.models'] = async foundation => {
     },
     
   })});
-  let Gunner = form({ name: 'Gunner', pars: { Winder }, props: (forms, Form) => ({
+  let Gunner = form({ name: 'Gunner', has: { Winder }, props: (forms, Form) => ({
     
     $bound: { form: 'circle', r: 24 }, $hp: 6,
     $imageKeep: foundation.seek('keep', 'static', [ 'room', 'fly', 'resource', 'enemyGunner.png' ]),
@@ -1784,7 +1784,7 @@ global.rooms['fly.models'] = async foundation => {
     
     
   })});
-  let Rumbler = form({ name: 'Rumbler', pars: { Enemy, Mover }, props: (forms, Form) => ({
+  let Rumbler = form({ name: 'Rumbler', has: { Enemy, Mover }, props: (forms, Form) => ({
     
     $bound: { form: 'circle', r: 16 }, $hp: 7,
     $imageKeep: foundation.seek('keep', 'static', [ 'room', 'fly', 'resource', 'enemyRumbler.png' ]),
@@ -1857,7 +1857,7 @@ global.rooms['fly.models'] = async foundation => {
     }
     
   })});
-  let RumblerKaboom = form({ name: 'RumblerKaboom', pars: { Entity, Physical }, props: (forms, Form) => ({
+  let RumblerKaboom = form({ name: 'RumblerKaboom', has: { Entity, Physical }, props: (forms, Form) => ({
     
     initProps: utils.fa(forms, 'initProps', (i, arr, val) => {
       let { r=0, sizePerSec=30 } = val;
@@ -1865,7 +1865,7 @@ global.rooms['fly.models'] = async foundation => {
     }),
     initSyncs: utils.fa(forms, 'initSyncs', (i, arr) => [ 'sizePerSec' ].gain(...arr)),
     getCollideResult(ud, tail) {
-      if (U.hasForm(tail, Mortal)) tail.takeDamage(ud, null, 1);
+      if (hasForm(tail, Mortal)) tail.takeDamage(ud, null, 1);
     },
     getRelGeom(ud) {
       let { x, y } = forms.Physical.getRelGeom.call(this, ud);
@@ -1884,7 +1884,7 @@ global.rooms['fly.models'] = async foundation => {
     
   })});
   
-  let Drifter = form({ name: 'Drifter', pars: { Enemy, Mover }, props: (forms, Form) => ({
+  let Drifter = form({ name: 'Drifter', has: { Enemy, Mover }, props: (forms, Form) => ({
     
     $imageKeep: foundation.seek('keep', 'static', [ 'room', 'fly', 'resource', 'enemyDrifter.png' ]),
     
@@ -1926,7 +1926,7 @@ global.rooms['fly.models'] = async foundation => {
     }
     
   })});
-  let Wanderer = form({ name: 'Wanderer', pars: { Enemy, Mover }, props: (forms, Form) => ({
+  let Wanderer = form({ name: 'Wanderer', has: { Enemy, Mover }, props: (forms, Form) => ({
     
     $bound: { form: 'circle', r: 22 }, $maxHp: 4.5,
     $imageKeep: foundation.seek('keep', 'static', [ 'room', 'fly', 'resource', 'enemyWanderer.png' ]),
@@ -1972,7 +1972,7 @@ global.rooms['fly.models'] = async foundation => {
     isAlive: utils.fa(forms, 'isAlive', (i, arr) => !arr.find(alive => !alive).found)
     
   })});
-  let WinderMom = form({ name: 'WinderMom', pars: { Enemy, Spawner, Mover }, props: (forms, Form) => ({
+  let WinderMom = form({ name: 'WinderMom', has: { Enemy, Spawner, Mover }, props: (forms, Form) => ({
     
     $bound: { form: 'rect', w: 160, h: 160 }, $maxHp: 110,
     
@@ -2022,7 +2022,7 @@ global.rooms['fly.models'] = async foundation => {
     }
     
   })});
-  let WandererMom = null && form({ name: 'WandererMom', pars: { Enemy, Spawner, Mover }, props: (forms, Form) => ({
+  let WandererMom = null && form({ name: 'WandererMom', has: { Enemy, Spawner, Mover }, props: (forms, Form) => ({
     
     $bound: { form: 'rect', w: 150, h: 210 },
     $maxHp: 110, $numBullets: 7, $bulletSpd: 330,
@@ -2080,7 +2080,7 @@ global.rooms['fly.models'] = async foundation => {
   })});
   
   // LEVEL
-  let Level = form({ name: 'Level', pars: { Entity, Physical }, props: (forms, Form) => ({
+  let Level = form({ name: 'Level', has: { Entity, Physical }, props: (forms, Form) => ({
     
     initProps: utils.fa(forms, 'initProps', (i, arr, val) => {
       
@@ -2332,7 +2332,7 @@ global.rooms['fly.models'] = async foundation => {
         console.log(`Processed ${entities.length} entities in ${Math.round(foundation.getMs() - timingMs)}ms:`);
         let types = Map();
         for (let entity of entities) {
-          let t = U.getFormName(entity);
+          let t = getFormName(entity);
           types.set(t, (types.get(t) || 0) + 1);
         }
         for (let [ t, n ] of types) console.log(`    ${n.toString().padHead(3, ' ')} x ${t}`);
@@ -2343,7 +2343,7 @@ global.rooms['fly.models'] = async foundation => {
     }
     
   })});
-  let Moment = form({ name: 'Moment', pars: { Entity }, props: (forms, Form) => ({
+  let Moment = form({ name: 'Moment', has: { Entity }, props: (forms, Form) => ({
     
     $imageKeeps: {
       meadow:         foundation.seek('keep', 'static', [ 'room', 'fly', 'resource', 'bgMeadow.png' ]),
@@ -2445,7 +2445,7 @@ global.rooms['fly.models'] = async foundation => {
     }
     
   })});
-  let MomentAhead = form({ name: 'MomentAhead', pars: { Moment }, props: (forms, Form) => ({
+  let MomentAhead = form({ name: 'MomentAhead', has: { Moment }, props: (forms, Form) => ({
     
     initProps: utils.fa(forms, 'initProps', (i, arr, val) => {
       let { ms, name, bounds, dist, prevMoment=null, startY=null, aheadSpd=100 } = val;
@@ -2477,7 +2477,7 @@ global.rooms['fly.models'] = async foundation => {
     }
     
   })});
-  let MomentConditional = form({ name: 'MomentConditional', pars: { MomentAhead }, props: (forms, Form) => ({
+  let MomentConditional = form({ name: 'MomentConditional', has: { MomentAhead }, props: (forms, Form) => ({
     
     initProps: utils.fa(forms, 'initProps', (i, arr, val) => {
       let props = {}.gain(...arr);

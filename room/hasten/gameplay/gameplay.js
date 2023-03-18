@@ -4,7 +4,7 @@ global.rooms['hasten.gameplay'] = foundation => hut => {
   
   let fullVision = true;
   
-  let WorldState = U.form({ name: 'WorldState', props: (forms, Form) => ({
+  let WorldState = form({ name: 'WorldState', props: (forms, Form) => ({
     
     // TODO: Model world state properly using this Form, then get a
     // quick multiplayer test (controlling a circle) working! Look out
@@ -154,7 +154,7 @@ global.rooms['hasten.gameplay'] = foundation => hut => {
     
   })});
   
-  let Entity = U.form({ name: 'Entity', props: (forms, Form) => ({
+  let Entity = form({ name: 'Entity', props: (forms, Form) => ({
     
     $tags: Set([]),
     
@@ -167,7 +167,7 @@ global.rooms['hasten.gameplay'] = foundation => hut => {
       });
       
     },
-    desc: function() { return `${U.getFormName(this)}@${this.uid}`; },
+    desc: function() { return `${getFormName(this)}@${this.uid}`; },
     getTags: function(ws) { return this.Form.tags; },
     hasTag: function(ws, tag) { return this.getTags(ws).has(tag); },
     getCollideMass: function(ws) { return null; },
@@ -185,7 +185,7 @@ global.rooms['hasten.gameplay'] = foundation => hut => {
     render: function(ws, draw) {}
     
   })});
-  let World = U.form({ name: 'World', has: { Entity }, props: (forms, Form) => ({
+  let World = form({ name: 'World', has: { Entity }, props: (forms, Form) => ({
     
     init: function(args) {
       
@@ -227,7 +227,7 @@ global.rooms['hasten.gameplay'] = foundation => hut => {
     }
     
   })});
-  let Laster = U.form({ name: 'Laster', has: { Entity }, props: (forms, Form) => ({
+  let Laster = form({ name: 'Laster', has: { Entity }, props: (forms, Form) => ({
     
     init: function({ ctrlUid, x=0, y=0, rot=0, ...args }) {
       

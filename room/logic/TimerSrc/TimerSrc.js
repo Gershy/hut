@@ -1,15 +1,15 @@
-global.rooms['logic.TimerSrc'] = foundation => {
+global.rooms['logic.TimerSrc'] = () => {
   
   return form({ name: 'TimerSrc', has: { Endable, Src }, props: (forms, Form) => ({
     
-    init: function({ ms, num=1, immediate=(num !== 1), markMs=foundation.getMs() }) {
+    init: function({ ms, num=1, immediate=(num !== 1), markMs=getMs() }) {
       
       // `num` may be set to `Infinity` for unlimited ticks
       // `markMs` anchors us to the correct moment; it should set it as
       // early as possible for accuracy
       this.initMs = this.lastMs = this.markMs = markMs;
       
-      if (!U.isForm(num, Number)) throw Error(`"num" must be a Number`);
+      if (!isForm(num, Number)) throw Error(`"num" must be a Number`);
       if (!num.isInteger()) throw Error(`"num" must be an integer`);
       if (num < 0) throw Error(`"num" must be >= 0`);
       
@@ -33,7 +33,7 @@ global.rooms['logic.TimerSrc'] = foundation => {
       // that the TimerSrc always ends as soon as an Error occurs in its
       // `this.send` call
       
-      let ms = foundation.getMs();
+      let ms = getMs();
       let dms = ms - this.lastMs;
       this.lastMs = ms;
       
@@ -53,7 +53,7 @@ global.rooms['logic.TimerSrc'] = foundation => {
           
           this.timeout = setTimeout(
             () => this.doSend(),
-            Math.max(0, this.markMs - foundation.getMs())
+            Math.max(0, this.markMs - getMs())
           );
           
         }

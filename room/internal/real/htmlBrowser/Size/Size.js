@@ -1,7 +1,7 @@
 global.rooms['internal.real.htmlBrowser.Size'] = async foundation => {
   
   let Layout = await foundation.getRoom('internal.real.generic.Layout');
-  return U.form({ name: 'Size', has: { Layout }, props: (forms, Form) => ({
+  return form({ name: 'Size', has: { Layout }, props: (forms, Form) => ({
     init: function({ ratio=null, w=ratio ? null : '100%', h=ratio ? null : '100%' }) {
       if (ratio !== null && (w === null) === (h === null)) throw Error(`With "ratio" must provide exactly one of "w" or "h"`);
       

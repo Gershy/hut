@@ -1,13 +1,13 @@
 global.rooms['Hinterland'] = async foundation => {
   
-  let rooms = await foundation.getRooms([ 'logic.Scope', 'record' ]);
+  let rooms = await getRooms([ 'logic.Scope', 'record' ]);
   let { Record } = rooms.record;
   let { Scope } = rooms;
   
   return form({ name: 'Hinterland', props: (forms, Form) => ({
     
     // Hinterland is the space in which multiple Huts interact according
-    // to the Rooms of the AboveHut
+    // to the rules of the AboveHut
     
     init(prefix, roomName, params={}) {
       
@@ -19,60 +19,42 @@ global.rooms['Hinterland'] = async foundation => {
       
     },
     
-    async open(hut, networkGroup) {
+    async open({ hut, netIden }) {
       
-      if (!networkGroup) throw Error(`No NetworkGroup provided!`);
-      
-      // TODO: This is a mess; not the right place to supply default pfx
-      if (hut.defaultPfx) throw Error(`${hut.desc()} already has default prefix "${hut.defaultPfx}"`);
-      hut.defaultPfx = this.prefix;
+      // TODO: Maybe here is the place to define the connection from
+      // `netIden` to `hut`? I.e. that network communications to the
+      // NetworkIdentity get translated to `hut`. This may be some good
+      // candidate logic to define once and reference from ABOVE/BELOW.
+      // If that *doesn't* make sense, maybe all Hinterlands logic needs
+      // to move to `runWithConfig` + `HtmlBrowserHabitat/init/init.js`
       
       let tmp = Tmp();
-      
-      // Setup all servers; note this is fire-and-forget! Awaiting the
-      // server connection can seriously impact client-side UX!
-      // Note: There would be race-condition ramifications if code were
-      // allowed to continue without any immediately-available servers
-      // (e.g. quickly occurring requests from the BelowHut could
-      // encounter the error that it cannot do Tells since there is no
-      // AboveHut). This currently cannot happen to FoundationBrowser,
-      // as the function for creating the http server is synchronous!
-      // This is contextually sensible, as the FoundationBrowser code
-      // itself has been transported over a live http connection (and
-      // therefore minimum 1 http connection must be available)
-      let sc = foundation.subcon('network.server.active');
-      let { netIden, servers } = networkGroup;
-      for (let { address, bindings } of servers) for (let { protocol, port, ...opts } of bindings) {
-        
-        let server = foundation.createServer({ hut, protocol, netIden, host: address, port, ...opts });
-        if (!netIden) tmp.endWith(server);
-        
-        if (sc.enabled) {
-          sc(`OPEN ${server.desc()}`);
-          server.endWith(() => sc(`SHUT ${server.desc()}`));
-        }
-        
-      }
-      
-      if (netIden) tmp.endWith(netIden.runManagedServers());
+      tmp.endWith(netIden.runOnNetwork());
       
       // Prepare all habitats
-      await Promise.all(this.habitats.map(async hab => tmp.endWith(await hab.prepare(this.roomName, hut))));
+      await Promise.all(this.habitats.map(async hab => {
+        
+        let habitatPrepared = await hab.prepare(this.roomName, hut);
+        tmp.endWith(habitatPrepared);
+        
+      }));
       
       // Add all type -> Form mappings
       for (let [ k, v ] of this.recordForms) {
+        
         // Note that the value mapped to is either some Record Form or a
         // Function returning some Record Form!
-        let addTypeFormFnTmp = hut.addTypeFormFn(k, isFormFn(v) ? () => v : v);
+        let addTypeFormFnTmp = hut.addTypeFormFn(k, v['~Forms'] ? () => v : v);
         tmp.endWith(addTypeFormFnTmp);
+        
       }
       
-      let real = (await foundation.seek('real', 'primary')).addReal(`${this.prefix}.root`);
+      let rootReal = ( await real([]) ).addReal(`${this.prefix}.root`);
       
       let loftRh = hut.relHandler({ type: `${this.prefix}.loft`, term: 'hut', offset: 0, limit: 1, fixed: true });
       tmp.endWith(loftRh);
       
-      let recordSampleSc = foundation.subcon('record.sample');
+      let recordSampleSc = subcon('record.sample');
       if (recordSampleSc.enabled) (async () => {
         
         let rank = rec => rec.uid.hasHead('!') ? -1 : 0;
@@ -134,7 +116,7 @@ global.rooms['Hinterland'] = async foundation => {
       let mainScope = Scope(loftRh, { processArgs: rhFromRecWithRhArgs, frameFn: resolveHrecs }, (loftRec, dep) => {
         
         // The AppRecord is ready; apply `this.above`
-        this.above(hut, loftRec, real, dep);
+        this.above(hut, loftRec, rootReal, dep);
         
         // Now KidHuts may access the AppRecord via the Hinterland; use
         // the default (0, Infinity, {}) relHandler - otherwise some
@@ -146,13 +128,12 @@ global.rooms['Hinterland'] = async foundation => {
           
           // Records throughout `scp` get followed by `owned`
           dep.scp(loftRh, { frameFn: resolveHrecsAndFollowRecs.bind(null, kidHut) }, (loftRec, dep) => {
-            this.below(kidHut, loftRec, real, dep);
+            this.below(kidHut, loftRec, rootReal, dep);
           });
           
         });
         
       });
-      
       tmp.endWith(mainScope);
       
       /// =ABOVE} {BELOW=
@@ -160,11 +141,10 @@ global.rooms['Hinterland'] = async foundation => {
       // As soon as Below syncs the root Rec it's good to go
       let kidScope = Scope(loftRh, { processArgs: rhFromRecWithRhArgs, frameFn: resolveHrecs }, async (loftRec, dep) => {
         
-        await this.below(hut, loftRec, real, dep);
-        await real.tech.informInitialized(); // Let the RealTech know the below initialized!
+        await this.below(hut, loftRec, rootReal, dep);
+        await rootReal.tech.informInitialized(); // Let the RealTech know the below initialized!
         
       });
-      
       tmp.endWith(kidScope);
       
       /// =BELOW}

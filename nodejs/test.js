@@ -1,11 +1,11 @@
 'use strict';
 
-module.exports = async foundation => {
+module.exports = async () => {
   
   // TODO: I think tests should be written modularly alongside the
   // files they correspond to, and FoundationNodejs can scan for
   // all such tests and run them all here!
-  let rooms = await foundation.getRooms([
+  let rooms = await getRooms([
     'logic.MemSrc',
     'logic.FnSrc',
     'logic.SetSrc',
@@ -176,7 +176,7 @@ module.exports = async foundation => {
         thing1: 'hi',
         thing2: Promise(r => setTimeout(() => r('ha'), 0)),
         thing3: 'yo',
-        thing4: Promise(r => foundation.soon().then(() => r('69')))
+        thing4: Promise(r => soon(() => r('69')))
       };
       let { thing1, thing2, thing3, thing4, ...more } = await Promise.all(prms);
       
@@ -185,6 +185,17 @@ module.exports = async foundation => {
       if (thing3 !== 'yo') throw Error(`Invalid "thing2"`);
       if (thing4 !== '69') throw Error(`Invalid "thing4"`);
       if (!more.empty()) throw Error(`allObj resulted in unexpected values`);
+    },
+    
+    async m => { // Function.prototype.bound
+      
+      let f = (a, b, c, d) => a + b + c + d;
+      let f1 = f.bound(1);
+      let f2 = f1.bound(2);
+      let f3 = f2.bound(4);
+      
+      if (f3(8) !== 15) throw Error(`Bounding function didn't curry params as expected`);
+      
     },
     
     async m => { // Ending a Tmp changes the results of getter methods
@@ -1017,8 +1028,10 @@ module.exports = async foundation => {
     
     async m => { // Comment removal
       
-      let regL = foundation.Form.captureLineCommentRegex;
-      let regB = foundation.Form.captureInlineBlockCommentRegex;
+      let { RoomLoader } = require('./runWithConfig.js');
+      
+      let regL = RoomLoader.captureLineCommentRegex;
+      let regB = RoomLoader.captureInlineBlockCommentRegex;
       
       let tests = [
         
@@ -1071,8 +1084,8 @@ module.exports = async foundation => {
     } catch (err) {
       
       let name = test.toString().match(/[/][/](.*)\n/)?.[1]?.trim() ?? '<unnamed>';
-      gsc(`Test FAIL (${name}):\n${foundation.formatError(err)}`);
-      foundation.halt();
+      gsc(`Test FAIL (${name})`, err.desc());
+      process.exit(1);
       
     }
     

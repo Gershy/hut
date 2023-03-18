@@ -1,8 +1,8 @@
-global.rooms['TermBank'] = async foundation => {
+global.rooms['TermBank'] = async () => {
   
-  let random = await foundation.getRoom('random');
+  let random = await getRoom('random');
   
-  return U.form({ name: 'TermBank', props: (forms, Form) => ({
+  return form({ name: 'TermBank', props: (forms, Form) => ({
     
     $stockTerms: [
       'academician', 'acceptor', 'ace', 'achiever', 'adept', 'adherent', 'administrator',
@@ -103,7 +103,7 @@ global.rooms['TermBank'] = async foundation => {
       'wunderkind', 'youngster', 'younker', 'youth', 'xenophile'
     ],
     
-    init: function(terms=Form.stockTerms, r=random.NativeRandom()) { // TODO: foundation.getRootRandom()?
+    init: function(terms=Form.stockTerms, r=random.NativeRandom()) { // TODO: global.getRootRandom()?
       
       let [ initTerm, ...otherTerms ] = r.genShuffled(terms);
       this.termsHead = this.termsTail = { term: initTerm, next: null };

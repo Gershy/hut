@@ -1,30 +1,32 @@
-global.rooms['record'] = async foundation => {
+global.rooms['record'] = async () => {
   
-  let rooms = await foundation.getRooms([
+  let rooms = await getRooms([
     'logic.MemSrc',
-    'logic.Scope',
-    'record.bank.TransientBank'
+    'record.bank.WeakBank'
   ]);
-  let { MemSrc, Scope, TransientBank } = rooms;
+  let { MemSrc, WeakBank } = rooms;
   
   let Manager = form({ name: 'Manager', props: (forms, Form) => ({
     
-    init({ rootRec=null, bank=null }) {
-      
-      if (bank === null) bank = TransientBank();
+    // TODO:
+    // "Manager" -> "Archivist"
+    // "Manager" -> "Librarian" ("Record" -> "Book"??)
+    // "Manager" -> "Curator"
+    
+    init({ bank=WeakBank() }) {
       
       Object.assign(this, {
         
-        rootRec,
+        recSearches: Set(/* functions which return either `Record(...)` or `null` */),
         bank,
         
         // To avoid race conditions all Records in the middle of being
         // created are keyed here temporarily (keys map to Promises
         // resolving to the Record). If a Record is "live" (already
         // available in RAM, and not to be re-created in a separate
-        // instance) it is in only one of two places:
-        // 1. In the RecordTree of `this.rootRec`, or
-        // 2. Pending resolution from a Promise keyed in `this.recPrms`
+        // instance) it must be returned by a `findRecordInMemory` call
+        // of the corresponding id (which must be configured by setting
+        // the correct search functions using `addRecordSearch`!)
         recPrmCacheMs: 5000,
         recPrms: Object.plain({ /* uid -> Promise(Record(...)) */ }),
         recPrmTimeouts: Object.plain({ /* uid -> Timeout */ }),
@@ -97,6 +99,12 @@ global.rooms['record'] = async foundation => {
       
     },
     
+    addRecordSearch(itFn) {
+      
+      this.recSearches.add(itFn);
+      return Endable(() => this.recSearches.rem(itFn));
+      
+    },
     findRecordInMemory(uid) {
       
       // Depending on the Manager implementation it may have multiple
@@ -107,9 +115,11 @@ global.rooms['record'] = async foundation => {
       // Manager needs to be able to supply the instance of any
       // preexisting, in-memory Record by its uid!
       
-      // Check if `uid` can ever be referenced via the RootRec (note
-      // `null` indicates no Record under `uid` is in-memory)
-      for (let rec of this.rootRec.iterateAll()) if (rec.uid === uid) return rec;
+      for (let search of this.recSearches) {
+        let rec = search(uid);
+        if (rec) return rec;
+      }
+      
       return null;
       
     },
@@ -275,7 +285,11 @@ global.rooms['record'] = async foundation => {
       if (!Form.nameRegex.test(name)) throw Error(`Invalid Type name: "${name}"`);
       if (manager.types[name]) throw Error(`Instantiated Type with duplicate name: "${name}"`);
       
-      Object.assign(this, { manager, name, termTypes: { /* Term => Type */ } });
+      Object.defineProperties(this, {
+        name: { value: name, enumerable: true },
+        manager: { value: manager },
+        termTypes: { value: {} /* Term => Type */ }
+      });
       
       // Doen't hurt to have the Type mapped immediately!
       manager.types[name] = this;
@@ -731,10 +745,14 @@ global.rooms['record'] = async foundation => {
       if (!volatile) volatile = group.mems.find(mem => mem.volatile).found;
       
       // Assign instance props
+      Object.defineProperty(this, 'group', {
+        enumerable: false,
+        value: group
+      });
       Object.assign(this, {
         
-        type, uid, group,
-        valueSrc: MemSrc.Prm1(value),
+        type, uid,
+        valueSrc: MemSrc.Prm1(value), // TODO: Use Src(function newRoute(...) { ... }) to remove MemSrc dependency
         volatile,
         relHandlers: Object.plain({}),
         
@@ -746,7 +764,7 @@ global.rooms['record'] = async foundation => {
       mmm('record', +1);
       this.endWith(() => mmm('record', -1));
       
-      foundation.subcon('record.instance')(() => `LIVE ${this.desc()} (banking...)`);
+      subcon('record.instance')(() => `LIVE ${this.desc()} (banking...)`);
       
       // Apply Banking
       let err = Error('');
@@ -814,21 +832,21 @@ global.rooms['record'] = async foundation => {
             
           }
           
-          foundation.subcon('record.instance')(() => `PROP ${this.desc()} (await sync...)`);
+          subcon('record.instance')(() => `PROP ${this.desc()} (await sync...)`);
           
           await syncPrm;
           
-          foundation.subcon('record.instance')(() => `SYNC ${this.desc()}`);
+          subcon('record.instance')(() => `SYNC ${this.desc()}`);
           
         } catch (cause) {
           
           // Any Errors upon Banking / informing Holders result in the
           // Record Ending immediately
           
-          foundation.subcon('record.instance')(() => `FAIL ${this.desc()}`);
+          subcon('record.instance')(() => `FAIL ${this.desc()}`);
           
           try         { this.end(); }
-          catch (err) { gsc(`Additional Error when ${this.desc()} failed to Bank`, foundation.formatError(err)); }
+          catch (err) { gsc(`Additional Error when ${this.desc()} failed to Bank`, err); }
           
           err.propagate({ cause, msg: `Failed to Bank ${this.desc()}` });
           
@@ -1110,7 +1128,7 @@ global.rooms['record'] = async foundation => {
       
       if (!isForm(prop, String)) throw Error(`Must provide a String property`);
       
-      let src = MemSrc.Prm1(null);
+      let src = MemSrc.Prm1(null); // TODO: Use Src(function newRoute(...) { ... }) to remove MemSrc dependency
       let lastVal = skip;
       let route = this.valueSrc.route(delta => {
         
@@ -1140,14 +1158,14 @@ global.rooms['record'] = async foundation => {
     setValue(value) {
       
       let curVal = this.valueSrc.val;
-      let curIsObj = isForm(curVal, Object);
+      let curIsObj = curVal?.constructor === Object;
       
       // Functions resolve to a transformation on the current value; if
       // the current value is an Object a snapshot of it is passed; this
       // allows the passed param to be modified and returned in-place,
       // which can shorten the code required in some use-cases
-      if (isForm(value, Function)) {
-        let passVal = curIsObj ? { ...curVal } : curVal;
+      if (value?.constructor === Function) {
+        let passVal = curIsObj ? { ...curVal } : curVal; // TODO: Deep copy required? (Yes!)
         value = value(passVal);
         if (value === skip) value = passVal;
       }
@@ -1174,7 +1192,7 @@ global.rooms['record'] = async foundation => {
     end() { forms.Tmp.end.call(this); return this.endedPrm; },
     cleanup() {
       
-      foundation.subcon('record.instance')(() => `KILL ${this.desc()}`);
+      subcon('record.instance')(() => `KILL ${this.desc()}`);
       
       for (let endWithMemRoute of this.endWithMemRoutes) endWithMemRoute.end();
       

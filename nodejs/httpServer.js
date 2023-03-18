@@ -17,7 +17,7 @@
 // TODO: For `res.writeHead(...)`, consider Keep-Alive
 // e.g. 'Keep-Alive: timeout=5, max=100'
 
-require('../clearing.js');
+require('../room/setup/clearing/clearing.js');
 
 let zlib = require('zlib');
 let stream = require('stream');
@@ -35,9 +35,20 @@ let httpResponseCodes = Object.plain({
 
 module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   
+  // [ ] Allow server stop/restart (enable certificate turnover)
+  // [ ] Report http traffic to subcon (TODO: delay from req->res!)
+  // [ ] Boot inactive clients (heartbeat behaviour)
+  // [ ] Allow parameterization via body+cookie+header+url (TODO!)
+  // [ ] Resolve all request params to (client key + 
+  // [ ] Manage resource caching (may require additional hints?)
+  // [ ] Handle cache busting
+  // [ ] Handle compression
+  
+  if (!isForm(compression, Array)) throw Error(`Api: compression should be Array; got ${getFormName(compression)}`);
+  
   let { subcon=Function.stub, errSubcon=Function.stub } = opts;
   let { heartbeatMs=60*1000, doCaching=true } = opts;
-  let { msFn=Date.now, processCookie=Function.stub, processBody=Function.stub, getKeyedMessage } = opts;
+  let { getKeyedMessage } = opts;
   let { getCacheSecs=v=>(60 * 60 * 24 * 5) } = opts; // Cache for 5 days by default
   if (!getKeyedMessage) throw Error(String.baseline(`
     | Must provide "getKeyedMessage"
@@ -46,11 +57,14 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     | - "path" is the url path (excluding the "/" prefix)
     | - "query" is an Object representing the query
     | - "fragment" is the path fragment (excluding the "#" prefix)
-    | - "cookie" is the result of "processCookie" (or the plain cookie, as a String)
-    | - "body" is the result of "processBody" (or the plain Body, as a String)
+    | - "cookie" is an Object with cookie keys pointing to raw cookie values
+    | - "body" is the http body given as a String
     | 
     | - "key" is the session identifier String for the given request
-    | - "msg" is the resulting payload 
+    | - "msg" is the resulting payload
+    | 
+    | This function can also throw Errors - any Error thrown with an "http" property defines an Error that should propagate back to the client (e.g. to inform them of their misbehaviour).
+    | Any Errors lacking an "http" property are assumed to indicate client "confusion" (as distinct from "misbehaviour"), and will prompt the client to reset its state (e.g. clear headers), and reattempt the request.
   `));
   
   let makeHttpSession = (key, req) => {
@@ -96,7 +110,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     }, 'prm');
     
     session.endWith(() => {
-      for (let pkg of session.queueRes) { pkg.used = true; forceEnd(pkg.res, 204); }
+      for (let pkg of session.queueRes) { pkg.used = true; forceEnd(pkg.res, {}, 204); }
       session.queueRes = Array.stub;
       session.queueMsg = Array.stub;
       clearTimeout(session.timeout);
@@ -114,9 +128,14 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     
     if (msg === skip) return;
     
+    
     // Resolve Errors to 400 responses
     let code = 200;
-    if (hasForm(msg, Error)) [ code, msg ] = [ 400, { command: 'error', msg: msg.message } ];
+    if (hasForm(msg, Error)) {
+      code = 400;
+      let e = msg.has('e') ? msg.e : msg.message.replace(/^[a-zA-Z0-9]/g, '');
+      msg = { command: 'error', msg: msg.message, e };
+    }
     
     let keep = null;
     if (hasForm(msg, Keep)) keep = msg;
@@ -246,7 +265,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     } catch (err) {
       
       errSubcon(`Failed to respond with ${getFormName(keep ?? msg)}: ${keep ? keep.desc() : (msg?.slice?.(0, 100) ?? msg)}`, err);
-      forceEnd(res, 400);
+      forceEnd(res, {}, 400);
       
     } finally {
       
@@ -255,11 +274,11 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     }
     
   };
-  let forceEnd = (res, code=400, body=null) => {
+  let forceEnd = (res, headers={}, code=400, body=null) => {
     
     let errs = [];
-    try { res.writeHead(code);   } catch (err) { errs.push(err); }
-    try { res.end(body || skip); } catch (err) { errs.push(err); }
+    try { res.writeHead(code, headers); } catch (err) { errs.push(err); }
+    try { res.end(body || skip);        } catch (err) { errs.push(err); }
     
     if (errs.empty()) return;
     errSubcon(`Errors occurred trying to end response (with code ${code})`, ...errs.map(err => {
@@ -322,7 +341,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       // Note that only 1 of "upgrade" and "request" will be triggered
       // for a given `req`!
       
-      let ms = msFn();
+      let ms = getMs();
       
       // Consume http request body
       let body = null;
@@ -342,7 +361,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         req.on('end', endFn = () => bodyPrm.resolve(chunks.join('')));
         
         try { body = await bodyPrm; }
-        catch (err) { forceEnd(res, 400, err.message); }
+        catch (err) { forceEnd(res, {}, 400, err.message); }
         finally {
           req.off('data', dataFn);
           req.off('end', endFn);
@@ -423,11 +442,8 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         
       }
       
-      if (tmp.closing) return forceEnd(res, 500);
+      if (tmp.closing) return forceEnd(res, {}, 500);
       for (let intercept of tmp.intercepts) if (intercept(req.gain({ body }), res)) return;
-      
-      try         { body = processBody(body); }
-      catch (err) { errSubcon('Error processing http body', err); forceEnd(res, 400, 'Invalid body'); }
       
       let headers = req.headers;
       let cookie = headers.cookie
@@ -436,26 +452,21 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         ?.toObj(item => item.cut('=') /* Naturally produces [ key, value ] */)
         ?? {};
       let cookieKeys = cookie.toArr((v, k) => k);
-      try         { cookie = processCookie(cookie); }
-      catch (err) { errSubcon('Error processing http cookie', err); forceEnd(res, 400, 'Invalid cookie'); }
       
       let [ , path, query='', fragment='' ] = req.url.match(/^([/][^?#]*)([?][^#]+)?([#].*)?$/);
       path = path.slice(1);
       query = query ? query.slice(1).split('&').toObj(pc => [ ...pc.cut('='), true /* default key-only value to flag */ ]) : {};
       fragment = fragment.slice(1);
       
-      let keyedMsg = null; // Note this must be `{ key, msg }`, where `key` is `null` (for anon) or a String
-      try {
+      // Note `keyedMsg` must be `{ key, msg }`, where `key` is `null`
+      // (for anon) or a String identifying the session
+      let keyedMsg = null;
+      try { keyedMsg = await getKeyedMessage({ headers, path, query, fragment, cookie, body }); }
+      catch (err) {
         
-        keyedMsg = await getKeyedMessage({ path, query, fragment, cookie, body });
-        
-      } catch (err) {
-        
-        errSubcon('Error getting session Key+Msg (clearing cookies and redirecting...)', err);
-        return res.writeHead(302, {
-          'Set-Cookie': cookieKeys.map(k => `${k}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;`),
-          'Location': '/'
-        }).end();
+        errSubcon('Error getting http KeyedMessage', err);
+        let { code=400, headers={}, msg=err.message } = err.has('http') ? err.http : { msg: 'Bad Request' };
+        return forceEnd(res, headers, code, msg);
         
       }
       path = query = fragment = cookie = cookieKeys = body = null;
@@ -467,7 +478,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         tmp.endWith(session, 'tmp');
         tmp.src.send(session);
         
-      } else {                     // Reuse or create an identity Session
+      } else if (isForm(keyedMsg.key, String)) {                     // Reuse or create an identity Session
         
         session = sessions.get(keyedMsg.key);
         if (!session) {
@@ -484,9 +495,13 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
           return;
         }
         
+      } else {
+        
+        throw Error(`Api: KeyedMessage key must be null or String; got ${keyedMsg.key}`);
+        
       }
       
-      if (session.off()) return res.socket.destroy(); // return res.socket.destroy(); //end(); //forceEnd(res, 204);
+      if (session.off()) return res.socket.destroy(); // forceEnd(res, {}, 204);
       
       let replyPrm = null;
       let replyable = () => {
@@ -535,7 +550,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       while (session.queueRes.length > 1) { // TODO: Parameterize "maxBankedResponses"?
         let pkg = session.queueRes.shift();
         pkg.used = true;
-        forceEnd(pkg.res, 204);
+        forceEnd(pkg.res, {}, 204);
       }
       
     });

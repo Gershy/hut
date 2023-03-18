@@ -1,4 +1,5 @@
-// TODO: Ditch this Form entirely and simply work with duck-typing??
+// Note that other Banks implicitly implement this api, but this file is
+// never actually loaded (as it's needless overhead)
 global.rooms['record.bank.AbstractBank'] = foundation => form({ name: 'AbstractBank', has: { Endable }, props: (forms, Form) => ({
   
   init() { forms.Endable.init.call(this); },

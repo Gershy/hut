@@ -5,7 +5,7 @@ global.rooms['internal.real.htmlBrowser.Art'] = async foundation => {
   
   let Layout = await foundation.getRoom('internal.real.generic.Layout');
   
-  return U.form({ name: 'Art', has: { Layout }, props: (insp, Insp) => ({
+  return form({ name: 'Art', has: { Layout }, props: (insp, Insp) => ({
     init: function({ pixelDensityMult=1, pixelCount=null /* [ 620, 480 ] */, keySrc=null, animationFn }={}) {
       
       if (pixelDensityMult !== 1 && pixelCount) throw Error(`Can't specify pixel density and pixel count`);
@@ -15,7 +15,7 @@ global.rooms['internal.real.htmlBrowser.Art'] = async foundation => {
     install: function(real) {
       
       let keySrc = this.getParam(real, 'keySrc');
-      if (keySrc && !U.isForm(keySrc, MemSrc.Prm1)) throw Error(`keySrc must be MemSrc.Prm1`);
+      if (keySrc && !isForm(keySrc, MemSrc.Prm1)) throw Error(`keySrc must be MemSrc.Prm1`);
       
       let keys = Set();
       keySrc.mod(keys);
@@ -114,7 +114,7 @@ global.rooms['internal.real.htmlBrowser.Art'] = async foundation => {
           draw.frame(() => {
             draw.trn(canvas.width >> 1, -(canvas.height >> 1));
             if (style) {
-              if (U.isForm(style, String)) style = { fillStyle: style };
+              if (isForm(style, String)) style = { fillStyle: style };
               draw.rectCen(0, 0, canvas.width, canvas.height, style);
             }
             draw.scl(this.pixelDensityMult);
@@ -148,7 +148,7 @@ global.rooms['internal.real.htmlBrowser.Art'] = async foundation => {
           let hw = w >> 1;
           let hh = h >> 1;
           
-          let url = foundation.getUrl(keep.getUrlParams(), { fixed: true });
+          let url = global.url(keep.getUrlParams(), { fixed: true });
           let img = !draw.imgCache.has(url)
             ? draw.imgCache[url] = Object.assign(new Image(), { src: url })
             : draw.imgCache[url];

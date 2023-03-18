@@ -1,11 +1,9 @@
-global.rooms['record.bank.TransientBank'] = async foundation => {
+global.rooms['record.bank.WeakBank'] = async foundation => {
   
-  let AbstractBank = await foundation.getRoom('record.bank.AbstractBank');
-  
-  return form({ name: 'TransientBank', has: { AbstractBank }, props: (forms, Form) => ({
+  return form({ name: 'WeakBank', has: { Endable }, props: (forms, Form) => ({
     
     init() {
-      forms.AbstractBank.init.call(this);
+      forms.Endable.init.call(this);
       Object.assign(this, { recs: Map(), nextUid: 0 });
     },
     getNextUid() { return this.nextUid++; },
