@@ -13,7 +13,7 @@ global.rooms['setup.hut'] = async () => {
     // Huts connect by Roads to other Huts, have the ability to Tell and
     // Hear to/from other Huts, and can react to what they Hear
     
-    init({ isHere=false, hid, uid, ...recordProps }) {
+    init({ isHere=false, hid, uid, heartbeatMs, ...recordProps }) {
       
       if (!hid && !uid) throw Error(`Api: supply either "hid" or "uid" (they're synonyms)`);
       if (!hid) hid = uid;
@@ -25,13 +25,15 @@ global.rooms['setup.hut'] = async () => {
       Object.assign(this, {
         hid,
         isHere, isAfar: !isHere,
-        commandSrcTmps: Map(/* command => CommandSrcTmp */)
+        commandSrcTmps: Map(/* command => CommandSrcTmp */),
+        heartbeatMs
       });
       
     },
-    desc() { return getFormName(this); },
+    desc() { return `${getFormName(this)}(${this.isHere ? 'here' : 'afar'}, ${this.hid})`; },
     
-    hear({ src, road, reply, ms=getMs(), msg }) {
+    hear({ src, road, reply, ms=getMs(), msg }) { return src.tell({ trg: this, road, reply, ms, msg }); },
+    tell({ trg, road, reply, ms=getMs(), msg }) {
       
       // Causes `this` to tell `trg` a Message
       // Note that `ms` should typically be provided, and should
@@ -53,14 +55,15 @@ global.rooms['setup.hut'] = async () => {
       // Note that "disjoint" Huts are non-neighbours (they require a
       // Road to communicate)
       
-      let trg = this;
       
       if (hasForm(msg, Error)) {
         subcon('warning')(`Error reply`, msg);
         msg = { command: 'error', type: 'application', msg: msg.message };
       }
-      
       if (!msg) return;
+      
+      let src = this;
+      /// {DEBUG=
       if (!src && road) throw Error(`Can't provide Road without SrcHut (who is on the other end of that Road??)`);
       if (!src && reply) throw Error(`Can't omit "src" and provide "reply" (who would receive that reply??)`);
       if (src && src.aboveHut !== trg && trg.aboveHut !== src) {
@@ -70,6 +73,7 @@ global.rooms['setup.hut'] = async () => {
           | Trg: ${trg?.desc?.() ?? null}
         `));
       }
+      /// =DEBUG}
       
       subcon('road.traffic')(() => ({
         type: 'comm',
@@ -133,13 +137,13 @@ global.rooms['setup.hut'] = async () => {
       throw Error(`Couldn't communicate between Huts`);
       
     },
-    tell({ trg, road, reply, ms=getMs(), msg }) { return trg.hear({ src: this, road, reply, ms, msg }); },
     getRoadFor(trg) { throw Error('Not implemented'); },
     actOnComm(comm) {
       
       let { msg={} } = comm;
       let { command=null } = msg;
       
+      if (command === 'lubdub') return; // Don't respond to heartbeat
       if (command === 'error') return gsc('Comm error', msg);
       if (command === 'multi') {
         
@@ -185,16 +189,15 @@ global.rooms['setup.hut'] = async () => {
     // A Hut that directly manages a Record structure and manages making
     // projections of that structure available to BelowHuts
     
-    init({ isHere, hid, recMan }) {
+    init({ recMan, ...args }) {
       
       if (!recMan) throw Error('Api: "recMan" must be provided');
       
       forms.Hut.init.call(this, {
-        isHere,
-        hid,
         type: recMan.getType('hut.above'),
         group: recMan.getGroup([]),
-        value: { ms: getMs() }
+        value: { ms: getMs() },
+        ...args
       });
       
       /// {ABOVE=
@@ -235,7 +238,6 @@ global.rooms['setup.hut'] = async () => {
       }));
       
     },
-    
     makeBelowUid() {
       
       return [ this.childUidCnt++, Math.floor(Math.random() * 62 ** 8) /* TODO: Use a stock random instance? */ ]
@@ -250,7 +252,14 @@ global.rooms['setup.hut'] = async () => {
       let { manager } = this.type;
       let type = manager.getType('hut.belowHut');
       let group = manager.getGroup([]);
-      let bh = BelowHut({ aboveHut: this, isHere: !this.isHere, type, group, hid });
+      let bh = BelowHut({
+        aboveHut: this,
+        isHere: !this.isHere,
+        type,
+        group,
+        hid,
+        heartbeatMs: this.heartbeatMs
+      });
       
       this.belowHuts.add(hid, bh);
       bh.endWith(() => this.belowHuts.rem(hid));
@@ -281,6 +290,7 @@ global.rooms['setup.hut'] = async () => {
         // TODO: Subcon values for Below??
         
         aboveHid: this.hid,
+        subcons: conf('subcons').map(subcon => subcon.slice([ 'output' ])),
         deploy: {
           maturity: conf('deploy.maturity'),
           loft: {
@@ -389,14 +399,21 @@ global.rooms['setup.hut'] = async () => {
   })});
   let BelowHut = form({ name: 'BelowHut', has: { Hut }, props: (forms, Form) => ({
     
-    init({ aboveHut, ...hutArgs }) {
+    init({ aboveHut, ...args }) {
       
       if (!aboveHut) throw Error(`Api: must supply "aboveHut"`);
       
-      forms.Hut.init.call(this, hutArgs);
+      forms.Hut.init.call(this, args);
+      
+      // Speed up BelowHut heartbeat to ensure it's on time
+      /// {BELOW=
+      if (this.isHere) this.heartbeatMs = Math.min(this.heartbeatMs * 0.95, this.heartbeatMs - 2500);
+      /// =BELOW}
       
       Object.assign(this, {
+        
         aboveHut,
+        heartbeatTimeout: null,
         
         /// {ABOVE=
         pendingSync: { add: {}, upd: {}, rem: {} },
@@ -405,6 +422,8 @@ global.rooms['setup.hut'] = async () => {
         
         roads: Map(/* Server(...) => Road/Session(...) */)
       });
+      
+      this.resetHeartbeatTimeout();
       
     },
         
@@ -424,6 +443,22 @@ global.rooms['setup.hut'] = async () => {
         
       }
       if (this.roads.get(server) !== road) throw Error(`Api: duplicate road for "${server.desc()}"`);
+      
+    },
+    getRoadFor(trg) {
+      
+      /// {DEBUG=
+      if (trg !== this.aboveHut) throw Error(`Can't tell ${trg.desc()} - can only tell ${this.aboveHut.desc()}!`);
+      /// =DEBUG}
+      
+      let bestRoad = null;
+      let bestCost = Infinity;
+      for (let [ server, road ] of this.roads) {
+        let cost = server.currentCost();
+        if (cost < bestCost) [ bestRoad, bestCost ] = [ road, cost ];
+      }
+      
+      return bestRoad;
       
     },
     
@@ -487,6 +522,45 @@ global.rooms['setup.hut'] = async () => {
       
     },
     /// =ABOVE}
+    tell({ trg, ...args }) {
+      
+      /// {DEBUG=
+      if (trg !== this.aboveHut) throw Error(`Can't tell ${trg.desc()} - can only tell ${this.aboveHut.desc()}!`);
+      /// =DEBUG}
+      
+      this.resetHeartbeatTimeout();
+      return forms.Hut.tell.call(this, { trg, ...args });
+      
+    },
+    resetHeartbeatTimeout() {
+      
+      clearTimeout(this.heartbeatTimeout);
+      this.heartbeatTimeout = setTimeout(() => {
+        
+        // Combining compilation markers with isHere/isAfar confuses me;
+        // the advantage is that Belows won't see the logic that causes
+        // Above to terminate dead BelowHuts. But should we remove the
+        // logic for sending heartbeats from Above? Need to consider:
+        // {BELOW= =BELOW} GETS COMPILED, BUT `this.isAfar === true`
+        // - This means in a Below environment (e.g. browser) we have
+        //   representations of remote Huts (interesting...)
+        // {ABOVE= =ABOVE} GETS COMPILED, BUT `this.isHere === true`
+        // - This means in an Above environment (e.g. nodejs) there are
+        //   BelowHuts representing local actors (end-to-end testing?)
+        
+        /// {BELOW=
+        // HereBelowHuts send heartbeats to be kept alive by Above
+        if (this.isHere) this.tell({ trg: this.aboveHut, msg: { command: 'lubdub' } });
+        /// =BELOW}
+        
+        /// {ABOVE=
+        // AfarBelowHuts haven't kept up their heartbeats; end them!
+        if (this.isAfar) this.end();
+        /// =ABOVE}
+        
+      }, this.heartbeatMs);
+      
+    },
     
     cleanup() {
       

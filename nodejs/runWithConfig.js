@@ -301,6 +301,21 @@ let createSchema = () => {
     
   };
   
+  scm.at('subcons').fn = (val, schema, chain) => {
+    
+    if (val === null) val = {};
+    
+    let defaults = {
+      gsc: {
+        description: 'Global Subcon - primary dev output',
+        output: { inline: true, therapist: false }
+      }
+    };
+    defaults.merge(val);
+    
+    return schema.inner(defaults, chain);
+    
+  };
   let subconsScm = scm.at('subcons.*');
   subconsScm.at('description').fn = (val, schema, chain) => {
     
@@ -317,7 +332,6 @@ let createSchema = () => {
   subconsScm.at('output.inline').fn = (val, schema, chain) => {
     
     if (val === null) val = 0;
-    
     if ([ 0, 1 ].has(val)) val = !!val;
     return validate(chain, val, { form: Boolean });
     
@@ -333,7 +347,9 @@ let createSchema = () => {
   subconsScm.at('format').fn = (val, schema, chain) => {
     
     // TODO: Functions can't be synced?
-    return validate(chain, val, { form: Function });
+    return val
+      ? validate(chain, val, { form: Function })
+      : null;
     
   };
   subconsScm.at('*').fn = (val, schema, chain) => val; // Allow arbitrary properties
@@ -731,57 +747,32 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
   hutFp = Filepath(hutFp);
   let hutKeep = FsKeep(await rootTrn.kid(hutFp), hutFp);
   
-  // Enhance value formatting and subcons
-  await (async () => {
-    
-    let util = require('util');
-    Object.defineProperty(Error.prototype, Symbol.for('nodejs.util.inspect.custom'), {
-      enumerable: false,
-      writable: true,
-      value: function(depth, opts, custom) { return this.desc(); }
-    });
-    
-    global.formatAnyValue = (val, { colors=true, depth=10 }={}) => util.inspect(val, { colors, depth });
-    
-    let vertDashChars = '166,124,33,9597,9599,9551,9483,8286,8992,8993,10650'.split(',').map(v => parseInt(v, 10).char());
-    let horzDashChars = '126,8212,9548,9148,9477'.split(',').map(v => parseInt(v, 10).char());
-    let junctionChars = '43,247,5824,9532,9547,9535,10775,10765,9533,9069,9178,11085'.split(',').map(v => parseInt(v, 10).char());
-    let vertDash = () => vertDashChars[Math.floor(Math.random() * vertDashChars.length)];
-    let horzDash = () => horzDashChars[Math.floor(Math.random() * horzDashChars.length)];
-    let junction = () => junctionChars[Math.floor(Math.random() * junctionChars.length)];
-    
-    let resolveFnArgs = (sc, args) => args.map(arg => isForm(arg, Function) ? arg(sc) : arg);
-    global.subconOutput = (sc, ...args) => thenAll(resolveFnArgs(sc, args), args => {
-      
-      let leftColW = 28;
-      let depth = 10;
-      if (isForm(args[0], String) && /^[!][!][0-9]+$/.test(args[0])) {
-        depth = parseInt(args[0].slice(2), 10);
-        args = args.slice(1);
-      }
-      
-      let now = getDate();
-      
-      let leftLns = [ `> ${sc.term.slice(-leftColW)}`, now ];
-      let rightLns = args.map(v => {
-        if (!isForm(v, String)) v = formatAnyValue(v, { depth });
-        return v.split(/\r?\n/);
-      }).flat();
-      
-      let logStr = Math.max(leftLns.length, rightLns.length).toArr(n => {
-        let l = (leftLns[n] || '').padTail(leftColW);
-        let r = rightLns[n] || '';
-        return l + vertDash() + ' ' + r;
-      }).join('\n');
-      
-      let topLine = (28).toArr(horzDash).join('') + junction() + (50).toArr(horzDash).join('');
-      console.log(topLine + '\n' + logStr);
-      
-    });
-    
-  })();
+  // TODO: HEEERE!!
+  // - Trying to debug network
+  // - So many frickin logs in the way
+  // - Need to add Subcon stuff to conf to eliminate noise
+  // - Refactoring it is ANNOYING
+  // - Circular need between initializing conf and subcon output (conf
+  //   wants to do output; output wants to consult conf to see if sc is
+  //   enabled)
+  // - Breaking the cycling by queuing sc calls until the sc outputter
+  //   is ready (so conf will try to do sc output but it won't actually
+  //   be output until later)
+  // - In the middle of this; should also make sure that if process
+  //   exits before sc output is ready, there will be some queued logs
+  //   that never got output - should probably output them upon exiting
+  global.bufferedLogs = [];
+  let setSubconOutput = fn => {
+    let pending = global.bufferedLogs;
+    global.bufferedLogs = null;
+    global.subconOutput = fn;
+    for (let args of pending) fn(...args);
+  };
+  global.subconOutput = (...args) => global.bufferedLogs.push(args);
   
-  gsc(`utc: ${getMs()}\npid: ${process.pid}`);
+  let setupSc = subcon('setup');
+  
+  setupSc(`utc: ${getMs()}\npid: ${process.pid}`);
   
   // Calibrate `getMs` (hi-res)
   await (async () => {
@@ -905,7 +896,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
   })();
   
   // Resolve final conf from Raw and Keep sources; enable `global.conf`
-  // Depends on `global.keep`
+  // Depends on `global.keep` and `global.subconOutput`
   await (async () => {
     
     let t = getMs();
@@ -993,7 +984,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       
     }
     
-    gsc(`Configuration processed after ${(getMs() - t).toFixed(2)}ms`, conf);
+    setupSc(`Configuration processed after ${(getMs() - t).toFixed(2)}ms`, conf);
     
     global.conf = (...chain) => {
       
@@ -1013,6 +1004,68 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       return ptr;
       
     };
+    
+  })();
+  
+  // Enhance value formatting and subcons
+  await (async () => {
+    
+    let util = require('util');
+    Object.defineProperty(Error.prototype, Symbol.for('nodejs.util.inspect.custom'), {
+      enumerable: false,
+      writable: true,
+      value: function(depth, opts, custom) { return this.desc(); }
+    });
+    
+    global.formatAnyValue = (val, { colors=true, depth=10 }={}) => util.inspect(val, { colors, depth });
+    
+    let vertDashChars = '166,124,33,9597,9599,9551,9483,8286,8992,8993,10650'.split(',').map(v => parseInt(v, 10).char());
+    let horzDashChars = '126,8212,9548,9148,9477'.split(',').map(v => parseInt(v, 10).char());
+    let junctionChars = '43,247,5824,9532,9547,9535,10775,10765,9533,9069,9178,11085'.split(',').map(v => parseInt(v, 10).char());
+    let vertDash = () => vertDashChars[Math.floor(Math.random() * vertDashChars.length)];
+    let horzDash = () => horzDashChars[Math.floor(Math.random() * horzDashChars.length)];
+    let junction = () => junctionChars[Math.floor(Math.random() * junctionChars.length)];
+    
+    let resolveFnArgs = (sc, args) => args.map(arg => isForm(arg, Function) ? arg(sc) : arg);
+    setSubconOutput((sc, ...args) => thenAll(resolveFnArgs(sc, args), args => {
+      
+      // Prevent stdout output if "output.format" is false
+      let allScConf = conf('subcons') ?? {};
+      let scConf = allScConf.has(sc.term) ? allScConf[sc.term] : null;
+      let { output, format } = scConf ?? {
+        output: { inline: true },
+        format: null
+      };
+      if (!output.inline) return;
+      
+      // Format args if formatter is available
+      if (format) args = args.map(arg => format(arg, sc));
+      
+      let leftColW = 28;
+      let depth = 10;
+      if (isForm(args[0], String) && /^[!][!][0-9]+$/.test(args[0])) {
+        depth = parseInt(args[0].slice(2), 10);
+        args = args.slice(1);
+      }
+      
+      let now = getDate();
+      
+      let leftLns = [ `> ${sc.term.slice(-leftColW)}`, now ];
+      let rightLns = args.map(v => {
+        if (!isForm(v, String)) v = formatAnyValue(v, { depth });
+        return v.split(/\r?\n/);
+      }).flat();
+      
+      let logStr = Math.max(leftLns.length, rightLns.length).toArr(n => {
+        let l = (leftLns[n] || '').padTail(leftColW);
+        let r = rightLns[n] || '';
+        return l + vertDash() + ' ' + r;
+      }).join('\n');
+      
+      let topLine = (28).toArr(horzDash).join('') + junction() + (50).toArr(horzDash).join('');
+      console.log(topLine + '\n' + logStr);
+      
+    }));
     
   })();
   
@@ -1214,7 +1267,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
   await (async () => {
     let t = getMs();
     await require('./test.js')();
-    gsc(`Tests completed after ${(getMs() - t).toFixed(2)}ms`);
+    setupSc(`Tests completed after ${(getMs() - t).toFixed(2)}ms`);
   })();
   
   // Enable `global.real`
@@ -1274,10 +1327,8 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     
     let subconWriteStdout = global.subconOutput;
     global.subconOutput = (sc, ...args) => {
-      
       let term = sc.term;
-      return subconWriteStdout(sc, ...args);
-      
+      subconWriteStdout(sc, ...args);
     };
     
   })();
@@ -1289,6 +1340,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     await keep('[file:code:cmp]').rem();
     
     let { uid=null, def, hosting } = global.conf('deploy.loft');
+    let { heartbeatMs } = hosting;
     
     let { prefix, room: loftName, keep: keepTerm } = def;
     
@@ -1304,33 +1356,36 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       : WeakBank({ subcon: global.subcon('bank') });
     
     let recMan = record.Manager({ prefix, bank });
-    let aboveHut = hut.AboveHut({ hid: uid, prefix, par: null, isHere: true, recMan });
+    let aboveHut = hut.AboveHut({ hid: uid, prefix, par: null, isHere: true, recMan, heartbeatMs });
     
     // Get a NetworkIdentity to handle the hosting
     let NetworkIdentity = require('./NetworkIdentity.js');
     let netIden = NetworkIdentity(hosting.netIden);
     
     // Server management
-    let getSessionKey = payload => {
+    let getSessionKey = (payload) => {
       
-      // Regardless of the protocol, they payload we receive should have
-      // an `hid` property
-      let { hid=null } = payload;
+      let { trn='anon', hid=null } = payload;
+      
+      // These can't be confined to DEBUG blocks - Server must always be
+      // wary of malformatted remote queries!
+      if (![ 'anon', 'sync', 'async' ].has(trn)) throw Error(`Api: invalid "trn"`).mod({ trn });
+      if (hid && !isForm(hid, String)) throw Error(`Api: invalid "hid"`).mod({ hid });
+      if (trn === 'anon') return null;
       
       // Try pre-existing Hut?
       let belowHut = aboveHut.belowHuts.get(hid);
       if (belowHut) return hid; // Note `belowHut.hid === hid`
       
-      // Are we lax with identities??
-      let laxIdentity = false
-        || global.conf('deploy.maturity') === 'dev'
-        || hid === null;
+      // Get an Hid to create a new Hut; if no `hid` was provided use a
+      // new, safely generated `hid`; otherwise an `hid` was provided
+      // but didn't reference any existing BelowHut - this is only valid
+      // for "dev" maturity
+      if (!hid) hid = aboveHut.makeBelowUid()
+      else if (global.conf('deploy.maturity') !== 'dev') throw Error(`Api: invalid "hid"`);
       
       // If we're lax simply return a new Hut with the provided Hut Id
-      if (laxIdentity) return aboveHut.makeBelowHut(hid ?? aboveHut.makeBelowUid()).uid;
-      
-      // If we're not lax the client should receive an Error
-      throw Error(`Invalid Hut id: "${hid}"`);
+      return aboveHut.makeBelowHut(hid).hid;
       
     };
     let servers = hosting.protocols.toArr(serverOpts => {
@@ -1361,19 +1416,35 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
           let headerValue = {};
           if (headers.has('hut')) {
             let hutHeaders = isForm(headers.hut, Array) ? headers.hut : [ headers.hut ];
-            Object.assign(headerValue, hutHeaders.map(v => {
+            Object.assign(headerValue, ...hutHeaders.map(v => {
               let obj = jsonToVal(Buffer.from(headerValue, 'base64'));
               if (!isForm(obj, Object)) throw Error(`Header values must resolve to Objects; got ${getFormName(obj)}`);
               return obj;
             }));
           }
           
-          let msg = { command: path, ...headerValue, ...cookie, ...body, ...query };
-          let key = null;
+          let command = path || 'hutify'; // Note `path` is a String with leading "/" removed
+          let msg = {
+            
+            command,
+            trn: 'anon', // Note that "trn" defaults to "sync" if the resolved command is still "hutify"
+            
+            // Include values from other sources
+            ...headerValue, ...cookie, ...body, ...query
+            
+          };
+          
+          // "hutify" command is always "sync"
+          if (msg.command === 'hutify') msg.trn = 'sync';
+          
+          if (!isForm(msg.trn, String)) throw Error(`Api: "trn" must be String`).mod({ http: {} });
+          if (![ 'anon', 'sync', 'async' ].has(msg.trn)) throw Error(`Api: invalid "trn" value`).mod({ http: {} });
+          if (!isForm(msg.command, String)) throw Error(`Api: "command" must be String`).mod({ http: {} });
           
           // Errors getting the session key should reset headers
-          try { key = getSessionKey(msg); }
-          catch (err) {
+          try {
+            return { key: getSessionKey(msg), msg };
+          } catch (err) {
             // TODO: Review when to redirect? Really only requests to
             // load the main page should redirect... this will redirect
             // requests for .js, .css, fetch requests, etc.
@@ -1385,8 +1456,6 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
               }
             }});
           }
-          
-          return { key, msg };
           
         }
         
@@ -1406,61 +1475,67 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     
     // Each server gets managed by the NetworkIdentity, and is routed
     // so that Sessions are put in contact with the Hut
-    let processAnonSessionMsg = (session, { replyable, ms=getMs(), msg }) => {
-      
-      return hut.hear({
-        src: { parHut: hut, desc: () => `AnonHut(${session.knownNetAddrs.toArr(v=>v).join(', ')})` },
-        road: session, reply: replyable(), ms,
-        msg
-      });
-      
-    };
-    let processSessionMsg = (belowHut, session, { replyable, ms=getMs(), msg }) => {
-      
-      if (msg.command === 'bp') return; // Don't propagate bank-poll commands to Hut
-      
-      if (!msg.command) Object.assign(msg, { trn: 'sync', command: 'hutify' });
-      if (!msg.trn)     Object.assign(msg, { trn: 'anon' });
-      
-      let reply = (msg.trn === 'sync') ? replyable() : null; // `reply` only allowed for "sync" requests
-      aboveHut.hear({ src: belowHut, road: session, reply, ms, msg });
-      
-    };
-    let processSession = (server, session) => {
-      
-      // TODO: Does this `session` have a reputation??
-      // let naRep = hut.netAddrReputation;
-      // let netAddrs = session.knownNetAddrs;
-      // let badNetAddr = netAddrs.find(na => naRep.get(na)?.window >= 1).val; // "window" refers to the reputational damage within some timeframe (as opposed to "total" reputational damage)
-      // let badRep = badNetAddr && naRep.get(badNetAddr);
-      // 
-      // if (badRep) {
-      //   this.subcon('warning')(`Reject ${session.desc()} @ ${netAddrs.toArr(v => v).join(' + ')}`, Set(badRep.strikes.map(v => v.reason)).toArr(v => v));
-      //   return session.end();
-      // }
-      
-      // Note Hid is always equal to Session key; this is the bridge
-      // between generic protocol serving and the Hut backend!
-      
-      let hid = session.key;
-      
-      // If `session.key` is `null` this is an anonymous Session; only
-      // 1 Tell will occur, and it must be replied to immediately!
-      if (hid === null) return session.hear.route(processAnonSessionMsg.bind(null, session), 'prm');
-      
-      // At this point `session.key` is either the preexisting hid of
-      // a Hut, or a never-before-seen hid that we can be certain is
-      // authenticated to be used as the hid of a new Hut
-      let belowHut = aboveHut.belowHuts.get(hid) ?? aboveHut.makeBelowHut(hid);
-      belowHut.seenOnRoad(server, session);
-      
-      session.hear.route(processSessionMsg.bound(belowHut, session));
-      
-    };
     for (let server of servers) {
+      
       netIden.addServer(server);
       aboveHut.addServerInfo({ ...server }.slice([ 'secure', 'protocol', 'netAddr', 'port' ]));
-      server.src.route(processSession.bound(server));
+      
+      server.src.route((session) => {
+        
+        // TODO: Does this `session` have a reputation??
+        // let naRep = hut.netAddrReputation;
+        // let netAddrs = session.knownNetAddrs;
+        // let badNetAddr = netAddrs.find(na => naRep.get(na)?.window >= 1).val; // "window" refers to the reputational damage within some timeframe (as opposed to "total" reputational damage)
+        // let badRep = badNetAddr && naRep.get(badNetAddr);
+        // 
+        // if (badRep) {
+        //   this.subcon('warning')(`Reject ${session.desc()} @ ${netAddrs.toArr(v => v).join(' + ')}`, Set(badRep.strikes.map(v => v.reason)).toArr(v => v));
+        //   return session.end();
+        // }
+        
+        // Note Hid is always equal to Session key; this is the bridge
+        // between generic protocol serving and the Hut backend!
+        
+        let hid = session.key;
+        
+        // `session.key === null` indicates an anonymous Session; a
+        // single Tell will occur and it must be replied to with `reply`!
+        if (hid === null) return session.hear.route(({ replyable, ms=getMs(), msg }) => {
+          
+          // Spoof the BelowHut (there isn't any; it's Anon)
+          let anonHut = {
+            aboveHut,
+            isHere: false,
+            isAfar: true,
+            desc: () => `AnonHut(${session.netAddr})`
+          };
+          hut.Hut.prototype.tell.call(anonHut, {
+            // Note that `hut.BelowHut.prototype.tell` would trigger
+            // heartbeat timeout functionality on the AnonHut, which
+            // isn't necessary because AnonHuts are completely ephemeral
+            trg: aboveHut,
+            road: session, reply: replyable(), ms,
+            msg
+          });
+          
+        }, 'prm');
+        
+        // There is an identity/BelowHut associated with this Session!
+        // We'll reference or create the BelowHut; note rejection of
+        // invalid Sessions happened earlier when determining the Hid
+        let belowHut = aboveHut.belowHuts.get(hid);
+        belowHut.seenOnRoad(server, session);
+        session.hear.route(({ replyable, ms=getMs(), msg }) => {
+          
+          if (msg.command === 'bp') return; // Don't propagate bank-poll commands to Hut
+          
+          let reply = (msg.trn === 'sync') ? replyable() : null; // `reply` only allowed for "sync" requests
+          belowHut.tell({ trg: aboveHut, road: session, reply, ms, msg });
+          
+        });
+        
+      });
+      
     }
     
     let loft = await getRoom(loftName);

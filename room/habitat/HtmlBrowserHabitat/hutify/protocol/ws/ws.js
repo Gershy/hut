@@ -7,6 +7,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.protocol.ws'] = () => {
       protocol: 'ws', netIden, netProc,
       desc: () => `ws${netIden.secureBits ? 's' : ''}://${netProc}`,
       src: Src(),
+      currentCost: () => 0.25,
     });
     
     server.src.route(session => {
@@ -14,10 +15,8 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.protocol.ws'] = () => {
       server.endWith(session, 'tmp');
       
       // TODO: Detect ssl properly!
-      let socket = new global.WebSocket(`${netIden.secureBits ? 'wss' : 'ws'}://${netProc}/?trn=sync&hutId=${this.hutId}`);
-      socket.addEventListener('error', err => {
-        this.subcon('warning')('Socket error event', err);
-      });
+      let socket = new WebSocket(`${netIden.secureBits ? 'wss' : 'ws'}://${netProc}/?trn=sync&hid=${hut.hid}`);
+      socket.addEventListener('error', err => subcon('warning')('Socket error event', err));
       socket.addEventListener('close', () => session.end());
       
       let openPrm = Promise((rsv, rjc) => {
@@ -28,7 +27,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.protocol.ws'] = () => {
       
       socket.addEventListener('message', ({ data: msg, ...stuff }) => {
         msg = jsonToVal(msg);
-        if (msg) session.hear.send({ ms: this.getMs(), reply: null, msg });
+        if (msg) session.hear.send({ ms: getMs(), reply: null, msg });
       });
       
       let routeBeforeConnect = session.tell.route(async data => {

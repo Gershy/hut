@@ -56,13 +56,14 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.init'] = () => ({ init: async ev
   window.addEventListener('blur', evt => body.classList.remove('focus'));
   
   global.subconOutput = (sc, ...args) => {
+    
+    args = args.map(arg => isForm(arg, Function) ? arg() : arg).filter(Boolean);
     if (!args.length) return;
     console.log(
       `%c${getDate().padTail(80, ' ')}\n${sc.term.padTail(80, ' ')}`,
       'background-color: rgba(0, 0, 0, 0.2);',
     );
-    for (let arg of args) console.log(arg);
-    console.log('');
+    console.log(...args);
   };
   gsc(global.rawConf);
   
@@ -238,10 +239,11 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.init'] = () => ({ init: async ev
     `record.bank.WeakBank`,
     global.conf('deploy.loft.def.room')
   ]);
-    
+  
+  let heartbeatMs = global.conf('deploy.loft.hosting.heartbeatMs');
   let bank = WeakBank({ subcon: global.subcon('bank') });
   let recMan = record.Manager({ prefix, bank });
-  let aboveHut = hut.AboveHut({ hid: '!above', prefix, isHere: false, recMan });
+  let aboveHut = hut.AboveHut({ hid: '!above', prefix, isHere: false, recMan, heartbeatMs });
   let belowHut = aboveHut.makeBelowHut(global.conf('hid'));
   
   // Note that `netIden` is just a stub - Hinterland will want to call
@@ -250,31 +252,18 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.init'] = () => ({ init: async ev
   // network" functionality), and call `loft.open`, which will call
   // `Hinterland(...).open({ hut, netIden })` with the spoofed `netIden`
   
-  let { heartbeatMs, netAddr, netIden: netIdenConf, protocols } = global.conf('deploy.loft.hosting');
-  
-  // Reduce `heartbeatMs` to make sure we beat the timer set Above
-  heartbeatMs = Math.max(heartbeatMs * 0.9, heartbeatMs - 3000);
+  let { netAddr, netIden: netIdenConf, protocols } = global.conf('deploy.loft.hosting');
   
   // TODO: This assumes Above never ends which may introduce annoyances
   // for development (e.g. Above restarting should refresh Below)
   let netIden = { ...netIdenConf, runOnNetwork: () => Tmp.stub };
+  
   let setupServer = (protocolObj, server) => {
     
-    // Any Sessions joining any Server have Hears/Tells directed to the
-    // appropriate Hut
+    // Any Session represents a Session with Above
     server.src.route(session => {
-      
-      // Send heartbeats whenever we haven't sent a Tell for too long
-      let timeout = null;
-      let resetTimeout = () => {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => session.tell.send({ command: 'lubdub' }), heartbeatMs);
-      };
-      resetTimeout();
-      session.tell.route(resetTimeout, 'prm');
-      
-      // Anything heard from the Session represents a Command from Above
-      // directed at us (Below)
+          
+      // HutMsgs from the Session are sent from Above to us (Below)
       session.hear.route(({ ms, msg }) => aboveHut.tell({ trg: belowHut, road: session, ms, msg }));
       
     });

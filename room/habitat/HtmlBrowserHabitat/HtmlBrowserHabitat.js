@@ -257,7 +257,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
             <style type="text/css">
               body, html { padding: 0; margin: 0; }
               body { margin: 2px; text-align: center; }
-              iframe { display: inline-block; margin: 1px; vertical-align: top; border: none; }
+              iframe { display: inline-block; margin: 1px; vertical-align: top; border: none; box-shadow: 0 0 0 1px #000; }
             </style>
             <script type="text/javascript">window.addEventListener('load', () => document.querySelector('iframe').focus())</script>
           </head>

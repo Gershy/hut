@@ -10,8 +10,12 @@ if (1) { // Setup basic process monitoring
   // https://nodejs.org/api/process.html#signal-events
   
   let origExit = process.exit;
+  let revealBufferedLogs = () => {
+    for (let arg of global.bufferedLogs ?? []) console.log(...pendingLog);
+  };
   process.exit = (...args) => {
     gsc(Error('Process explicitly exited').desc());
+    revealBufferedLogs();
     return origExit.call(process, ...args);
   };
   
@@ -26,6 +30,7 @@ if (1) { // Setup basic process monitoring
   
   let onErr = err => {
     gsc(`Uncaught ${getFormName(err)}:`, err.desc());
+    revealBufferedLogs();
     origExit(1);
   };
   process.on('uncaughtException', onErr);

@@ -5,7 +5,7 @@ require('../room/setup/clearing/clearing.js');
 module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   
   let { subcon=Function.stub, errSubcon=Function.stub } = opts;
-  let { getKey, heartbeatMs=60*1000 } = opts;
+  let { getKey } = opts;
   if (!getKey) throw Error(String.baseline(`
     | Must provide "getKey":
     | It must be a Function like: ({ query }) => key
@@ -22,11 +22,8 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       desc: () => `SoktSession(ws${secure ? 's' : ''}://${netAddr}:${port} / ${key})`,
       currentCost: () => 0.3,
       netAddr: socket.remoteAddress,
-      
       tell: Src(),
-      hear: Src(),
-      timeout: setTimeout(() => session.end(), heartbeatMs)
-      
+      hear: Src()
     });
     
     let state = { frames: [], size: 0, buff: Buffer.alloc(0) };
@@ -168,9 +165,6 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
       // Call this whenever there's more data available on the wire
       
-      clearTimeout(session.timeout);
-      session.timeout = setTimeout(() => session.end(), heartbeatMs);
-      
       state.size += buff.length;
       if (state.size > 5000) return session.end();
       state.buff = Buffer.concat([ state.buff, buff ]);
@@ -297,6 +291,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         let key = opts.getKey({ query });
         let session = makeSoktSession(key, req, socket, buff);
         tmp.endWith(session, 'tmp');
+        
         tmp.src.send(session);
         
         subcon(() => ({ type: 'hear', fin: null, op: null, mask: null, data: null }));

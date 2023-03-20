@@ -108,13 +108,16 @@ Object.assign(global, {
     },
     merge(o) {
       for (let [ k, v ] of o) {
-        
-        // Non-Object properties are simple
+        // Incoming non-Object properties are simple
         if (v?.constructor !== Object) { this[k] = v; continue; }
-        if (this[k]?.constructor !== Object || !this.has(k)) this[k] = {};
-        this[k].merge(v);
         
+        // Existing non-Object replaced with `{}`
+        if (this[k]?.constructor !== Object || !this.has(k)) this[k] = {};
+        
+        // And simply recurse!
+        this[k].merge(v);
       }
+      return this;
     },
     count() { let c = 0; for (let k in this) c++; return c; },
     categorize(fn) { // Iterator: (val, key) => '<categoryTerm>'
@@ -357,6 +360,7 @@ Object.assign(global, {
       
       let { message: msg, stack, cause, ...props } = this;
       let [ preamble, lines ] = stack.cut('\n<trace begin>\n');
+      if (!lines) return stack; // Errors which occur before error formatting is initialized are better like this
       
       // We want to show the Message and Preamble; depending how the
       // Error is generated one may contain the other - if so we show

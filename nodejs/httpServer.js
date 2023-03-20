@@ -37,7 +37,6 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   
   // [ ] Allow server stop/restart (enable certificate turnover)
   // [ ] Report http traffic to subcon (TODO: delay from req->res!)
-  // [ ] Boot inactive clients (heartbeat behaviour)
   // [ ] Allow parameterization via body+cookie+header+url (TODO!)
   // [ ] Resolve all request params to (client key + 
   // [ ] Manage resource caching (may require additional hints?)
@@ -47,7 +46,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   if (!isForm(compression, Array)) throw Error(`Api: compression should be Array; got ${getFormName(compression)}`);
   
   let { subcon=Function.stub, errSubcon=Function.stub } = opts;
-  let { heartbeatMs=60*1000, doCaching=true } = opts;
+  let { doCaching=true } = opts;
   let { getKeyedMessage } = opts;
   let { getCacheSecs=v=>(60 * 60 * 24 * 5) } = opts; // Cache for 5 days by default
   if (!getKeyedMessage) throw Error(String.baseline(`
@@ -85,20 +84,8 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
     });
     
-    // Messages from the Client reset the heartbeat
-    if (session.key !== null) {
-      
-      session.hear.route(() => {
-        clearTimeout(session.timeout);
-        session.timeout = setTimeout(() => session.end(), heartbeatMs);
-      }, 'prm');
-      
-    } else {
-      
-      // Always end anon Sessions eventually
-      session.timeout = setTimeout(() => session.end(), 10000);
-      
-    }
+    // Always end anon Sessions eventually
+    if (session.key === null) setTimeout(() => session.end(), 10000);
     
     // Trying to send a Message with the Session either uses a queued
     // Response Object to send the message immediately, or queues the
@@ -113,7 +100,6 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       for (let pkg of session.queueRes) { pkg.used = true; forceEnd(pkg.res, {}, 204); }
       session.queueRes = Array.stub;
       session.queueMsg = Array.stub;
-      clearTimeout(session.timeout);
     });
     
     return session;
