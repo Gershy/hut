@@ -181,6 +181,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.init'] = () => ({ init: async ev
     let FakeReal = form({ name: 'FakeReal', has: { Tmp }, props: (forms, Form) => ({
       init({ name, tech }) {
         forms.Tmp.init.call(this);
+        gsc('INIT', { name });
         Object.assign(this, {
           name, tech,
           fakeLayout: null,
