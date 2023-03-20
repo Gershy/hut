@@ -10,11 +10,6 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.init'] = () => ({ init: async ev
   
   Error.prepareStackTrace = (err, callSites) => err.message + '\n<trace begin>\n' + callSites.map(cs => {
     
-    //console.log(Object.getOwnPropertyNames(Object.getPrototypeOf(cs)).toObj(prop => {
-    //  if ([ 'constructor' ].has(prop)) return skip;
-    //  return [ prop, cs[prop]() ];
-    //}));
-    
     // https://v8.dev/docs/stack-trace-api
     let rawFileName = cs.getFileName();
     let row = cs.getLineNumber();
@@ -55,18 +50,6 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.init'] = () => ({ init: async ev
   window.addEventListener('focus', evt => body.classList.add('focus'));
   window.addEventListener('blur', evt => body.classList.remove('focus'));
   
-  global.subconOutput = (sc, ...args) => {
-    
-    args = args.map(arg => isForm(arg, Function) ? arg() : arg).filter(Boolean);
-    if (!args.length) return;
-    console.log(
-      `%c${getDate().padTail(80, ' ')}\n${sc.term.padTail(80, ' ')}`,
-      'background-color: rgba(0, 0, 0, 0.2);',
-    );
-    console.log(...args);
-  };
-  gsc(global.rawConf);
-  
   global.getMs = Date.now;
   global.keep = (...args) => { throw Error(`Lol wut`).mod({ args }); };
   global.conf = (...chain) => {
@@ -80,6 +63,21 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.init'] = () => ({ init: async ev
       ptr = ptr[pc];
     }
     return ptr;
+    
+  };
+  global.subconOutput = (sc, ...args) => {
+    
+    let term = sc.term;
+    let { inline=false, therapist=false } = global.rawConf.subcons[term]?.output ?? {};
+    if (!inline) return;
+    
+    args = args.map(arg => isForm(arg, Function) ? arg() : arg).filter(Boolean);
+    if (!args.length) return;
+    console.log(
+      `%c${getDate().padTail(80, ' ')}\n${sc.term.padTail(80, ' ')}`,
+      'background-color: rgba(0, 0, 0, 0.2);',
+    );
+    console.log(...args);
     
   };
   global.getRooms = (names, { shorten=true, ...opts }={}) => {
@@ -133,6 +131,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.init'] = () => ({ init: async ev
     }));
     
   };
+  gsc('Configuration:', global.rawConf);
   
   /// {DEBUG=
   global.mapSrcToCmp = (file, row, col) => {

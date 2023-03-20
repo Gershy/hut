@@ -1541,6 +1541,11 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     let loft = await getRoom(loftName);
     await loft.open({ hut: aboveHut, netIden });
     
+    process.on('exit', () => {
+      aboveHut.end();
+      for (let server of servers) server.serverShut();
+    });
+    
   })();
   
 };

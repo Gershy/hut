@@ -20,14 +20,14 @@ global.rooms['setup.hut'] = async () => {
       if (!uid) uid = hid;
       if (uid !== hid) throw Error(`Api: "hid" and "uid" must have same value`);
       
-      forms.Record.init.call(this, { uid, ...recordProps });
-      
       Object.assign(this, {
         hid,
         isHere, isAfar: !isHere,
         commandSrcTmps: Map(/* command => CommandSrcTmp */),
         heartbeatMs
       });
+      
+      forms.Record.init.call(this, { uid, ...recordProps, volatile: true });
       
     },
     desc() { return `${getFormName(this)}(${this.isHere ? 'here' : 'afar'}, ${this.hid})`; },
