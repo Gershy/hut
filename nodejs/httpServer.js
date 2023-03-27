@@ -35,14 +35,6 @@ let httpResponseCodes = Object.plain({
 
 module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   
-  // [ ] Allow server stop/restart (enable certificate turnover)
-  // [ ] Report http traffic to subcon (TODO: delay from req->res!)
-  // [ ] Allow parameterization via body+cookie+header+url (TODO!)
-  // [ ] Resolve all request params to (client key + 
-  // [ ] Manage resource caching (may require additional hints?)
-  // [ ] Handle cache busting
-  // [ ] Handle compression
-  
   if (!isForm(compression, Array)) throw Error(`Api: compression should be Array; got ${getFormName(compression)}`);
   
   let { subcon=Function.stub, errSubcon=Function.stub } = opts;
@@ -51,14 +43,14 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   let { getCacheSecs=v=>(60 * 60 * 24 * 5) } = opts; // Cache for 5 days by default
   if (!getKeyedMessage) throw Error(String.baseline(`
     | Must provide "getKeyedMessage"
-    | It must be a function like: ({ path, query, fragment, cookie, body }) => ({ key, msg })
+    | It must be a function like: ({ headers, path, query, fragment, cookie, body }) => ({ key, msg })
     | 
+    | - "headers" are http headers
     | - "path" is the url path (excluding the "/" prefix)
     | - "query" is an Object representing the query
     | - "fragment" is the path fragment (excluding the "#" prefix)
     | - "cookie" is an Object with cookie keys pointing to raw cookie values
     | - "body" is the http body given as a String
-    | 
     | - "key" is the session identifier String for the given request
     | - "msg" is the resulting payload
     | 
@@ -113,7 +105,6 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     // indicates the client has misused the http connection.
     
     if (msg === skip) return;
-    
     
     // Resolve Errors to 400 responses
     let code = 200;
@@ -197,7 +188,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     }
     
     // If `cache` set Cache-Control; `opts.doCaching` determines if the
-    // http resource either lasts for 5 days, or immediately expires
+    // http resource either lasts for some time or immediately expires
     // TODO: `cache` is always "private"! Consider how to propagate the
     // information regarding the sensitivity of the given response data
     // to this point in the code; overall we want to be able to do
@@ -209,7 +200,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       'Cache-Control': (opts.doCaching && cache) ? `${cache}, max-age=${getCacheSecs(msg)}` : 'max-age=0'
     };
     
-    res.explicitBody = { body: keep ?? msg, encode };
+    res.explicitBody = { body: keep ?? msg, encode }; // Use the "explicitBody" property to make values clearer in subcon
     
     let timeout = setTimeout(() => {
       errSubcon(`Ending response destructively because response data was not ready in time`);

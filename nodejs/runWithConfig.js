@@ -1,6 +1,45 @@
 'use strict';
 
 require('../room/setup/clearing/clearing.js');
+
+// Set up basic process monitoring
+(() => {
+  
+  // https://nodejs.org/api/process.html#signal-events
+  let origExit = process.exit;
+  let revealBufferedLogs = () => {
+    if (!global.bufferedLogs?.length) return;
+    console.log('Error before logs displayable; outputting raw logged data:');
+    for (let args of global.bufferedLogs) console.log(...args);
+  };
+  process.exit = (...args) => {
+    gsc(Error('Process explicitly exited').desc());
+    revealBufferedLogs();
+    return origExit.call(process, ...args);
+  };
+  
+  // NOTE: Trying to catch SIGKILL or SIGSTOP crashes posix!
+  // https://github.com/nodejs/node-v0.x-archive/issues/6339
+  let evts = 'hup,int,pipe,quit,term,tstp,break'.split(',');
+  let haltEvts = Set('int,term,quit'.split(','));
+  for (let evt of evts) process.on(`SIG${evt.upper()}`, (...args) => {
+    gsc(`Process event: "${evt}"`, args);
+    haltEvts.has(evt) && process.exit(isForm(args[1], Number) ? args[1] : -1);
+  });
+  
+  let onErr = err => {
+    if (err['~suppressed']) return; // Ignore suppressed errors
+    gsc(`Uncaught ${getFormName(err)}:`, err.desc());
+    revealBufferedLogs();
+    origExit(1);
+  };
+  process.on('uncaughtException', onErr);
+  process.on('unhandledRejection', onErr);
+  
+  //process.on('exit', code => gsc(`Process exit event (code: ${code})`));
+  
+})();
+
 let { rootTransaction: rootTrn, Filepath, FsKeep } = require('./filesys.js');
 
 let niceRegex = (...args) => {
@@ -747,20 +786,6 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
   hutFp = Filepath(hutFp);
   let hutKeep = FsKeep(await rootTrn.kid(hutFp), hutFp);
   
-  // TODO: HEEERE!!
-  // - Trying to debug network
-  // - So many frickin logs in the way
-  // - Need to add Subcon stuff to conf to eliminate noise
-  // - Refactoring it is ANNOYING
-  // - Circular need between initializing conf and subcon output (conf
-  //   wants to do output; output wants to consult conf to see if sc is
-  //   enabled)
-  // - Breaking the cycling by queuing sc calls until the sc outputter
-  //   is ready (so conf will try to do sc output but it won't actually
-  //   be output until later)
-  // - In the middle of this; should also make sure that if process
-  //   exits before sc output is ready, there will be some queued logs
-  //   that never got output - should probably output them upon exiting
   global.bufferedLogs = [];
   let setSubconOutput = fn => {
     let pending = global.bufferedLogs;
@@ -768,10 +793,9 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     global.subconOutput = fn;
     for (let args of pending) fn(...args);
   };
-  global.subconOutput = (...args) => global.bufferedLogs.push(args);
+  global.subconOutput = (...args) => void global.bufferedLogs.push(args);
   
   let setupSc = subcon('setup');
-  
   setupSc(`utc: ${getMs()}\npid: ${process.pid}`);
   
   // Calibrate `getMs` (hi-res)
@@ -809,7 +833,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
   })();
   
   // Enable `global.keep`
-  // Depends on `hutKeep`
+  // - Requires `hutKeep`
   await (async () => {
     
     let RootKeep = form({ name: 'RootKeep', has: { Keep }, props: (forms, Form) => ({
@@ -895,119 +919,8 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     
   })();
   
-  // Resolve final conf from Raw and Keep sources; enable `global.conf`
-  // Depends on `global.keep` and `global.subconOutput`
-  await (async () => {
-    
-    let t = getMs();
-    
-    rawConf = resolveDeepObj(rawConf);
-    let schema = createSchema();
-    
-    let conf = {
-      
-      confs: [],
-      subcons: {},
-      
-      hosts: {},
-      deploy: {
-        subconKeep: '[file:mill]->sc',
-        maturity: 'alpha'
-      }
-      
-    };
-    
-    try {
-      
-      conf.merge(await schema.getConf(cloneResolveLinks(rawConf, false)));
-    
-      // Apply any Keep-based Conf
-      if (conf.confs && !conf.confs.empty()) {
-        
-        let moreConfs = await Promise.all(conf.confs.map(async keepConf => {
-          
-          let keep = global.keep(keepConf);
-          
-          let content = null;
-          try {
-            content = await keep.getContent('utf8');
-            content = content.replace(/[;\s]+$/, ''); // Remove tailing whitespace and semicolons
-            content = await eval(`(${content})`);
-          } catch (err) {
-            err.propagate({ keepConf, keep: keep.fp.desc(), content });
-          }
-          return content;
-          
-        }));
-        
-        for (let c of moreConfs) conf.merge(resolveDeepObj(c));
-        conf.merge(rawConf); // Merge back the raw configuration; it should always have precedence!
-        
-        conf = await schema.getConf(cloneResolveLinks(conf));
-        
-      }
-      
-      // Resolve any @-links
-      conf = cloneResolveLinks(conf, '', conf);
-      
-      // Additional Conf value sanitization and defaulting:
-      
-      // Provide defaults for Ports
-      for (let [ , protocol ] of conf.deploy.loft.hosting.protocols) {
-        
-        if (protocol.port !== null) continue;
-        
-        let netIden = conf.deploy.loft.hosting.netIden;
-        
-        if ([ 'http' ].includes(protocol.protocol))
-          protocol.port = (netIden.secureBits > 0) ? 443 : 80;
-        
-        if ([ 'ws', 'sokt' ].includes(protocol.protocol))
-          protocol.port = (netIden.secureBits > 0) ? 443 : 80;
-        
-      }
-      
-      // Default random loft uid
-      // TODO: Maybe it should *always* be random for low maturity?
-      // Would at least help with cache-busting - but maybe it should be
-      // the responsibility of the dev to make sure the uid is random
-      // for each run...
-      if (conf.deploy.loft.uid === null) conf.deploy.loft.uid = Math.random().toString(36).slice(2, 8);
-      
-    } catch (err) {
-      
-      if (err.message.startsWith('Api:')) {
-        gsc(err);
-        process.exit(1);
-      }
-      throw err;
-      
-    }
-    
-    setupSc(`Configuration processed after ${(getMs() - t).toFixed(2)}ms`, conf);
-    
-    global.conf = (...chain) => {
-      
-      chain = chain.map(v => isForm(v, String) ? v.split('.') : v).flat(Infinity);
-      
-      let ptr = conf;
-      for (let pc of chain) {
-        
-        /// {DEBUG= TODO: how to compile out these markers??
-        if (!isForm(ptr, Object) || !ptr.has(pc)) throw Error('Api: invalid Conf chain').mod({ chain });
-        /// =DEBUG}
-        
-        ptr = ptr[pc];
-        
-      }
-      
-      return ptr;
-      
-    };
-    
-  })();
-  
-  // Enhance value formatting and subcons
+  // Upgrade `global.subconOutput`
+  // - No dependencies (but using subcons requires `global.conf`)
   await (async () => {
     
     let util = require('util');
@@ -1066,6 +979,110 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       console.log(topLine + '\n' + logStr);
       
     }));
+    
+  })();
+  
+  // Enable `global.conf`
+  // - requires `global.keep`
+  // - requires `global.subconOutput`
+  await (async () => {
+    
+    let t = getMs();
+    
+    rawConf = resolveDeepObj(rawConf);
+    let schema = createSchema();
+    
+    let conf = {
+      
+      confs: [],
+      
+      // Note this controls which subcons get to output by default
+      subcons: 'gsc,setup,compile.result,bank,warning'.split(',').toObj(v => [ v, {
+        output: { inline: true, therapist: false }
+      }]),
+      
+      hosts: {},
+      deploy: {
+        subconKeep: '[file:mill]->sc',
+        maturity: 'alpha'
+      }
+      
+    };
+    global.conf = (...chain) => {
+      
+      chain = chain.map(v => isForm(v, String) ? v.split('.') : v).flat(Infinity);
+      
+      let ptr = conf;
+      for (let pc of chain) {
+        
+        /// {DEBUG= TODO: how to compile out these markers??
+        if (!isForm(ptr, Object) || !ptr.has(pc)) throw Error('Api: invalid Conf chain').mod({ chain });
+        /// =DEBUG}
+        
+        ptr = ptr[pc];
+        
+      }
+      
+      return ptr;
+      
+    };
+    
+    conf.merge(await schema.getConf(cloneResolveLinks(rawConf, false)));
+  
+    // Apply any Keep-based Conf
+    if (conf.confs && !conf.confs.empty()) {
+      
+      let moreConfs = await Promise.all(conf.confs.map(async keepConf => {
+        
+        let keep = global.keep(keepConf);
+        
+        let content = null;
+        try {
+          content = await keep.getContent('utf8');
+          content = content.replace(/[;\s]+$/, ''); // Remove tailing whitespace and semicolons
+          content = await eval(`(${content})`);
+        } catch (err) {
+          err.propagate({ keepConf, keep: keep.fp.desc(), content });
+        }
+        return content;
+        
+      }));
+      
+      for (let c of moreConfs) conf.merge(resolveDeepObj(c));
+      conf.merge(rawConf); // Merge back the raw configuration; it should always have precedence!
+      
+      conf = await schema.getConf(cloneResolveLinks(conf));
+      
+    }
+    
+    // Resolve any @-links
+    conf = cloneResolveLinks(conf, '', conf);
+    
+    // Additional Conf value sanitization and defaulting:
+    
+    // Provide defaults for Ports
+    for (let [ , protocol ] of conf.deploy.loft.hosting.protocols) {
+      
+      if (protocol.port !== null) continue;
+      
+      let netIden = conf.deploy.loft.hosting.netIden;
+      
+      if ([ 'http' ].includes(protocol.protocol))
+        protocol.port = (netIden.secureBits > 0) ? 443 : 80;
+      
+      if ([ 'ws', 'sokt' ].includes(protocol.protocol))
+        protocol.port = (netIden.secureBits > 0) ? 443 : 80;
+      
+    }
+    
+    // Default random loft uid
+    // TODO: Maybe it should *always* be random for low maturity?
+    // Would at least help with cache-busting - but maybe it should be
+    // the responsibility of the dev to make sure the uid is random
+    // for each run...
+    if (conf.deploy.loft.uid === null) conf.deploy.loft.uid = Math.random().toString(36).slice(2, 8);
+    
+    setupSc(`Configuration processed after ${(getMs() - t).toFixed(2)}ms`, conf);
     
   })();
   
@@ -1400,6 +1417,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       if ([ 'http' ].includes(protocol)) return require('./httpServer.js')({
         
         secure: netIden.secureBits > 0,
+        subcon: global.subcon('server.http.raw'),
         errSubcon: global.subcon('warning'),
         netAddr, port, heartbeatMs, compression, ...opts,
         getKeyedMessage: ({ headers, path, query, fragment, cookie: cookieObj, body }) => {
@@ -1463,6 +1481,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       if ([ 'ws', 'sokt' ].includes(protocol)) return require('./soktServer.js')({
         
         secure: netIden.secureBits > 0,
+        subcon: global.subcon('server.sokt.raw'),
         errSubcon: global.subcon('warning'),
         netAddr, port, heartbeatMs, compression, ...opts,
         getKey: ({ query  }) => getSessionKey(query)

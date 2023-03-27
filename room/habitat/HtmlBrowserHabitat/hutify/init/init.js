@@ -8,7 +8,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.init'] = () => ({ init: async ev
   // Room with `getRoom`, as the logic for doing so is only defined
   // after this code has ran!)
   
-  Error.prepareStackTrace = (err, callSites) => err.message + '\n<trace begin>\n' + callSites.map(cs => {
+  Error.prepareStackTrace = (err, callSites) => console.log(err.message, err.stack) ?? err.message + '\n<trace begin>\n' + callSites.map(cs => {
     
     // https://v8.dev/docs/stack-trace-api
     let rawFileName = cs.getFileName();
@@ -39,16 +39,18 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.init'] = () => ({ init: async ev
     evt.preventDefault();
     
   };
-  window.addEventListener('unhandledrejection', onErr);
-  window.addEventListener('error', onErr);
+  window.evt('unhandledrejection', onErr);
+  window.evt('error', onErr);
   
   let document = window.document;
-  let body = document.body;
-  body.classList.add('focus');
-  window.addEventListener('load', () => body.classList.add('loaded'));
-  window.addEventListener('beforeunload', () => body.classList.remove('loaded'));
-  window.addEventListener('focus', evt => body.classList.add('focus'));
-  window.addEventListener('blur', evt => body.classList.remove('focus'));
+  let { classList: cl } = document.body;
+  cl.add('focus');
+  window.evt('load', () => cl.add('loaded'));
+  window.evt('beforeunload', () => cl.remove('loaded'));
+  window.evt('focus', () => cl.add('focus'));
+  window.evt('blur', () => cl.remove('focus'));
+  
+  let rootReal = null; // TODO: HEEERE!
   
   global.getMs = Date.now;
   global.keep = (...args) => { throw Error(`Lol wut`).mod({ args }); };
@@ -104,8 +106,8 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.init'] = () => ({ init: async ev
       if (!script.roomPrm)
         script.roomPrm = Promise((rsv, rjc) => {
           if (global.rooms[name]) return rsv();
-          script.addEventListener('load', rsv, { once: true });
-          script.addEventListener('error', rjc, { once: true });
+          script.evt('load', rsv, { once: true });
+          script.evt('error', rjc, { once: true });
         })
           .catch(cause => err.propagate({ cause, msg: `Failed to load room "${name}"` }))
           .then(async () => {
@@ -181,7 +183,6 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.init'] = () => ({ init: async ev
     let FakeReal = form({ name: 'FakeReal', has: { Tmp }, props: (forms, Form) => ({
       init({ name, tech }) {
         forms.Tmp.init.call(this);
-        gsc('INIT', { name });
         Object.assign(this, {
           name, tech,
           fakeLayout: null,
@@ -287,7 +288,5 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.init'] = () => ({ init: async ev
   
   let loft = loftObj.toArr(v => v)[0];
   await loft.open({ hut: belowHut, netIden });
-  
-  gsc(global.conf('deploy.loft.hosting'));
   
 }});

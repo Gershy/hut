@@ -34,9 +34,8 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
     
     // TODO: `tmp.end()` should undo these dependency additions
     hut.addKnownRoomDependencies([
-      'Hut',
+      'setup.hut',
       'record',
-      'record.bank.AbstractBank',
       'record.bank.WeakBank',
       'Hinterland',
       'habitat.HtmlBrowserHabitat',
@@ -97,8 +96,16 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
               body.loaded { opacity: 1; }
             </style>
             
-            <script type="text/javascript">Object.assign(window.global=window,{rooms:Object.create(null)});</script>
-            <script type="text/javascript">window.addEventListener('DOMContentLoaded',e=>rooms['habitat.HtmlBrowserHabitat.hutify.init']().init(e));</script>
+            <script type="text/javascript">
+              Object.assign(window.global = window, { rooms:Object.create(null) });
+              let evtSrc = EventTarget.prototype;
+              Object.defineProperty(evtSrc, 'evt', { writable: true, value: function(...args) {
+                this.addEventListener(...args);
+                return Tmp(() => this.removeEventListener(...args));
+              }});
+              // Can't use window.evt - Tmp hasn't been defined yet
+              window.addEventListener('DOMContentLoaded', e=>rooms['habitat.HtmlBrowserHabitat.hutify.init']().init(e));
+            </script>
             ${roomScript('setup.clearing', 'defer')}
             ${roomScript('habitat.HtmlBrowserHabitat.hutify.init', 'defer')}
             ${protocolRooms.toArr(n => roomScript(n, 'defer')).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
@@ -108,9 +115,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
             
             <script type="text/javascript">Object.assign(global,{rawConf:JSON.parse('${valToJson({
               
-              // This is json-encoded (which actually speeds up loadtime
-              // due to the limited parse-tree within a string), sent,
-              // and decoded client-side
+              // Encode to String server-side; decode client-side
               
               hid: src.uid,
               ...belowConf,

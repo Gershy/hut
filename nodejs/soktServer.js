@@ -27,7 +27,6 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     });
     
     let state = { frames: [], size: 0, buff: Buffer.alloc(0) };
-    session.endWith(() => state = null);
     
     // Process conversions between op+code+payload and Buffer
     let wsDecode = buff => {
@@ -148,12 +147,15 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         return { type: 'tell', op, code, text, payloadLen: data.length };
       });
       
-      return wsWriteQueue = wsWriteQueue.then(() => Promise((rsv, rjc) => {
+      return wsWriteQueue = wsWriteQueue.then(() => Promise(rsv => {
         
         socket.write(wsEncode(opts), err => {
-          if (!err) return rsv();
-          session.end();
-          rjc(err);
+          if (err) {
+            err['~suppressed'] = true;
+            session.end();
+            errSubcon(`Error writing to ${session.desc()}`, err);
+          }
+          rsv();
         });
         
       }));
@@ -169,12 +171,13 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       if (state.size > 5000) return session.end();
       state.buff = Buffer.concat([ state.buff, buff ]);
       
-      while (state) {
+      while (session.onn()) {
         
         let wsMsg = wsDecode(state.buff);
         if (!wsMsg) break; // Need more data to finish decoding
         
         let { consumed, ...frame } = wsMsg;
+        
         state.buff = state.buff.slice(consumed);
         state.size -= consumed;
         wsFrame(ms, frame);

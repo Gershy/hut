@@ -293,8 +293,6 @@ global.rooms['chess2'] = async () => {
       /// {ABOVE=
       
       hut.addKnownRoomDependencies([
-        'Hut',
-        'record.bank.AbstractBank',
         'record.bank.WeakBank',
         'Hinterland',
         'habitat.HtmlBrowserHabitat',
@@ -1028,10 +1026,8 @@ global.rooms['chess2'] = async () => {
                 dep(TimerSrc({ ms: 2000 })).route(() => {
                   
                   holdReal.end();
-                  dep(resignReal.addLayouts([
-                    { form: 'Press', pressFn: () => resignAct.act() },
-                    { form: 'Decal', colour: '#c2aa' }
-                  ]));
+                  dep(resignReal.addLayout({ form: 'Press', pressFn: () => resignAct.act() }));
+                  dep(resignReal.addLayout({ form: 'Decal', colour: '#c2aa' }));
                   
                 }, 'prm');
                 

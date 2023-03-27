@@ -855,7 +855,7 @@ if (!global.rooms) global.rooms = gsc(`Notice: defaulted global.rooms`) ?? Objec
     // are required, but a "cleanup" property may get defined by passing
     // a Function to the `init` method
     
-    $turnOffDefProp: { value: () => false, enumerable: true, writable: true, configurable: true },
+    $turnOffDefProp: Object.freeze({ value: () => false, enumerable: true, writable: true, configurable: true }),
     
     init(fn) {
       

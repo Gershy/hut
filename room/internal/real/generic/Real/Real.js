@@ -326,11 +326,6 @@ global.rooms['internal.real.generic.Real'] = foundation => form({ name: 'Real', 
     });
     return tmp;
     
-  },
-  addLayouts(layouts) {
-    let tmp = Tmp();
-    for (let layout of layouts) tmp.endWith(this.addLayout(layout));
-    return tmp;
   }
   
 })});

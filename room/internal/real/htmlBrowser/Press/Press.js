@@ -27,12 +27,10 @@ global.rooms['internal.real.htmlBrowser.Press'] = async foundation => {
           evt.stopPropagation();
           evt.preventDefault();
           
-          let pressFn = this.getParam(real, 'pressFn');
-          pressFn && pressFn();
+          this.getParam(real, 'pressFn')?.();
           this.send();
         };
-        domNode.addEventListener('click', clickFn);
-        tmp.endWith(() => domNode.removeEventListener('click', clickFn));
+        tmp.endWith(domNode.evt('click', clickFn));
       }
       
       if (this.modes.has('discrete')) {
@@ -45,8 +43,7 @@ global.rooms['internal.real.htmlBrowser.Press'] = async foundation => {
           pressFn && pressFn();
           this.send();
         };
-        domNode.addEventListener('keypress', keyFn);
-        tmp.endWith(() => domNode.removeEventListener('keypress', keyFn));
+        tmp.endWith(domNode.evt('keypress', keyFn));
       }
       
       if (this.modes.has('discrete') && this.modes.has('continuous')) {

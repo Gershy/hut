@@ -263,7 +263,7 @@ global.FoundationBrowser = form({ name: 'FoundationBrowser', has: { Foundation }
         // Note that `real` may render even if it's `off()` - this is
         // to facilitate Reals which change visually as they end. Many
         // Reals don't change visually as they end - these are
-        // detectable as they have no `parentNode`: (TODO: Hacky?)
+        // detectable as they have no `parentNode` (TODO: Hacky?)
         if (real.off() && !domNode.parentNode) return;
         
         // Naive: ignoring `delta` purify Real & apply all layouts

@@ -73,8 +73,7 @@ global.rooms['internal.real.htmlBrowser.TextInput'] = async foundation => {
           if (val === prevVal) { return; } else { prevVal = val; }
           
           // Always call the "textInputFn" with the modified `val`
-          let textInputFn = this.getParam(real, 'textInputFn');
-          if (textInputFn) textInputFn(val);
+          this.getParam(real, 'textInputFn')?.(val);
           
         }));
         
@@ -85,8 +84,7 @@ global.rooms['internal.real.htmlBrowser.TextInput'] = async foundation => {
         tmp.endWith(textInputSrc.route(val => {
           
           // Always call the "textInputFn" with the modified `val`
-          let textInputFn = this.getParam(real, 'textInputFn');
-          if (textInputFn) textInputFn(val);
+          this.getParam(real, 'textInputFn')?.(val);
           
         }));
         

@@ -5,41 +5,6 @@
 Object.assign(global, { rooms: Object.create(null) });
 require('./room/setup/clearing/clearing.js');
 
-if (1) { // Setup basic process monitoring
-  
-  // https://nodejs.org/api/process.html#signal-events
-  
-  let origExit = process.exit;
-  let revealBufferedLogs = () => {
-    for (let arg of global.bufferedLogs ?? []) console.log(...pendingLog);
-  };
-  process.exit = (...args) => {
-    gsc(Error('Process explicitly exited').desc());
-    revealBufferedLogs();
-    return origExit.call(process, ...args);
-  };
-  
-  // NOTE: Trying to catch SIGKILL or SIGSTOP crashes posix!
-  // https://github.com/nodejs/node-v0.x-archive/issues/6339
-  let evts = 'hup,int,pipe,quit,term,tstp,break'.split(',');
-  let haltEvts = Set('int,term,quit'.split(','));
-  for (let evt of evts) process.on(`SIG${evt.upper()}`, (...args) => {
-    gsc(`Process event: "${evt}"`, args);
-    haltEvts.has(evt) && process.exit(isForm(args[1], Number) ? args[1] : -1);
-  });
-  
-  let onErr = err => {
-    gsc(`Uncaught ${getFormName(err)}:`, err.desc());
-    revealBufferedLogs();
-    origExit(1);
-  };
-  process.on('uncaughtException', onErr);
-  process.on('unhandledRejection', onErr);
-  
-  //process.on('exit', code => gsc(`Process exit event (code: ${code})`));
-  
-}
-
 if (0 || process.cwd() === '/hut') { // Low-level debug
   
   let intervalMs = (process.cwd() === '/hut' ? 10 : 30) * 1000;
@@ -83,7 +48,8 @@ if (0 || process.cwd() === '/hut') { // Low-level debug
   
 }
 
-let conf = (() => { // Parse configuration
+// Run based on directory of this file and command-line configuration
+require('./nodejs/runWithConfig.js')({ hutFp: __dirname, conf: (() => { // Parse configuration
   
   try {
     
@@ -93,14 +59,11 @@ let conf = (() => { // Parse configuration
       
       v = v.trim();
       if (looksLikeEval.test(v)) v = eval(`(${v})`);
-      
       if (!v) return skip;
       
       // Consider string values without "=" as the single hoist room name,
       // while strings containing "=" represent key-value pairs
-      if (isForm(v, String)) v = v.has('=')
-        ? v.split(/[ ;,&]+/g).toObj(v => v.cut('=')) // Key-value pairs
-        : { 'lofts': [{ loft: { name: 'c2', loft: 'chess2', bank: null } }] };
+      if (isForm(v, String)) v = v.split(/[ ;,&]+/g).toObj(v => v.cut('=').map(v => v.trim()));
       
       if (!isForm(v, Object)) throw Error(`Couldn't process an argument: "${v}"`);
       
@@ -124,7 +87,4 @@ let conf = (() => { // Parse configuration
     
   }
   
-})();
-
-// Enable room loading, load "setup.hut", and init an AboveHut
-require('./nodejs/runWithConfig.js')({ hutFp: __dirname, conf });
+})()});
