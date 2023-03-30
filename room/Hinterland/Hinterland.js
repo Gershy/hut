@@ -26,7 +26,7 @@ global.rooms['Hinterland'] = async foundation => {
       // NetworkIdentity get translated to `hut`. This may be some good
       // candidate logic to define once and reference from ABOVE/BELOW.
       // If that *doesn't* make sense, maybe all Hinterlands logic needs
-      // to move to `runWithConfig` + `HtmlBrowserHabitat/init/init.js`
+      // to move to `foundation` + `HtmlBrowserHabitat/init/init.js`
       
       let tmp = Tmp();
       tmp.endWith(netIden.runOnNetwork());

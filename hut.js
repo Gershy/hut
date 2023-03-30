@@ -49,7 +49,7 @@ if (0 || process.cwd() === '/hut') { // Low-level debug
 }
 
 // Run based on directory of this file and command-line configuration
-require('./nodejs/runWithConfig.js')({ hutFp: __dirname, conf: (() => { // Parse configuration
+require('./nodejs/foundation.js')({ hutFp: __dirname, conf: (() => { // Parse configuration
   
   try {
     

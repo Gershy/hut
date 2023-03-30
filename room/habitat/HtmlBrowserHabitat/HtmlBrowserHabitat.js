@@ -104,10 +104,10 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
                 return Tmp(() => this.removeEventListener(...args));
               }});
               // Can't use window.evt - Tmp hasn't been defined yet
-              window.addEventListener('DOMContentLoaded', e=>rooms['habitat.HtmlBrowserHabitat.hutify.init']().init(e));
+              window.addEventListener('DOMContentLoaded', e=>rooms['habitat.HtmlBrowserHabitat.hutify.foundation']().init(e));
             </script>
             ${roomScript('setup.clearing', 'defer')}
-            ${roomScript('habitat.HtmlBrowserHabitat.hutify.init', 'defer')}
+            ${roomScript('habitat.HtmlBrowserHabitat.hutify.foundation', 'defer')}
             ${protocolRooms.toArr(n => roomScript(n, 'defer')).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
             ${depRooms.toArr(n => roomScript(n, 'async')).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
 

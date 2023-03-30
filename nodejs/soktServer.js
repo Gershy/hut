@@ -151,7 +151,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         
         socket.write(wsEncode(opts), err => {
           if (err) {
-            err['~suppressed'] = true;
+            err.suppress();
             session.end();
             errSubcon(`Error writing to ${session.desc()}`, err);
           }
@@ -206,13 +206,18 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         try         { msg = jsonToVal(msg); }
         catch (err) { msg = { command: msg.toString('utf8') }; }
         
-        session.hear.send({ replyable: null, ms, msg });
+        // Here's where to consider opcodes other than 1 and 2
+        // Note that 1 and 2 ("text" and "binary") are pretty both
+        // handled as `jsonToVal` above accepts either String or Buffer
+        if      (op === 0x1) session.hear.send({ replyable: null, ms, msg });
+        else if (op === 0x2) session.hear.send({ replyable: null, ms, msg });
+        else if (op === 0x8) { session['~initiatedEnd'] = true; session.end(); }
+        else if (op === 0x9) wsWrite({ op: 0xa, text: 'Pong!' });
+        else if (op === 0xa) wsWrite({ op: 0x9, text: 'Ping!' });
+        else                 errSubcon(`Received unexpected opcode: 0x${op.toString(16)}`);
         
       }
       
-      if (op === 0x8) session.end();
-      if (op === 0x9) wsWrite({ op: 0xa, text: 'Pong!' });
-      if (op === 0xa) wsWrite({ op: 0x9, text: 'Ping!' });
       
     };
     
@@ -234,7 +239,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     
     let tellRoute = session.tell.route(msg => msg && wsWrite({ op: 1, text: valToJson(msg) }));
     
-    session.endWith(() => {
+    session.endWith(async () => {
       
       socket.off('readable', readableFn);
       socket.off('close', closeFn);
@@ -242,8 +247,13 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
       tellRoute.end();
       
+      // Note that we only send a "goodbye" frame if the Session itself
+      // didn't initiate its own ending
       // Code: https://www.rfc-editor.org/rfc/rfc6455#section-7.4.1
-      wsWrite({ op: 8, code: 1000, text: `Goodbye friend :')` }).finally(() => socket.end());
+      if (!session['~initiatedEnd'])
+        await wsWrite({ op: 8, code: 1000, text: `Goodbye friend :')` }).finally(() => socket.end());
+      else
+        socket.end();
       
     });
     

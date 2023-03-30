@@ -3,7 +3,9 @@
 // The "clearing" is javascript-level bootstrapping
 
 /// {ASSERT=
-if (!global) throw Error(`"global" must be available`);
+let mustDefaultRooms = !global?.rooms;
+if (!global)          throw Error(`"global" must be available`);
+if (mustDefaultRooms) global.rooms = Object.create(null);
 /// =ASSERT}
 
 Object.assign(global, {
@@ -236,6 +238,7 @@ Object.assign(global, {
     count() { return this.length; },
     indent(...args /* amt=2, char=' ' | indentStr=' '.repeat(2) */) {
       
+      if (!this) return this; // No-op on empty String (otherwise it would transform a 0-line string to a 1-line string)
       let indentStr = null;
       if (isForm(args[0], String)) { indentStr = args[0]; }
       else                         { let [ amt=2, char=' ' ] = args; indentStr = char.repeat(amt); }
@@ -343,6 +346,10 @@ Object.assign(global, {
       
     },
     propagate(props /* { cause, msg, message, ...more } */) { throw this.mod(props); },
+    suppress() {
+      this['~suppressed'] = true;
+      if (this.cause) this.cause.suppress();
+    },
     
     desc(seen=Set()) {
       
@@ -359,8 +366,13 @@ Object.assign(global, {
       seen.add(this);
       
       let { message: msg, stack, cause, ...props } = this;
-      let [ preamble, lines ] = stack.cut('\n<trace begin>\n');
-      if (!lines) return stack; // Errors which occur before error formatting is initialized are better like this
+      let traceHeadInd = stack.indexOf('{HUTTRACE=');
+      let traceTailInd = stack.indexOf('=HUTTRACE}');
+      
+      if (traceHeadInd < 0 || traceTailInd < 0) return `{UNPROCESSEDERROR=\n${stack}\n=UNPROCESSEDERROR}`;
+      
+      let preamble = stack.slice(0, traceHeadInd);
+      let trace = JSON.parse(stack.slice(traceHeadInd + '{HUTTRACE='.length, traceTailInd));
       
       // We want to show the Message and Preamble; depending how the
       // Error is generated one may contain the other - if so we show
@@ -384,27 +396,33 @@ Object.assign(global, {
         
       }).join('\n');
       
-      lines = lines.split('\n').map(ln => {
-        let [ fnName, file, row, col ] = ln.split(' + ');
-        let obj = mapSrcToCmp(file, row, col); // `{ file, row, col, context }`
-        return { ...obj, row: obj.row.toString(10), col: obj.col.toString(10) };
-      });
+      trace = trace.map(({ keepName, row, col, ...props }) => ({
+        keepName, row, col,
+        ...props,
+        ...mapSrcToCmp(keepName, row, col) /* { file, row, col, context } */
+      }));
       
-      let fileChars = Math.max(...lines.map(line => line.file.length));
-      let rowChars = Math.max(...lines.map(line => line.row.length));
-      let colChars = Math.max(...lines.map(line => line.col.length));
-      lines = lines.map(({ file, row, col }) => `${file.padTail(fileChars)} [${row.padHead(rowChars)}:${col.padHead(colChars)}]`);
+      // Stringify "row" and "col"
+      trace = trace.map(({ row, col, keepName, ...props }) =>  ({
+        ...props,
+        keepName,
+        row: row.toString(10),
+        col: col.toString(10)
+      }));
       
-      let desc = `${fullMsg || getFormName(this)}\n${lines.join('\n').indent('\u2022 ')}`;
+      let fileChars = Math.max(...trace.map(item => item.file.length));
+      let rowChars = Math.max(...trace.map(item => item.row.length));
+      let colChars = Math.max(...trace.map(item => item.col.length));
+      trace = trace.map(({ file, row, col }) => `${file.padTail(fileChars)} [${row.padHead(rowChars)}:${col.padHead(colChars)}]`);
       
-      if (!props.empty()) try { desc += `\nPROPS:\n${valToJson(props).indent(2)}`; } catch (err) {}
+      let desc = fullMsg || getFormName(this);
+      if (!trace.empty()) desc += '\n' + trace.join('\n').indent('\u2022 ');
+      if (!props.empty()) desc += '\n' + formatAnyValue(props).indent(2);
       
       if (cause) {
-        
         if (hasForm(cause, Error)) cause = cause.desc(seen);
         else                       cause = cause.map(err => err.desc(seen)).join('\n');
         desc += `\nCAUSE:\n${cause.indent(2)}`;
-        
       }
       
       return desc;
@@ -809,26 +827,29 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   },
   
   // Urls
-  urlRaw: ({ path='', query }) => {
-    query = query.toArr((v, k) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
-    return query ? `/${path}?${query}` : `/${path}`; // TODO: Sanitize `path`? (But note it needs to be allowed to have "/" - e.g. "/!static/path/to/resource.jpg")
+  urlRaw: ({ path='', cacheBust, query }) => {
+    let result = '';
+    if (cacheBust) result = `/!${cacheBust}`;
+    if (path) result += `/${path}`;
+    if (query && !query.empty()) result += '?' + query.toArr((v, k) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+    return result; // TODO: Sanitize `path`? (But note it needs to be allowed to have "/" - e.g. "/!static/path/to/resource.jpg")
   },
   url: ({ path='', query }) => {
     
     let maturity = conf('deploy.maturity');
     
-    let ver = null;
+    let cacheBust = null;
     
     // In "dev" use a random version to dodge the cache
-    if      (maturity === 'dev')   ver = (Number.int32 * Math.random()).encodeStr(String.base32, 7);
+    if      (maturity === 'dev')   cacheBust = (Number.int32 * Math.random()).encodeStr(String.base32, 7);
     
     // In "beta" use process uid (refreshes once when Above restarts)
-    else if (maturity === 'beta')  ver = conf('deploy.loft.uid');
+    else if (maturity === 'beta')  cacheBust = conf('deploy.loft.uid');
     
     // TODO: How are we caching in alpha?
-    else if (maturity === 'alpha') ver = null;
+    else if (maturity === 'alpha') cacheBust = null;
     
-    return global.urlRaw(ver ? { path, query: { ...query, '!': ver } } : { path, query });
+    return global.urlRaw({ path, cacheBust, query });
     
   },
   
@@ -842,9 +863,9 @@ Object.assign(global, global.rooms['setup.clearing'] = {
 });
 
 /// {ASSERT=
-if (!global.mmm)   global.mmm = Function.stub;
-if (!global.gsc)   global.gsc = subcon('gsc'); // "global subcon"
-if (!global.rooms) global.rooms = gsc(`Notice: defaulted global.rooms`) ?? Object.create(null);
+if (!global.gsc)      global.gsc = subcon('gsc'); // "global subcon"
+if (!global.mmm)      global.mmm = Function.stub;
+if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
 /// =ASSERT}
 
 { // Define global Forms: Endable, Src, Tmp, etc.

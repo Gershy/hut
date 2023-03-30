@@ -1,4 +1,4 @@
-global.rooms['habitat.HtmlBrowserHabitat.hutify.init'] = () => ({ init: async evt => {
+global.rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] = () => ({ init: async evt => {
   
   // We're going to be stingy with this code; the smaller+faster this
   // file is, the better the user experience! Note this file
@@ -8,24 +8,26 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.init'] = () => ({ init: async ev
   // Room with `getRoom`, as the logic for doing so is only defined
   // after this code has ran!)
   
-  Error.prepareStackTrace = (err, callSites) => console.log(err.message, err.stack) ?? err.message + '\n<trace begin>\n' + callSites.map(cs => {
-    
-    // https://v8.dev/docs/stack-trace-api
-    let rawFileName = cs.getFileName();
-    let row = cs.getLineNumber();
-    let col = cs.getColumnNumber();
-    if (!rawFileName) {
-      let evalOrig = cs.getEvalOrigin();
-      let match = [ , rawFileName=null, row, col ] = (evalOrig ?? '').match(/(https?:[/][/].+):([0-9]+):([0-9]+)/) ?? [];
-      [ row, col ] = [ row, col ].map(v => parseInt(v, 10));
-    }
-    
-    if (!rawFileName) rawFileName = '<unknown>';
-    
-    let [ , roomName=rawFileName ] = rawFileName.match(/\broom=([^?&/]*)/) ?? [];
-    return `${cs.getFunctionName()} + ${roomName} + ${row} + ${col}`;
-    
-  }).join('\n');
+  Error.prepareStackTrace = (err, callSites) => {
+    let trace = callSites.map(cs => {
+      
+      // https://v8.dev/docs/stack-trace-api
+      let rawFileName = cs.getFileName();
+      let row = cs.getLineNumber();
+      let col = cs.getColumnNumber();
+      if (!rawFileName) {
+        let evalOrig = cs.getEvalOrigin();
+        let match = [ , rawFileName=null, row, col ] = (evalOrig ?? '').match(/(https?:[/][/].+):([0-9]+):([0-9]+)/) ?? [];
+        [ row, col ] = [ row, col ].map(v => parseInt(v, 10));
+      }
+      
+      if (!rawFileName) rawFileName = '<unknown>';
+      let [ , roomName=rawFileName ] = rawFileName.match(/\broom=([^?&/]*)/) ?? [];
+      return { fnName: cs.getFunctionName(), keepName: roomName, row, col };
+      
+    });
+    return `${err.message}{HUT${'T'}RACE=${JSON.stringify(trace)}=HUT${'T'}RACE}`;
+  };
   
   let onErr = evt => {
     
@@ -121,8 +123,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.init'] = () => ({ init: async ev
             
             // Note that `room.offsets` exists based on how Rooms are
             // compiled for BELOW!
-            if (!room.instance) room.instance = room();
-            return room.instance;
+            return room();
             
           })
           .then(room => script.roomPrm = room);
@@ -237,7 +238,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.init'] = () => ({ init: async ev
     
     // TODO: Maybe something like localstorage could allow BELOW to
     // work with KeepBank? (Would be blazing-fast client-side!!)
-    `record.bank.WeakBank`,
+    'record.bank.WeakBank',
     global.conf('deploy.loft.def.room')
   ]);
   

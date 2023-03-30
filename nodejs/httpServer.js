@@ -219,7 +219,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
           let err = Error('trace');
           let encoder = zlib[`create${encode[0].upper()}${encode.slice(1)}`](); // Transforms, e.g., "delate", "gzip" into "createDeflate", "createGzip"
           await Promise( (g, b) => stream.pipeline(pipe, encoder, res, err => err ? b(err) : g()) )
-            .fail( cause => err.propagate({ cause, msg: `Failed to stream ${keep.desc()}`, encode }) );
+            .fail(cause => err.propagate({ cause, msg: `Failed to stream ${keep.desc()}`, encode }));
           
         } else {
           
@@ -233,7 +233,6 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         
         // Encode if necessary
         if (encode) msg = await Promise( (g, b) => zlib[encode](msg, (err, v) => err ? b(err) : g(v)) );
-        
         res.writeHead(code, { ...resHeaders, 'Content-Length': Buffer.byteLength(msg).toString(10) });
         res.end(msg);
         
@@ -241,6 +240,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
     } catch (err) {
       
+      err.suppress();
       errSubcon(`Failed to respond with ${getFormName(keep ?? msg)}: ${keep ? keep.desc() : (msg?.slice?.(0, 100) ?? msg)}`, err);
       forceEnd(res, {}, 400);
       
@@ -254,8 +254,8 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   let forceEnd = (res, headers={}, code=400, body=null) => {
     
     let errs = [];
-    try { res.writeHead(code, headers); } catch (err) { errs.push(err); }
-    try { res.end(body || skip);        } catch (err) { errs.push(err); }
+    try { res.writeHead(code, headers); } catch (err) { err.suppress(); errs.push(err); }
+    try { res.end(body || skip);        } catch (err) { err.suppress(); errs.push(err); }
     
     if (errs.empty()) return;
     errSubcon(`Errors occurred trying to end response (with code ${code})`, ...errs.map(err => {
@@ -431,7 +431,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       let cookieKeys = cookie.toArr((v, k) => k);
       
       let [ , path, query='', fragment='' ] = req.url.match(/^([/][^?#]*)([?][^#]+)?([#].*)?$/);
-      path = path.slice(1);
+      path = path.slice(1).replace(/^[!][^/]+[/]*/, ''); // Ignore cache-busting component and leading slashes
       query = query ? query.slice(1).split('&').toObj(pc => [ ...pc.cut('='), true /* default key-only value to flag */ ]) : {};
       fragment = fragment.slice(1);
       
@@ -440,11 +440,9 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       let keyedMsg = null;
       try { keyedMsg = await getKeyedMessage({ headers, path, query, fragment, cookie, body }); }
       catch (err) {
-        
         errSubcon('Error getting http KeyedMessage', err);
         let { code=400, headers={}, msg=err.message } = err.has('http') ? err.http : { msg: 'Bad Request' };
         return forceEnd(res, headers, code, msg);
-        
       }
       path = query = fragment = cookie = cookieKeys = body = null;
       

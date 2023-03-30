@@ -2,6 +2,26 @@
 
 require('../room/setup/clearing/clearing.js');
 
+// Make Errors better! (https://v8.dev/docs/stack-trace-api)
+Error.prepareStackTrace = (err, callSites) => {
+  
+  let trace = callSites.map(cs => {
+    
+    let file = cs.getFileName();
+    if (!file || file.hasHead('node:')) return skip;
+    
+    return {
+      fnName: cs.getFunctionName(),
+      keepName: '[file]' + Keep.separator + cs.getFileName().split(/[/\\]+/).join(Keep.separator),
+      row: cs.getLineNumber(),
+      col: cs.getColumnNumber()
+    };
+    
+  });
+  return `{HUT${'T'}RACE=${JSON.stringify(trace)}=HUT${'T'}RACE}`;
+  
+};
+
 // Set up basic process monitoring
 (() => {
   
@@ -35,7 +55,6 @@ require('../room/setup/clearing/clearing.js');
   };
   process.on('uncaughtException', onErr);
   process.on('unhandledRejection', onErr);
-  
   //process.on('exit', code => gsc(`Process exit event (code: ${code})`));
   
 })();
@@ -766,19 +785,6 @@ let cloneResolveLinks = (root, errs=true, chain='', val=root) => {
 module.exports = async ({ hutFp, conf: rawConf }) => {
   
   // Extend `global` with all the functionality needed to run Huts
-  
-  // Make Errors better!
-  Error.prepareStackTrace = (err, callSites) => '\n<trace begin>\n' + callSites.map(cs => {
-    
-    // https://v8.dev/docs/stack-trace-api
-    
-    let file = cs.getFileName();
-    if (!file || file.hasHead('node:')) return skip;
-    
-    file = '[file]' + Keep.separator + cs.getFileName().split(/[/\\]+/).join(Keep.separator);
-    return `${cs.getFunctionName()} + ${file} + ${cs.getLineNumber()} + ${cs.getColumnNumber()}`;
-    
-  }).join('\n');
   
   // Get Keep representing the root Hut repo location
   // Note that typically transactions are Ended but this one will span

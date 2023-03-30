@@ -1947,10 +1947,7 @@ global.FoundationNodejs = form({ name: 'FoundationNodejs', has: { Foundation }, 
           
           if (!isForm(cookie, Object)) throw Error(`Overall cookie value must resolve to Object; got ${getFormName(cookie)}`).mod({ http: { code: 400 } });
           
-          // We can basically always ignore the `ver` value - but we can
-          // be suspicious of any requests for static resources which
-          // fail to include an expected "!" value!
-          let { hutId=null, ['!']: ver, ...msg } = { trn: 'anon', ...cookie, ...body, ...query };
+          let { hutId=null, ...msg } = { trn: 'anon', ...cookie, ...body, ...query };
           
           if (!msg.has('command')) {
             if (path === '')                 Object.assign(msg, { trn: 'sync', command: 'hutify' });

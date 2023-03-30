@@ -358,6 +358,9 @@ global.rooms['setup.hut'] = async () => {
         //    |   .
         //    | };Object.assign(global.rooms['example'],{"offsets":[...]});
         //    |
+        /// {DEBUG=
+        lines[tailInd] += `if(!global.rooms['${roomPcs.join('.')}'])throw Error('Failed to assign global.rooms[\\'${roomPcs.join('.')}\\']');`
+        /// =DEBUG}
         lines[tailInd] += `Object.assign(global.rooms['${roomPcs.join('.')}'],${valToJson({ offsets })});`;
         
       }
