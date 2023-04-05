@@ -139,10 +139,18 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       
       // TODO: Watch out for traversal with room name??
       // TODO: Parameterize debug??
+      
+      if (!isForm(msg?.room, String))
+        return reply(Error(`Api: "room" must be String; got ${getFormName(msg?.room)}`));
+      
+      if (!/^[a-zA-Z0-9]([a-zA-Z0-9.])*$/.test(msg.room))
+        return reply(Error(`Api: illegal room name: "${msg.room}"`));
+      
       try {
+        gsc('ROOM', msg);
         reply(await hut.getCompiledKeep('below', msg.room));
       } catch (err) {
-        reply(`'use strict';throw Error('Failed to load "${msg.room}"');`);
+        reply(`'use strict';global.rooms['${msg.room}']=()=>{throw Error('Api: no room named "${msg.room}"');}`);
       }
       
     });

@@ -13,6 +13,19 @@ global.rooms['setup.hut'] = async () => {
     // Huts connect by Roads to other Huts, have the ability to Tell and
     // Hear to/from other Huts, and can react to what they Hear
     
+    // TODO: HEEERE: need to implement Layouts; they use the Real's tech
+    // to get anything done and set "govern" values appropriately!
+    // 
+    // TODO: HEEERE: does it really need to be:
+    //    | Comm -> RoadSrc -> (route to RoadSrc routes) -> logic
+    // Why not have
+    //    | hut.commandHandler('c2.submitMove', () => { /* ... logic ... */ });
+    // Advantages:
+    // - Less complexity
+    // - No known or thinkable use-cases for a CommandSrcTmp having
+    //   multiple Routes anyways :P
+    // - ABLE TO THROW ERRORS IN HANDLER INSTEAD OF `reply(Error(...))`
+    
     init({ isHere=false, hid, uid, heartbeatMs, ...recordProps }) {
       
       if (!hid && !uid) throw Error(`Api: supply either "hid" or "uid" (they're synonyms)`);

@@ -124,7 +124,6 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] = () => ({ init: as
           script.evt('load', rsv, { once: true });
           script.evt('error', rjc, { once: true });
         })
-          .catch(cause => err.propagate({ cause, msg: `Failed to load room "${name}"` }))
           .then(async () => {
             
             let room = global.rooms[name];
@@ -139,6 +138,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] = () => ({ init: as
             return room();
             
           })
+          .catch(cause => err.propagate({ cause, msg: `Failed to load room "${name}"` }))
           .then(room => script.roomPrm = room);
       
       let resultName = shorten ? name.split('.').slice(-1)[0] : name;

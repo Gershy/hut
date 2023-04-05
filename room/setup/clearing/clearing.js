@@ -595,10 +595,8 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     
   },
   thenAll: (vals, ...args /* rsv, rjc */) => {
-    
     if (vals.find(v => v instanceof Promise).found) vals = Promise.all(vals);
     return then(vals, ...args);
-    
   },
   
   // Forms

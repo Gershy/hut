@@ -57,6 +57,7 @@ global.rooms['internal.real.htmlBrowser.Geom'] = async foundation => {
       if (anchor === 'none') return;
       
       // Ensure Geom won't poorly interact with Axis1d.Item
+      gsc('HHffkkkkoooooo');
       let hasAxis1d = real.layouts.find(lay => isForm(lay, Axis1d.Item)).found;
       if (hasAxis1d && (x !== null || y !== null || anchor !== 'cen'))
         throw Error(`Geom with Axis1d.Item forbids providing x, y, or non-cen anchor`);

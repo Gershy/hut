@@ -403,14 +403,13 @@ global.rooms['fly'] = async foundation => {
               lay.Geom({ h: '100%' }),
               lay.Text({ textSize: '200%', text: 'Leave lobby' }),
               lay.Decal({ colour: 'rgba(0, 0, 0, 0.05)' }),
-              lay.Press({})
+              lay.Press({ pressFn: () => exitLobbyAct.act() })
             ]);
             
             lobbyReal.addReal('gap', [ { form: 'Geom', h: '1vmin' } ]);
             
             // Players in lobbies are able to leave their lobby
             let exitLobbyAct = dep(hut.enableAction('fly.exitLobby', () => void myLobbyPlayer.end() ));
-            returnReal.getLayout(lay.Press).route(() => exitLobbyAct.act());
             
             let levelReal = lobbyReal.addReal('lobbyLevel', [
               lay.Axis1d({ axis: 'x', dir: '+', mode: 'dispersePadFull' })
@@ -438,23 +437,6 @@ global.rooms['fly'] = async foundation => {
               levelOverviewDescReal.mod({ text: levelMetadata.dispDesc });
             }));
             
-            let levelPasswordReal = levelReal.addReal('lobbyLevelPassword', [
-              lay.Geom({ w: '35%' }),
-              lay.Axis1d({ axis: 'y', dir: '+', mode: 'compactCenter' })
-            ]);
-            let levelPasswordInputFieldReal = levelPasswordReal.addReal('lobbyLevelPasswordInputField', [
-              lay.Geom({ w: '100%', h: '2em' }),
-              lay.TextInput({ textSize: 'calc(10px + 1.2vmin)', prompt: 'Level password' }),
-              lay.Decal({ colour: 'rgba(0, 0, 0, 0.05)' }),
-              lay.Press({ modes: [ 'discrete' ] })
-            ]);
-            let levelPasswordSubmitFieldReal = levelPasswordReal.addReal('lobbyLevelPasswordSubmitField', [
-              lay.Geom({ w: '100%', h: '2em' }),
-              lay.Text({ textSize: 'calc(9px + 1vmin)', text: 'Submit' }),
-              lay.Decal({ colour: 'rgba(0, 0, 0, 0.1)' }),
-              lay.Press({})
-            ]);
-            
             let submitLevelPasswordAct = dep(hut.enableAction('fly.submitLevelPassword', ({ password }) => {
               
               /// {ABOVE=
@@ -465,15 +447,27 @@ global.rooms['fly'] = async foundation => {
               /// =ABOVE}
               
             }));
-            
-            let submitLevelPasswordSrc = Src();
-            levelPasswordInputFieldReal.getLayout(lay.Press).route(() => submitLevelPasswordSrc.send());
-            levelPasswordSubmitFieldReal.getLayout(lay.Press).route(() => submitLevelPasswordSrc.send());
-            
-            submitLevelPasswordSrc.route(() => {
+            let doSubmit = () => {
               submitLevelPasswordAct.act({ password: levelPasswordInputFieldReal.params.textInputSrc.val })
               levelPasswordInputFieldReal.params.textInputSrc.mod('');
-            });
+            };
+            
+            let levelPasswordReal = levelReal.addReal('lobbyLevelPassword', [
+              lay.Geom({ w: '35%' }),
+              lay.Axis1d({ axis: 'y', dir: '+', mode: 'compactCenter' })
+            ]);
+            let levelPasswordInputFieldReal = levelPasswordReal.addReal('lobbyLevelPasswordInputField', [
+              lay.Geom({ w: '100%', h: '2em' }),
+              lay.TextInput({ textSize: 'calc(10px + 1.2vmin)', prompt: 'Level password' }),
+              lay.Decal({ colour: 'rgba(0, 0, 0, 0.05)' }),
+              lay.Press({ modes: [ 'discrete' ], pressFn: doSubmit })
+            ]);
+            let levelPasswordSubmitFieldReal = levelPasswordReal.addReal('lobbyLevelPasswordSubmitField', [
+              lay.Geom({ w: '100%', h: '2em' }),
+              lay.Text({ textSize: 'calc(9px + 1vmin)', text: 'Submit' }),
+              lay.Decal({ colour: 'rgba(0, 0, 0, 0.1)' }),
+              lay.Press({ pressFn: doSubmit })
+            ]);
             
             lobbyReal.addReal('gap', [ lay.Geom({ h: '1vmin' }) ]);
             
@@ -524,7 +518,12 @@ global.rooms['fly'] = async foundation => {
                 let modelReal = teamPlayerModelSetReal.addReal('lobbyTeamPlayerModelSetItem', [
                   lay.Size({ ratio: 1, w: '13vmin' }),
                   lay.Image({ imgKeep: Form.imageKeep, smoothing: false, scale: 0.6 }),
-                  lay.Press({})
+                  
+                  // Allow players to choose their corresponding options
+                  lay.Press({ pressFn: (teamPlayer === myPlayer)
+                    ? () => chooseModelAct.act({ modelTerm })
+                    : null
+                  })
                 ]);
                 let modelRealName = modelReal.addReal('lobbyTeamPlayerModelSetItemName', [
                   lay.Geom({ w: '100%', anchor: 'b' }),
@@ -544,11 +543,6 @@ global.rooms['fly'] = async foundation => {
                   let decal = lay.Decal({ border: null });
                   dep(modelReal.addLayout(decal));
                 });
-                
-                // Allow players to choose their corresponding options
-                if (teamPlayer === myPlayer) {
-                  modelReal.getLayout(lay.Press).route(() => chooseModelAct.act({ modelTerm }));
-                }
                 
               }
               

@@ -283,12 +283,10 @@ global.rooms['internal.real.generic.Real'] = foundation => form({ name: 'Real', 
     let tmp = Tmp();
     
     // Convert from "{ form: 'LayoutFormName', ... }" to Layout(...)
-    let formName = null;
     if (isForm(layout, Object)) {
       
       let { form=null, ...args } = layout;
       if (!isForm(form, String)) throw Error(`"form" property should be String (got ${getFormName(form)})`);
-      formName = form;
       
       // This sequence is capable of single-tick-resolution; get the
       // LayoutForm and instantiate it. Note that LayoutForm may not

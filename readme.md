@@ -2,7 +2,7 @@
 
 ### What the *honk* is a Hut?
 
-A Hut partakes in a shared experience. A Hut may define the rules of how an experience plays out, or subscribe to the rules of another Hut. Getting started, it's safe to think of a Hut as a client or server.
+A Hut partakes in a shared experience. A Hut may define the rules of how an experience plays out, or subscribe to the rules of another Hut. It's pretty safe to think of a Hut as a client or server.
 
 ### Why use Hut?
 
