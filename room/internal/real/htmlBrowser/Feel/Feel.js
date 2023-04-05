@@ -40,12 +40,12 @@ global.rooms['internal.real.htmlBrowser.Feel'] = async foundation => {
       
       let domNode = real.domNode;
       if (this.modes.has('continuous')) {
-        domNode.addEventListener('mouseenter', () => feelCnt.mod('onn'));
-        domNode.addEventListener('mouseleave', () => feelCnt.mod('off'));
+        tmp.endWith(domNode.evt('mouseenter', () => feelCnt.mod('onn')));
+        tmp.endWith(domNode.evt('mouseleave', () => feelCnt.mod('off')));
       }
       if (this.modes.has('discrete')) {
-        domNode.addEventListener('focus', () => feelDsc.mod('onn'));
-        domNode.addEventListener('blur',  () => feelDsc.mod('off'));
+        tmp.endWith(domNode.evt('focus', () => feelDsc.mod('onn')));
+        tmp.endWith(domNode.evt('blur',  () => feelDsc.mod('off')));
       }
       
       return tmp;

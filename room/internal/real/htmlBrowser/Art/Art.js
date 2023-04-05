@@ -37,8 +37,7 @@ global.rooms['internal.real.htmlBrowser.Art'] = async foundation => {
       
       if (real.params.printKeys) {
         let fn = evt => console.log( [ 'keyCode', 'key', 'code' ].toArr(v => `${v}: ${evt[v]}`).join('; ') );
-        canvas.addEventListener('keydown', fn);
-        tmp.endWith(() => canvas.removeEventListener('keydown', fn));
+        tmp.endWith(canvas.evt('keydown', fn));
       }
       
       let preventDef = evt => {
@@ -51,23 +50,20 @@ global.rooms['internal.real.htmlBrowser.Art'] = async foundation => {
         evt.stopPropagation();
         
       };
-      let keyDnFn = evt => {
+      
+      tmp.endWith(canvas.evt('keydown', evt => {
         keys.has(evt.keyCode) || (keys.add(evt.keyCode), keySrc.send(keys));
         preventDef(evt);
-      };
-      let keyUpFn = evt => {
+      }));
+      tmp.endWith(canvas.evt('keyup', evt => {
         keys.has(evt.keyCode) && (keys.rem(evt.keyCode), keySrc.send(keys));
         preventDef(evt);
-      };
-      let blurFn = evt => keys.empty() || (keys.clear(), keySrc.send(keys));
-      canvas.addEventListener('keydown', keyDnFn);
-      canvas.addEventListener('keyup', keyUpFn);
-      canvas.addEventListener('blur', blurFn);
-      tmp.endWith(() => {
-        canvas.removeEventListener('keydown', keyDnFn);
-        canvas.removeEventListener('keyup', keyUpFn);
-        canvas.removeEventListener('blur', blurFn);
-      });
+      }));
+      tmp.endWith(canvas.evt('blur', evt => {
+        if (keys.empty()) return;
+        keys.clear();
+        keySrc.send(keys);
+      }));
       
       let ctx = canvas.getContext('2d');
       ctx.imageSmoothingEnabled = false;

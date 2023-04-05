@@ -10,7 +10,7 @@ global.rooms['collabowrite.testHooks.authorsSubmit'] = foundation => hut => {
     
     run = Object.plain({
       login: act => act.act({ user: 'abe', pass: 'imsosmart' }),
-      createRoom: act => act.act({ name: 'TEST', minAuthors: 2 }),
+      makeRoom: act => act.act({ name: 'TEST', minAuthors: 2 }),
       //joinRoom: (act, uid) => act.act(),
       submit: act => (run.submit = null, act.act({ text: 'ABE SUBMISSION' }))
     });

@@ -454,15 +454,14 @@ global.rooms['chess2'] = async () => {
       });
       
       // Create Player Records for each Hut that joins
-      dep.scp(hut, 'hut.owned/par', (owned, dep) => {
+      dep.scp(hut, 'hut.owned/above', (owned, dep) => {
         
-        let kidHut = owned.m('kid');
-        
+        let kidHut = owned.m('below');
         let desc = kidHut.desc() + ' @ ' + kidHut.getKnownNetAddrs().toArr(v => v).join('+');
         
         let timerSrc = dep(TimerSrc({ ms: 1500 }));
-        timerSrc.route(() => c2Subcon(`${desc} FAILED to create player!`), 'prm');
-        timerSrc.route(() => (kidHut.strike(0.075, 'Failed timely chess2 player creation'), kidHut.end()), 'prm');
+        timerSrc.route(() => c2Subcon(`${desc} FAILED to make player!`), 'prm');
+        //timerSrc.route(() => (kidHut.strike(0.075, 'Failed timely chess2 player creation'), kidHut.end()), 'prm');
         
         dep.scp(kidHut, 'c2.player', (player, dep) => {
           
@@ -601,13 +600,15 @@ global.rooms['chess2'] = async () => {
       // We can initiate loading these rooms immediately, and hope they
       // load in time to affect any elements in need of uprighting!
       
+      gsc('CHESS2', real);
+      
       dep(real.addLayout({ form: 'Axis1d', axis: 'x', dir: '+', mode: 'compactCenter' }));
       dep(real.addLayout({ form: 'Decal', colour: '#646496', text: { colour: '#ffffff' } }));
       
       let mainReal = real.addReal('c2.main', [{ form: 'Geom', w: '100vmin', h: '100vmin' }]);
       let nodePlayerless = (dep, real) => {
         
-        let createPlayerAct = dep(hut.enableAction('c2.createPlayer', () => {
+        let makePlayerAct = dep(hut.enableAction('c2.makePlayer', () => {
           
           /// {ABOVE=
           let termTmp = termBank.hold();
@@ -636,7 +637,7 @@ global.rooms['chess2'] = async () => {
         }));
         
         /// {BELOW=
-        dep(TimerSrc({ ms: 500 })).route(() => createPlayerAct.act(), 'prm');
+        dep(TimerSrc({ ms: 500 })).route(() => makePlayerAct.act(), 'prm');
         let paneReal = dep(real.addReal('c2.pane', [
           { form: 'Geom', w: '80%', h: '80%', anchor: 'cen' },
           { form: 'Axis1d', axis: 'y', mode: 'compactCenter' },

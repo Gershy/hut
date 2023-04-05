@@ -192,7 +192,7 @@ let AcmeHttpClient = form({ name: 'AcmeHttpClient', props: (forms, Form) => ({
     
   },
   
-  async createAccount({ email, eab=null }={}) {
+  async makeAccount({ email, eab=null }={}) {
     
     if (!email) throw Error('Must provide "email"');
     
@@ -946,7 +946,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       let accountRes = await this.retrieveOrCompute(`acme.${type}.account`, 'ser', async () => {
         
         sc('Creating account...');
-        let res = await client.createAccount({ email: this.details.email });
+        let res = await client.makeAccount({ email: this.details.email });
         if (res.code !== 201) throw Error(`Failed to create ${type} account for email "${this.details.email}"`).mod({ res });
         return res;
         

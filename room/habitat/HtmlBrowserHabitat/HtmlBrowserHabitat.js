@@ -31,6 +31,11 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
     /// {ABOVE=
     
     let tmp = Tmp();
+    let cmd = (name, fn) => {
+      let cmdSrcTmp = hut.commandSrcTmp(name);
+      tmp.endWith(cmdSrcTmp);
+      cmdSrcTmp.src.route(fn);
+    };
     
     // TODO: `tmp.end()` should undo these dependency additions
     hut.addKnownRoomDependencies([
@@ -46,8 +51,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
     ]);
     
     // Omit "trn" to have it default to "anon" (cacheable)
-    
-    tmp.endWith(hut.roadSrc(this.rootRoadSrcName).route(async ({ src, reply, msg }) => {
+    cmd(this.rootRoadSrcName, async ({ src, reply, msg }) => {
       
       // TODO: Useragent detection at this point could theoretically
       // replace the following content with a different html body that
@@ -58,7 +62,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       // included within the html response (the initial html and sync
       // data will always arrive together)
       
-      let initSyncTell = src.consumePendingSync(hut);
+      let initSyncTell = src.consumePendingSync({ fromScratch: true });
       
       let depRooms = Set([
         roomName,
@@ -97,7 +101,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
             </style>
             
             <script type="text/javascript">
-              Object.assign(window.global = window, { rooms:Object.create(null) });
+              Object.assign(window.global = window, { rooms: Object.create(null) });
               let evtSrc = EventTarget.prototype;
               Object.defineProperty(evtSrc, 'evt', { writable: true, value: function(...args) {
                 this.addEventListener(...args);
@@ -129,8 +133,9 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
         </html>
       `));
       
-    }));
-    tmp.endWith(hut.roadSrc(`${this.prefix}.room`).route(async ({ src, reply, msg }) => {
+    });
+    
+    cmd(`${this.prefix}.room`, async ({ src, reply, msg }) => {
       
       // TODO: Watch out for traversal with room name??
       // TODO: Parameterize debug??
@@ -140,8 +145,8 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
         reply(`'use strict';throw Error('Failed to load "${msg.room}"');`);
       }
       
-    }));
-    tmp.endWith(hut.roadSrc(`${this.prefix}.rooms`).route(async ({ src, reply, msg }) => {
+    });
+    cmd(`${this.prefix}.rooms`, async ({ src, reply, msg }) => {
       
       // Unlike "<prefix>.room" (singular), type must always be "room"
       // and therefore the "type" param shouldn't be provided.
@@ -181,14 +186,14 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       //   line number for a specific file
       throw Error('Not implemented from here on...');
       
-    }));
+    });
     
-    tmp.endWith(hut.roadSrc(`${this.prefix}.icon`).route(async ({ src, reply, msg }) => {
+    cmd(`${this.prefix}.icon`, async ({ src, reply, msg }) => {
       
       reply(keep(`[file:repo]->room->setup->asset->hut.ico`));
       
-    }));
-    tmp.endWith(hut.roadSrc(`${this.prefix}.css`).route(async ({ src, reply, msg }) => {
+    });
+    cmd(`${this.prefix}.css`, async ({ src, reply, msg }) => {
       
       reply(String.multiline(`
         @keyframes focusControl {
@@ -230,9 +235,9 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
         }
       `));
       
-    }));
+    });
     
-    if (this.multiUserSim) tmp.endWith(hut.roadSrc(`${this.prefix}.multi`).route(async ({ src, reply, msg }) => {
+    this.multiUserSim && cmd(`${this.prefix}.multi`, async ({ src, reply, msg }) => {
       
       let { num='4', w='400', h='400', textSize='100%' } = msg;
       
@@ -270,7 +275,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
         </html>
       `));
       
-    }));
+    });
     
     return tmp;
     

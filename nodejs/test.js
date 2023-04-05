@@ -1073,6 +1073,13 @@ module.exports = async () => {
       
     },
     
+    async m => { // Filesys
+      
+      let { runTests } = require('./filesys.js');
+      await runTests({ sanityMult: 0.05 }); // Speed up initiation at the cost of some sanity
+      
+    }
+    
   ];
   
   for (let test of tests) {

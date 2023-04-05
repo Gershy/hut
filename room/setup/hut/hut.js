@@ -3,7 +3,7 @@ global.rooms['setup.hut'] = async () => {
   let { Record } = await getRoom('record');
   
   // TRACK:
-  // above+below: roadSrcs
+  // above+below: CommandSrcTmps
   // above: typeToClsFns
   // above: below huts track pendingSync
   // above: known deps
@@ -30,7 +30,7 @@ global.rooms['setup.hut'] = async () => {
       forms.Record.init.call(this, { uid, ...recordProps, volatile: true });
       
     },
-    desc() { return `${getFormName(this)}(${this.isHere ? 'here' : 'afar'}, ${this.hid})`; },
+    desc() { return `${this.isHere ? 'Here' : 'Afar'}${forms.Record.desc.call(this)}`; },
     
     hear({ src, road, reply, ms=getMs(), msg }) { return src.tell({ trg: this, road, reply, ms, msg }); },
     tell({ trg, road, reply, ms=getMs(), msg }) {
@@ -54,7 +54,6 @@ global.rooms['setup.hut'] = async () => {
       // the other's descendant
       // Note that "disjoint" Huts are non-neighbours (they require a
       // Road to communicate)
-      
       
       if (hasForm(msg, Error)) {
         subcon('warning')(`Error reply`, msg);
@@ -137,39 +136,30 @@ global.rooms['setup.hut'] = async () => {
       throw Error(`Couldn't communicate between Huts`);
       
     },
+    actOnComm(comm) { throw Error('Not implemented'); },
+    
+    getKnownNetAddrs() { throw Error('Not implemented'); },
     getRoadFor(trg) { throw Error('Not implemented'); },
-    actOnComm(comm) {
+    
+    enableAction(command, fn) {
       
-      let { msg={} } = comm;
-      let { command=null } = msg;
+      // TODO: Rename to "addAction"
+      // Above: adds an arbitrary action to the set of actions that can
+      // be remotely invoked on a Hut from Below
+      // Below: creates a utility used to request the invocation of an
+      // arbitrary function above
+      // Between: creates the ability to proxy a request for arbitrary
+      // functionality from Below to Above
+      // 
+      // Note that Below does not "request" Above to enable an Action;
+      // the corresponding calls to enableAction Above and Below must
+      // be coordinated by the implementor! (Typically Scopes will make
+      // this trivial)
       
-      if (command === 'lubdub') return; // Don't respond to heartbeat
-      if (command === 'error') return gsc('Comm error', msg);
-      if (command === 'multi') {
-        
-        let { src=null } = comm;
-        let { list=null } = msg;
-        
-        if (!isForm(list, Array)) return reply(Error(`Api: invalid multi list`).mod({ e: 'invalidMultiList' }));
-        
-        let replies = [];
-        let multiReply = msg => replies.push(msg);
-        for (let msg of list) this.hear({ src, reply: multiReply, msg });
-        
-        // TODO: Or... generate a multipart response? That would be cool too...
-        if (multiReply.length) { gsc('OOAAahhahahwwhwwaaa'); reply({ command: 'multi', list: replies }); }
-        return;
-        
-      }
-      
-      let cmdSrcTmp = this.commandSrcTmps.get(command);
-      if (!cmdSrcTmp) return comm.reply(Error(`Api: invalid command: "${command}"`).mod({ e: 'invalidCommand' }));
-      
-      cmdSrcTmp.src.send(comm);
+      throw Error('Not implemented');
       
     },
     
-    roadSrc(command) { return this.commandSrcTmp(command).src; }, // TODO: Delete this method!!
     commandSrcTmp(command) {
       
       // Produce a Tmp({ src: Src() }) whose "src" sends messages whose
@@ -181,6 +171,31 @@ global.rooms['setup.hut'] = async () => {
       }));
       return commandSrcTmp;
       
+    },
+    doCommand(comm, { critical=true }={}) {
+      
+      /// {DEBUG=
+      if (!isForm(comm?.msg?.command, String)) throw Error(`${this.desc()} given Comm without "command"`).mod({ comm });
+      /// =DEBUG}
+      
+      
+      // Try to process the command
+      let cst = this.commandSrcTmps.get(comm.msg.command);
+      if (cst) { cst.src.send(comm); return true; }
+      
+      // If this is "non-critical" simply return `false`, indicating we
+      // couldn't fulfill the command (note a commom non-critical case
+      // is when a BelowHut tries to execute a command itself; this case
+      // is non-critical because even if it can't process the command it
+      // can still ask its AboveHut to process the command)
+      if (!critical) return false;
+      
+      // Failed to run critical command; reply with Error if possible...
+      if (comm.reply) return comm.reply(Error(`Api: invalid command: "${comm.msg.command}"`).mod({ e: 'invalidCommand' }));
+      
+      // ... otherwise indicate this Error
+      subcon('warning')(`${this.desc()} failed without reply on command "${comm.msg.command}"`, { comm });
+      
     }
     
   })});
@@ -188,10 +203,18 @@ global.rooms['setup.hut'] = async () => {
     
     // A Hut that directly manages a Record structure and manages making
     // projections of that structure available to BelowHuts
+    // 
+    // Note that there is no `AboveHut.prototype.enableAction` - this
+    // would imply a method for BelowHuts to add arbitrary functionality
+    // to their AboveHut (which would be globally accessible for any
+    // BelowHut)
     
-    init({ recMan, ...args }) {
+    init({ prefix, recMan, ...args }) {
       
+      /// {DEBUG=
+      if (!recMan) recMan = args?.type?.manager;
       if (!recMan) throw Error('Api: "recMan" must be provided');
+      /// =DEBUG}
       
       forms.Hut.init.call(this, {
         type: recMan.getType('hut.above'),
@@ -201,12 +224,13 @@ global.rooms['setup.hut'] = async () => {
       });
       
       /// {ABOVE=
-      let ownedHutRh = this.relHandler('hut.owned/par'); // Get 'hut.owned' Recs where `this` is the Par
+      let ownedHutRh = this.relHandler('hut.owned/above'); // Get 'hut.owned' Recs where `this` is the Par
       let bankedPrm = this.bankedPrm.then(() => ownedHutRh.ready());
       /// =ABOVE}
       
       Object.assign(this, {
         
+        prefix,
         belowHuts: Map(/* belowHutHid => BelowHut(...) */),
         
         /// {ABOVE=
@@ -238,6 +262,7 @@ global.rooms['setup.hut'] = async () => {
       }));
       
     },
+    getRoadFor(trg) { return trg.getRoadFor(this); },
     makeBelowUid() {
       
       return [ this.childUidCnt++, Math.floor(Math.random() * 62 ** 8) /* TODO: Use a stock random instance? */ ]
@@ -247,10 +272,12 @@ global.rooms['setup.hut'] = async () => {
     },
     makeBelowHut(hid) {
       
+      /// {DEBUG=
       if (!hid) throw Error(`Must supply "hid" (maybe use ${getFormName(this)}(...).makeBelowUid()?)`);
+      /// =DEBUG}
       
       let { manager } = this.type;
-      let type = manager.getType('hut.belowHut');
+      let type = manager.getType('hut.below');
       let group = manager.getGroup([]);
       let bh = BelowHut({
         aboveHut: this,
@@ -264,19 +291,12 @@ global.rooms['setup.hut'] = async () => {
       this.belowHuts.add(hid, bh);
       bh.endWith(() => this.belowHuts.rem(hid));
       
-      // `soon` gives time for some initial Roads to be added
-      soon(() => manager.addRecord({
-        type: 'hut.owned',
-        group: { above: this, below: bh },
-        uid: `!owned@${this.hid}@${bh.hid}`
-      }));
-      
       return bh;
       
     },
+    actOnComm(comm) { comm.src.actOnComm(comm); }, // All Comms come from Below, so always delegate to BelowHut
     
     /// {ABOVE=
-    
     getBelowConf() {
       
       // TODO: it may be very elegant to simply provide an AboveHut with
@@ -288,6 +308,8 @@ global.rooms['setup.hut'] = async () => {
       return {
         
         // TODO: Subcon values for Below??
+        // TODO: Maybe `global.getBelowConf` is a better place for this
+        // logic than `AboveHut.prototype`?
         
         aboveHid: this.hid,
         subcons: conf('subcons').map(subcon => subcon.slice([ 'output' ])),
@@ -296,7 +318,7 @@ global.rooms['setup.hut'] = async () => {
           loft: {
             uid: conf('deploy.loft.uid'),
             def: {
-              prefix: conf('deploy.loft.def.prefix'),
+              prefix: this.getValue('prefix'),
               room: conf('deploy.loft.def.room')
             },
             hosting: {
@@ -322,7 +344,6 @@ global.rooms['setup.hut'] = async () => {
     },
     addKnownRoomDependencies(deps) { for (let dep of deps) this.knownRoomDependencies.add(dep); },
     addKnownRealDependencies(deps) { for (let dep of deps) this.knownRealDependencies.add(dep); },
-    
     async getCompiledKeep(bearing, roomPcs, { uniqKey=null, wrapJs=false }={}) {
       
       if (isForm(roomPcs, String)) roomPcs = roomPcs.split('.');
@@ -394,7 +415,6 @@ global.rooms['setup.hut'] = async () => {
       return cmpKeep;
       
     },
-    
     /// =ABOVE}
     
     addRecord(...args) { return this.type.manager.addRecord(...args); },
@@ -408,8 +428,8 @@ global.rooms['setup.hut'] = async () => {
       
       forms.Hut.init.call(this, args);
       
-      // Speed up BelowHut heartbeat to ensure it's on time
       /// {BELOW=
+      // Speed up BelowHut heartbeat to ensure it's on time
       if (this.isHere) this.heartbeatMs = Math.min(this.heartbeatMs * 0.95, this.heartbeatMs - 2500);
       /// =BELOW}
       
@@ -419,14 +439,76 @@ global.rooms['setup.hut'] = async () => {
         heartbeatTimeout: null,
         
         /// {ABOVE=
+        syncTellVersion: 0,
         pendingSync: { add: {}, upd: {}, rem: {} },
         throttleSyncPrm: null, // A Promise resolving when a queued sync request is sent
-        /// =ABOVE}
+        followedRecs: Set(/* Record */),
+        /// =ABOVE} {=BELOW
+        bufferedSyncs: Map(),
+        syncHearVersion: 0,
+        /// =BELOW}
         
         roads: Map(/* Server(...) => Road/Session(...) */)
       });
       
       this.resetHeartbeatTimeout();
+      
+      this.commandSrcTmp('lubdub').src.route(comm => { /* Ignore */ });
+      this.commandSrcTmp('error').src.route(comm => gsc(`${this.desc()} was informed of Error`, comm.msg));
+      this.commandSrcTmp('multi').src.route(({ src, msg: { list=null }, reply }) => {
+        
+        if (!isForm(list, Array)) return reply(Error(`Api: invalid multi list`).mod({ e: 'invalidMultiList' }));
+        
+        let replies = [];
+        let multiReply = msg => replies.push(msg);
+        for (let msg of list) this.actOnComm({ src, reply: multiReply, msg });
+        
+        // TODO: Or generate a multipart response??? That's cool too...
+        if (multiReply.length) {
+          gsc('OOAAahhahahwwhwwaaa');
+          reply({ command: 'multi', list: replies });
+        }
+        
+      });
+      
+      /// {BELOW=
+      this.commandSrcTmp('sync').src.route(({ src, msg, reply }) => {
+        
+        let err = Error('');
+        try {
+          let { v: version, content } = msg;
+          if (!isForm(version, Number)) throw Error('Invalid "version"');
+          if (!version.isInteger()) throw Error('Invalid "version"');
+          if (!isForm(content, Object)) throw Error('Invalid "content"');
+          if (version < this.syncHearVersion) throw Error(`Duplicated sync (version: ${version}; current version: ${this.syncHearVersion})`);
+          
+          // Add this newly arrived sync to the buffer
+          this.bufferedSyncs.set(version, content); mmm('bufferSync', +1);
+          
+          // Now perform as many pending syncs as possible; these must
+          // be sequential, and beginning with the very next expected
+          // sync (numbered `this.syncHearVersion`)
+          let bank = this.type.manager.bank;
+          while (this.bufferedSyncs.has(this.syncHearVersion)) {
+            let sync = this.bufferedSyncs.get(this.syncHearVersion);
+            this.bufferedSyncs.rem(this.syncHearVersion); mmm('bufferSync', -1);
+            this.syncHearVersion++;
+            bank.syncSer(this, sync);
+          }
+          
+          if (this.bufferedSyncs.size > 50) throw Error('Too many pending syncs');
+          
+        } catch (cause) {
+          
+          throw err.mod({
+            msg: 'Error while Syncing - this can occur if the AboveHut was restarted unexpectedly',
+            cause
+          });
+          
+        }
+        
+      });
+      /// =BELOW}
       
     },
         
@@ -444,6 +526,18 @@ global.rooms['setup.hut'] = async () => {
           if (this.roads.empty()) this.end();
         });
         
+        /// {ABOVE=
+        // If this is the 1st Road for this BelowHut init a "hut.owned"
+        // relationship BelowHut and AboveHut; note this relationship is
+        // only initiated ABOVE, as BELOW the relationship is synced
+        // from ABOVE
+        if (this.roads.size === 1) this.addRecord({
+          type: 'hut.owned',
+          group: { above: this.aboveHut, below: this },
+          uid: `!owned@${this.aboveHut.hid}@${this.hid}`
+        });
+        /// =ABOVE}
+        
       }
       if (this.roads.get(server) !== road) throw Error(`Api: duplicate road for "${server.desc()}"`);
       
@@ -454,18 +548,260 @@ global.rooms['setup.hut'] = async () => {
       if (trg !== this.aboveHut) throw Error(`Can't tell ${trg.desc()} - can only tell ${this.aboveHut.desc()}!`);
       /// =DEBUG}
       
-      let bestRoad = null;
       let bestCost = Infinity;
-      for (let [ server, road ] of this.roads) {
-        let cost = server.currentCost();
-        if (cost < bestCost) [ bestRoad, bestCost ] = [ road, cost ];
+      let bestRoad = null;
+      for (let road of this.roads.values()) {
+        let cost = road.currentCost();
+        if (cost < bestCost) [ bestCost, bestRoad ] = [ cost, road ];
       }
-      
       return bestRoad;
+      
+    },
+    addRecord(...args) {
+      let rec = this.aboveHut.addRecord(...args);
+      /// {ABOVE=
+      this.followRec(rec);
+      /// =ABOVE}
+      return rec;
+    },
+    getKnownNetAddrs() {
+      return Set(this.roads.toArr(road => road.netAddr)).toArr(Function.stub);
+    },
+    actOnComm(comm) {
+      
+      /// {DEBUG=
+      //if (comm?.src !== this) throw Error(`${this.desc()} was told to act on Comm intended for ${comm.src?.desc?.() ?? '<unknown>'}`).mod({ comm });
+      /// =DEBUG}
+      
+      // Try to do Command for BelowHut
+      if (this.doCommand(comm, { critical: false })) return;
+      
+      // If BelowHut couldn't do it, do critical attempt with AboveHut
+      this.aboveHut.doCommand(comm, { critical: true });
+      
+    },
+    
+    enableAction(command, fn) {
+      
+      if (!command.startsWith(`${this.aboveHut.prefix}.`)) command = `${this.aboveHut.prefix}.${command}`;
+      
+      let tmp = Tmp({ desc: () => `Action(${this.desc()}: "${command}")`, act: null });
+      
+      /// {BELOW=
+      
+      tmp.act = (msg={}) => {
+        /// {DEBUG=
+        if (msg.has('command')) throw Error('Reserved property "command" was supplied');
+        /// =DEBUG}
+        this.tell({ trg: this.aboveHut, msg: { ...msg, command } });
+      };
+      tmp.endWith(() => tmp.act = () => Error(`Action "${command}" unavailable`).propagate());
+      
+      /// =BELOW} {ABOVE=
+      
+      if (this.commandSrcTmps.has(command)) throw Error(`${this.desc()} got duplicate CommandSrc command "${command}"`);
+      
+      tmp.act = msg => this.tell({ trg: this.aboveHut, msg: { ...msg, command } });
+      
+      // `cmdSrcTmp` ends if `tmp` ends (if the action is disabled)
+      let cmdSrcTmp = this.commandSrcTmp(command);
+      tmp.endWith(cmdSrcTmp);
+      
+      // Route any sends from a RoadSrc so that they call `fn`. Note
+      // that `safe` allows either a value or an Error to be returned
+      // (and makes it so that `return Error(...)` behaves the same as
+      // `throw Error` within `fn`). Either the result or Error will be
+      // used as a reply
+      cmdSrcTmp.src.route(async ({ msg, reply, ms, src, trg }) => {
+        
+        if (tmp.off()) throw Error(`${tmp.desc()} has been ended`);
+        
+        // `result` is either response data or resulting Error
+        let result = await safe( () => fn(msg, { ms, src, trg }), err => err );
+        if (result == null) return reply(null);
+        
+        let isReplyData = false
+          || [ Object, Array, String, Error ].has(result?.constructor)
+          || hasForm(result, Error)
+          || hasForm(result, Keep);
+        if (isReplyData) return reply(result);
+        
+        /// {DEBUG=
+        throw Error(`Action for "${command}" returned invalid type ${getFormName(result)} (should return response data)`);
+        /// =DEBUG}
+        
+        reply(null);
+        
+      });
+      
+      /// =ABOVE}
+      
+      return tmp;
       
     },
     
     /// {ABOVE=
+    
+    toSync(type, rec, delta=null) {
+      
+      // Use this function to accrue changes to the current Record delta
+      // of a specific Hut; calling this function schedules a sync to
+      // occur if none is already scheduled
+      
+      /// {ASSERT=
+      if (!this.pendingSync.has(type)) throw Error(`Invalid type: ${type}`);
+      /// =ASSERT}
+      
+      if (this.off()) return;
+      
+      if (isForm(rec, AboveHut)) gsc(Error('UGH'));
+      
+      let { add, upd, rem } = this.pendingSync;
+      
+      // add, rem: cancel out! No information on Record is sent
+      // rem, add: cancel out! Record already present Below, and stays
+      
+      // Can add and rem occur together? NO  (conflicting messages!)
+      // Can add and upd occur together? NO  (redundant!)
+      // Can rem and upd occur together? YES (e.g. state is in the midst of change as deletion occurs)
+      
+      if (type === 'add') {
+        
+        
+        if (rem.has(rec.uid)) delete rem[rec.uid];
+        else {
+          if (upd.has(rec.uid)) delete upd[rec.uid];
+          add[rec.uid] = rec;
+        }
+        
+      } else if (type === 'rem') {
+        
+        if (add.has(rec.uid)) delete add[rec.uid];
+        else                  rem[rec.uid] = rec;
+        
+      } else if (type === 'upd') {
+        
+        if (add.has(rec.uid)) return; // No "upd" necessary: already adding!
+        
+        if (!upd.has(rec.uid) || !isForm(upd[rec.uid], Object) || !isForm(delta, Object)) {
+          upd[rec.uid] = delta;
+        } else {
+          upd[rec.uid].gain(delta);
+        }
+        
+      }
+      
+      // Don't schedule a sync if one is already scheduled!
+      if (this.throttleSyncPrm) return;
+      
+      let err = Error('trace');
+      let prm = this.throttleSyncPrm = soon(() => {
+        
+        // Can cancel scheduled sync by setting `this.throttleSyncPrm`
+        // to another value
+        if (this.throttleSyncPrm !== prm) return;
+        this.throttleSyncPrm = null;
+        
+        // Hut may have dried between scheduling and executing sync
+        if (this.off()) return;
+        
+        let updateTell = this.consumePendingSync({ fromScratch: false });
+        if (updateTell) this.aboveHut.tell({ trg: this, msg: updateTell });
+        
+      });
+      
+    },
+    followRec(rec) {
+      
+      /* ### Following and Syncing ###
+      
+      Note that the HereHut always exists without needing to be synced;
+      this is true both Above and Below; the HereHut is instantiated by
+      the Foundation (of course Below the code to instantiate the
+      Foundation is technically synced, but this is outside of Record
+      syncing behaviour). Note that BELOW the HereHut is a BelowHut, and
+      initiating it will require an "aboveHut" param - this means BELOW
+      will first of all manually create an AboveHut (mirroring ABOVE).
+      
+      So a HereHut always exists. Note that the HereAboveHut will have a
+      fixed uid ("!hereHut"), while HereBelowHut will typically be id'd
+      with a uid randomly generated by Above (unless the HereBelowHut is
+      spoofed, in which case it gets to pick its own hid!)
+      
+      Note that BELOW, the AfarAboveHut anchors the Record tree, and the
+      HereBelowHut is simply woven into that tree (at no time does a
+      BelowHut ever act as the root of a Record tree)
+      
+      */
+      
+      if (rec.off()) return Tmp.stub;             // Ignore any ended Recs
+      
+      gsc(`${this.desc()} following ${rec.desc()}`);
+      
+      let { allFollows } = this.aboveHut;
+      let { uid: hutUid } = this;
+      
+      // TODO: The following may be able to be simplified considering
+      // that if any of the iterated Records end, `rec` will end too
+      // (because a Member of its Group will end, with a cascading
+      // effect) - this means we don't need to worry about partial
+      // cleanup of the follow if an iterated Rec is Ended - the only
+      // case is that the whole thing gets cleaned up at once!
+      let followTmps = [ ...rec.iterateDepthFirst() ].map(rec => {
+        
+        if (rec === this) return skip;          // Don't follow ourself
+        if (rec === this.aboveHut) return skip; // Don't follow our AboveHut
+        
+        // Ref a pre-existing Follow again; Note Records can be followed
+        // via multiple independent Scope chains - just because a single
+        // Scope chain ends and `end` is called on its Follow doesn't
+        // mean the BelowHut has entirely unfollowed the Record!
+        let preexistingFollowTmp = allFollows[rec.uid]?.[hutUid]; // This says "the Follow of `rec` by a Hut, id'd with `hutUid`"
+        if (preexistingFollowTmp) return preexistingFollowTmp.ref();
+        
+        // First time following `rec`!
+        let followTmp = Tmp({ rec, desc: () => `FollowSingle(${rec.desc()})` });
+        
+        mmm('allFollows', +1);
+        if (!allFollows[rec.uid]) allFollows[rec.uid] = Object.plain(); // Reference the new Follow #1
+        allFollows[rec.uid][hutUid] = followTmp;                        // Reference the new Follow #2
+        mmm('followedRecs', +1);
+        this.followedRecs.add(rec);                                     // Link the Hut to the Record
+        this.toSync('add', rec);                                        // Generate an "add" sync item
+        let valRoute = rec.valueSrc.route(delta => {                    // New values become "upd" syncs
+          this.toSync('upd', rec, delta);
+        });
+        
+        followTmp.route(() => { // Cleanup when the Follow ends
+          
+          mmm('allFollows', -1);
+          delete allFollows[rec.uid][hutUid];                          // Unreference #1
+          let empty = true;                                            // Check if...
+          for (let k in allFollows[rec.uid]) { empty = false; break; } // ... no more huts ref this Record...
+          if (empty) delete allFollows[rec.uid];                       // ... and if not clear up memory!
+          mmm('followedRecs', -1);
+          this.followedRecs.rem(rec);                                  // Unlink the Hut from the Record
+          this.toSync('rem', rec);                                     // Generate a "rem" sync item
+          valRoute.end();                                              // Stop monitoring value changes
+          
+        }, 'prm');
+        
+        // Make sure the Follow ends if the Record ends first (note this
+        // temporary Route automatically ends if `followTmp` ends first)
+        rec.endWith(followTmp, 'tmp');
+        
+        return followTmp;
+        
+      });
+      if (followTmps.empty()) return Tmp.stub;
+      
+      let tmp = Tmp({ desc: () => `FollowTree(${rec.desc()})` });
+      tmp.endWith(() => { for (let tmp of followTmps) tmp.end(); });
+      rec.endWith(tmp, 'tmp');
+      this.endWith(tmp, 'tmp');
+      return tmp;
+      
+    },
     consumePendingSync({ fromScratch=false }={}) {
       
       let pendingSync = this.pendingSync;
@@ -474,15 +810,17 @@ global.rooms['setup.hut'] = async () => {
       if (fromScratch) {
         
         /// {DEBUG=
-        foundation.subcon('record.sync')(`${this.desc()} syncing from scratch`);
+        subcon('record.sync')(`${this.desc()} syncing from scratch`);
         /// =DEBUG}
         
         // Reset version and clear the current sync-delta, refreshing it
         // to indicate an "add" for every followed Record - essentially
         // this is "sync-from-scratch" behaviour!
         this.syncTellVersion = 0;
-        let { add } = pendingSync = { add: {}, upd: {}, rem: {} };
-        for (let rec of this.followedRecs) add[rec.uid] = rec;
+        pendingSync = { add: {}, upd: {}, rem: {} };
+        for (let rec of this.followedRecs) this.toSync('add', rec);
+        //let { add } = pendingSync = { add: {}, upd: {}, rem: {} };
+        //for (let rec of this.followedRecs) add[rec.uid] = rec;
         
       }
       
@@ -524,7 +862,12 @@ global.rooms['setup.hut'] = async () => {
       return { command: 'sync', v: this.syncTellVersion++, content };
       
     },
+    strike() {
+      gsc(`${this.desc()} got strike`);
+    },
+    
     /// =ABOVE}
+    
     tell({ trg, ...args }) {
       
       /// {DEBUG=
@@ -544,10 +887,11 @@ global.rooms['setup.hut'] = async () => {
         // the advantage is that Belows won't see the logic that causes
         // Above to terminate dead BelowHuts. But should we remove the
         // logic for sending heartbeats from Above? Need to consider:
-        // {BELOW= =BELOW} GETS COMPILED, BUT `this.isAfar === true`
+        // {BELOW= =BELOW} GETS COMPILED IN, BUT `this.isAfar === true`
         // - This means in a Below environment (e.g. browser) we have
-        //   representations of remote Huts (interesting...)
-        // {ABOVE= =ABOVE} GETS COMPILED, BUT `this.isHere === true`
+        //   representations of remote Huts (interesting, may never even
+        //   happen ever???)
+        // {ABOVE= =ABOVE} GETS COMPILED OUT, BUT `this.isHere === true`
         // - This means in an Above environment (e.g. nodejs) there are
         //   BelowHuts representing local actors (end-to-end testing?)
         
@@ -576,7 +920,6 @@ global.rooms['setup.hut'] = async () => {
     }
     
   })});
-  
   return { Hut, AboveHut, BelowHut };
   
 };

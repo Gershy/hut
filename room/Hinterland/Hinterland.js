@@ -19,7 +19,7 @@ global.rooms['Hinterland'] = async foundation => {
       
     },
     
-    async open({ hut, netIden }) {
+    async open({ hut, rec=hut, netIden }) {
       
       // TODO: Maybe here is the place to define the connection from
       // `netIden` to `hut`? I.e. that network communications to the
@@ -33,10 +33,8 @@ global.rooms['Hinterland'] = async foundation => {
       
       // Prepare all habitats
       await Promise.all(this.habitats.map(async hab => {
-        
         let habitatPrepared = await hab.prepare(this.roomName, hut);
         tmp.endWith(habitatPrepared);
-        
       }));
       
       // Add all type -> Form mappings
@@ -44,47 +42,48 @@ global.rooms['Hinterland'] = async foundation => {
         
         // Note that the value mapped to is either some Record Form or a
         // Function returning some Record Form!
-        let addTypeFormFnTmp = hut.addTypeFormFn(k, v['~Forms'] ? () => v : v);
-        tmp.endWith(addTypeFormFnTmp);
+        tmp.endWith(rec.type.manager.addFormFn(k, v['~Forms'] ? () => v : v));
         
       }
       
-      let rootReal = ( await real([]) ).addReal(`${this.prefix}.root`);
+      let hinterlandReal = global.real.addReal(`${this.prefix}.root`);
+      tmp.endWith(hinterlandReal);
       
-      let loftRh = hut.relHandler({ type: `${this.prefix}.loft`, term: 'hut', offset: 0, limit: 1, fixed: true });
+      let loftRh = rec.relHandler({ type: `${this.prefix}.loft`, term: 'hut', offset: 0, limit: 1, fixed: true });
       tmp.endWith(loftRh);
       
-      let recordSampleSc = subcon('record.sample');
-      if (recordSampleSc.enabled) (async () => {
+      /// {DEBUG=
+      let recordSampleScConf = conf('subcons.record->sample')
+      if (recordSampleScConf?.output?.inline) (async () => {
         
         let rank = rec => rec.uid.hasHead('!') ? -1 : 0;
         let rankType = (a, b) => a.type.name.localeCompare(b.type.name);
         let rankUid = (a, b) => a.uid.localeCompare(b.uid);
+        let sc = subcon('record.sample');
         
-        let TimerSrc = await foundation.getRoom('logic.TimerSrc');
-        TimerSrc({ num: Infinity, ms: recordSampleSc.ms }).route(() => {
+        let TimerSrc = await getRoom('logic.TimerSrc');
+        TimerSrc({ num: Infinity, ms: recordSampleScConf.ms }).route(() => {
           
-          let ts = foundation.getMs();
-          recordSampleSc('Sampling Records...');
-          let results = [ ...hut.iterateAll() ];
-          recordSampleSc(`  Sampled ${results.count()} Record(s):`);
-          recordSampleSc(results
+          let ts = getMs();
+          let results = [ ...rec.iterateAll() ]
             .sort((a, b) => (rank(a) - rank(b)) || rankType(a, b) || rankUid(a, b))
-            .map(rec => `  - ${rec.uid.padTail(24, ' ')} -> ${rec.type.name.padTail(24, ' ')} ${JSON.stringify(rec.getValue())}`)
-            .join('\n')
-          );
-          recordSampleSc(`  (Took ${((foundation.getMs() - ts) / 1000).toFixed(2)}ms)`);
+            .map(rec => `- ${rec.uid.padTail(24, ' ')} -> ${rec.type.name.padTail(24, ' ')} ${JSON.stringify(rec.getValue())}`);
+          sc([
+            `Sampled ${results.count()} Record(s) (took ${((getMs() - ts) / 1000).toFixed(2)}ms)`,
+            ...results
+          ].join('\n'))
           
         });
         
       })();
+      /// =DEBUG}
       
       let rhFromRecWithRhArgs = (args, dep) => {
         
         // Allows `dep.scp` to be passed 2 arguments, a Record and a
         // RelHandler argument, and those 2 arguments will be resolved
         // to a single RelHandler (which is a Src), which is the result
-        // of `rec.relHandler(relHandlerArg)
+        // of `rec.relHandler(relHandlerArg)`
         
         if (!hasForm(args[0], Record)) return args;
         
@@ -110,13 +109,14 @@ global.rooms['Hinterland'] = async foundation => {
       };
       
       // Create the AppRecord identified by `${this.prefix}.loft`
-      let mainRec = hut.addRecord({ type: `${this.prefix}.loft`, group: { hut }, value: null, uid: `!loft@${this.prefix}` });
+      gsc(`${rec.desc()} add loft`);
+      let mainRec = rec.addRecord({ type: `${this.prefix}.loft`, group: { hut }, value: null, uid: `!loft@${this.prefix}` });
       
-      // Wait for the AppRecord to register as a HolderRec on `hut`
+      // Wait for the Loft to register as a HolderRec on `hut`
       let mainScope = Scope(loftRh, { processArgs: rhFromRecWithRhArgs, frameFn: resolveHrecs }, (loftRec, dep) => {
         
         // The AppRecord is ready; apply `this.above`
-        this.above(hut, loftRec, rootReal, dep);
+        this.above(hut, loftRec, hinterlandReal, dep);
         
         // Now KidHuts may access the AppRecord via the Hinterland; use
         // the default (0, Infinity, {}) relHandler - otherwise some
@@ -124,11 +124,11 @@ global.rooms['Hinterland'] = async foundation => {
         dep.scp(hut.ownedHutRh, (owned, dep) => {
           
           // `owned` has { par, kid }; "par" and "kid" are both Huts
-          let kidHut = owned.getMember('kid');
+          let kidHut = owned.getMember('below');
           
           // Records throughout `scp` get followed by `owned`
           dep.scp(loftRh, { frameFn: resolveHrecsAndFollowRecs.bind(null, kidHut) }, (loftRec, dep) => {
-            this.below(kidHut, loftRec, rootReal, dep);
+            this.below(kidHut, loftRec, hinterlandReal, dep);
           });
           
         });
@@ -139,11 +139,8 @@ global.rooms['Hinterland'] = async foundation => {
       /// =ABOVE} {BELOW=
       
       // As soon as Below syncs the root Rec it's good to go
-      let kidScope = Scope(loftRh, { processArgs: rhFromRecWithRhArgs, frameFn: resolveHrecs }, async (loftRec, dep) => {
-        
-        await this.below(hut, loftRec, rootReal, dep);
-        await rootReal.tech.informInitialized(); // Let the RealTech know the below initialized!
-        
+      let kidScope = Scope(loftRh, { processArgs: rhFromRecWithRhArgs, frameFn: resolveHrecs }, (loftRec, dep) => {
+        this.below(hut, loftRec, hinterlandReal, dep);
       });
       tmp.endWith(kidScope);
       

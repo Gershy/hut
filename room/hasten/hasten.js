@@ -64,7 +64,7 @@ global.rooms['hasten'] = async foundation => {
         hut.actionCallback = act => {
           
           let run = {
-            createUser: a => a.act(),
+            makeUser: a => a.act(),
             renameUser: a => a.act({ name: `${hut.uid}` }),
             confirmUser: a => a.act(),
             joinTeam: a => (hut.uid === 'abe')
@@ -74,7 +74,7 @@ global.rooms['hasten'] = async foundation => {
               ? Promise(r => setTimeout(r, 600)).then(() => a.act())
               : Promise(r => setTimeout(r, 0  )).then(() => a.act()),
             submitTeamMessage: a => a.act({ text: `Hi I'm ${hut.uid} nice to meet` }),
-            createWorld: a => a.act()
+            makeWorld: a => a.act()
           }[act.name.split('.')[1]];
           
           if (run) dbgPrm = dbgPrm.then(wait).then(() => run(act));
@@ -87,13 +87,13 @@ global.rooms['hasten'] = async foundation => {
         hut.actionCallback = act => {
           
           let run = {
-            createUser: a => a.act(),
+            makeUser: a => a.act(),
             renameUser: a => a.act({ name: `TAS` }),
             confirmUser: a => a.act(),
             joinTeam: a => a.act({ code: '' }),
             toggleTeamStatus: a => a.act(),
             submitTeamMessage: a => a.act({ text: `TAS BOI` }),
-            createWorld: a => a.act()
+            makeWorld: a => a.act()
           }[act.name.split('.')[1]];
           
           if (run) dbgPrm = dbgPrm.then(wait).then(() => run(act));
@@ -135,17 +135,17 @@ global.rooms['hasten'] = async foundation => {
       let userChooser = dep(Chooser(hut.relSrc('hst.user')));
       dep.scp(userChooser.srcs.off, (noUser, dep) => {
         
-        let createUserAct = dep(hut.enableAction('hst.createUser', () => {
+        let makeUserAct = dep(hut.enableAction('hst.makeUser', () => {
           let user = hut.addRecord('hst.user', [ hut ], { name: 'Anon', stage: 'user', controls: [] });
           user.controls = Set();
         }));
         
-        dep(userReal.addReal('createUser', [
+        dep(userReal.addReal('makeUser', [
           { form: 'Geom', w: '100%', h: '50px' },
           { form: 'Text', size: '220%', text: 'Start' },
         ]));
         dep(userReal.addLayout({ form: 'Decal', colour: '#fff8', text: { colour: '#fff' }, border: { ext: '5px', colour: '#fff8' } }));
-        dep(userReal.addLayout({ form: 'Press', pressFn: () => createUserAct.act() }));
+        dep(userReal.addLayout({ form: 'Press', pressFn: () => makeUserAct.act() }));
         
       });
       dep.scp(userChooser.srcs.onn, (user, dep) => {
@@ -527,7 +527,7 @@ global.rooms['hasten'] = async foundation => {
           dep(userTeam.valSrc.route(() => roleChooser.choose(userTeam.getValue('role')) ));
           dep.scp(roleChooser.srcs.captain, (captain, dep) => {
             
-            let createWorldAct = dep(hut.enableAction('hst.createWorld', () => {
+            let makeWorldAct = dep(hut.enableAction('hst.makeWorld', () => {
               
               let { level, difficulty } = team.getValue('settings');
               let world = hut.parHut.addRecord('hst.world', [ team ], { ms: foundation.getMs(), level, difficulty, ctrlSet: {
@@ -561,7 +561,7 @@ global.rooms['hasten'] = async foundation => {
               { form: 'Geom', w: '80%' },
               { form: 'Text', size: '150%', text: 'Play' },
               { form: 'Decal', colour: '#fff4', text: { colour: '#fff' } },
-              { form: 'Press', pressFn: () => createWorldAct.act() }
+              { form: 'Press', pressFn: () => makeWorldAct.act() }
             ]));
             
           });

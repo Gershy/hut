@@ -11,14 +11,15 @@ Error.prepareStackTrace = (err, callSites) => {
     if (!file || file.hasHead('node:')) return skip;
     
     return {
+      type: 'line',
       fnName: cs.getFunctionName(),
-      keepName: '[file]' + Keep.separator + cs.getFileName().split(/[/\\]+/).join(Keep.separator),
+      keepTerm: '[file]' + Keep.separator + cs.getFileName().split(/[/\\]+/).join(Keep.separator),
       row: cs.getLineNumber(),
       col: cs.getColumnNumber()
     };
     
   });
-  return `{HUT${'T'}RACE=${JSON.stringify(trace)}=HUT${'T'}RACE}`;
+  return `{HUTTRACE=${valToJson(trace)}=HUTTRACE}`;
   
 };
 
@@ -184,9 +185,11 @@ let RoomLoader = form({ name: 'RoomLoader', props: (forms, Form) => ({
     // replaced with a single forward slash
     // Returns `[ file, col, row, context ]`
     
-    let cmpFp = this.cmpKeep.fp.desc();
+    // Format filepaths into KeepTerms
     let sep = Keep.separator;
+    if (/^([A-Z]:)?[/\\]/.test(file)) file = `[file]${sep}${file.replace(/[/\\]/g, sep)}`;
     
+    let cmpFp = this.cmpKeep.fp.desc();
     if (!file.hasHead(cmpFp + sep)) return { file, row, col, context: null };
     
     let pcs = file.slice((cmpFp + sep).length).split(sep);
@@ -291,7 +294,7 @@ let Schema = form({ name: 'Schema', props: (forms, Form) => ({
   
 })});
 
-let createSchema = () => {
+let makeSchema = () => {
   
   let resolveKeep = val => val;
   let error = (chain, val, msg, err=Error()) => err.propagate({ msg: `Api: config at "${chain}": ${msg}`, chain, val });
@@ -996,16 +999,22 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     let t = getMs();
     
     rawConf = resolveDeepObj(rawConf);
-    let schema = createSchema();
+    let schema = makeSchema();
     
     let conf = {
       
       confs: [],
       
       // Note this controls which subcons get to output by default
-      subcons: 'gsc,setup,compile.result,bank,warning'.split(',').toObj(v => [ v, {
-        output: { inline: true, therapist: false }
-      }]),
+      subcons: {
+        ...'gsc,setup,compile->result,bank,warning'.split(',').toObj(v => [ v, {
+          output: { inline: true, therapist: false }
+        }]),
+        'record->sample': {
+          output: { inline: false, therapist: false },
+          ms: 5000
+        }
+      },
       
       hosts: {},
       deploy: {
@@ -1156,7 +1165,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       // Shouldn't be in a block after all lines are processed
       if (curBlock) throw Error(`Ended with unbalanced "${curBlock.type}" block`);
       
-      // Now compute the offsets to allow mapping cmp->src codepoints
+      // Now compute the offsets to allow mapping cmp->src callsites
       let curOffset = null;
       let offsets = [];
       let nextBlockInd = 0;
@@ -1324,29 +1333,21 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       src: Src.stub
     })});
     
-    let fakeReal = FakeReal({ name: 'nodejs.fakeReal', tech: {
+    let fakeLayout = FakeLayout();
+    let fakeReal =  global.real = FakeReal({ name: 'nodejs.fakeReal', tech: {
       render: Function.stub,
       informNavigation: Function.stub,
       getLayoutForm: name => fakeLayout,
       getLayoutForms: names => names.toObj(name => [ name, fakeReal.getLayoutForm(name) ]),
       render: Function.stub
     }});
-    let fakeLayout = FakeLayout();
-    
-    global.real = terms => {
-      
-      if (isForm(terms, String)) terms = terms.split(',');
-      if (terms.length !== 0) throw Error(`Must supply [] (only the RootReal can be accessed here)`);
-      return fakeReal;
-      
-    };
     
   })();
   
   // Again enhance Subcon output to use Records + KeepBank
   await (async () => {
     
-    gsc('Pls implement');
+    gsc('Pls implement therapy');
     
     let subconWriteStdout = global.subconOutput;
     global.subconOutput = (sc, ...args) => {
@@ -1378,7 +1379,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       ? KeepBank({ subcon: global.subcon('bank'), keep: global.keep(keepTerm) })
       : WeakBank({ subcon: global.subcon('bank') });
     
-    let recMan = record.Manager({ prefix, bank });
+    let recMan = record.Manager({ bank });
     let aboveHut = hut.AboveHut({ hid: uid, prefix, par: null, isHere: true, recMan, heartbeatMs });
     
     // Get a NetworkIdentity to handle the hosting
@@ -1532,7 +1533,8 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
             aboveHut,
             isHere: false,
             isAfar: true,
-            desc: () => `AnonHut(${session.netAddr})`
+            desc: () => `AnonHut(${session.netAddr})`,
+            actOnComm: (comm) => aboveHut.doCommand(comm)
           };
           hut.Hut.prototype.tell.call(anonHut, {
             // Note that `hut.BelowHut.prototype.tell` would trigger

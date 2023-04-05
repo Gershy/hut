@@ -348,14 +348,16 @@ Object.assign(global, {
     propagate(props /* { cause, msg, message, ...more } */) { throw this.mod(props); },
     suppress() {
       this['~suppressed'] = true;
-      if (this.cause) this.cause.suppress();
+      
+      if (!this.cause) return;
+      let causes = (hasForm(this.cause, Error) ? [ this.cause ] : this.cause);
+      causes.each(err => err.suppress());
     },
     
     desc(seen=Set()) {
-      
       // Errors have a Message and a Stack
       // Stacks are a Preamble followed by a Trace
-      // A Trace is a sequence of Codepoints
+      // A Trace is a sequence of callsites
       
       // Note that Error -> String conversion expects the Message and
       // Stack to be formatted according to these principles:
@@ -369,7 +371,7 @@ Object.assign(global, {
       let traceHeadInd = stack.indexOf('{HUTTRACE=');
       let traceTailInd = stack.indexOf('=HUTTRACE}');
       
-      if (traceHeadInd < 0 || traceTailInd < 0) return `{UNPROCESSEDERROR=\n${stack}\n=UNPROCESSEDERROR}`;
+      if (traceHeadInd < 0 || traceTailInd < 0) return `Unprocessed Error:\n${stack}`;
       
       let preamble = stack.slice(0, traceHeadInd);
       let trace = JSON.parse(stack.slice(traceHeadInd + '{HUTTRACE='.length, traceTailInd));
@@ -388,32 +390,40 @@ Object.assign(global, {
       fullMsg = fullMsg.trim().split('\n').map(line => {
         
         let match = line.trim().match(/^((?:[/]|[A-Z][:][/\\])[^:]+)[:]([0-9]+)(?:[:]([0-9]+))?$/);
+        
         if (!match) return line;
         let [ , file, row, col=null ] = match;
-        return col
-          ? `${file.replace(/[\\]+/g, '/')} [${row}:${col}]`
-          : `${file.replace(/[\\]+/g, '/')} [${row}]`;
+        let mapped = mapSrcToCmp(file, row, col ?? 0);
+        gsc({ mapped });
+        return `${mapped.file.replace(/[\\]+/g, '/')} [${mapped.row}:${mapped.col}]`;
         
       }).join('\n');
       
-      trace = trace.map(({ keepName, row, col, ...props }) => ({
-        keepName, row, col,
-        ...props,
-        ...mapSrcToCmp(keepName, row, col) /* { file, row, col, context } */
-      }));
+      trace = trace.map(val => {
+        if      (val.type === 'info') return val;
+        else if (val.type === 'line') {
+          
+          let { keepTerm, row, col } = val;
+          let mapped = mapSrcToCmp(keepTerm, row, col);
+          
+          // Stringify "row" and "col"
+          return { ...val, ...mapped, row: mapped.row.toString(10), col: mapped.col.toString(10) };
+          
+        }
+      });
       
-      // Stringify "row" and "col"
-      trace = trace.map(({ row, col, keepName, ...props }) =>  ({
-        ...props,
-        keepName,
-        row: row.toString(10),
-        col: col.toString(10)
-      }));
-      
-      let fileChars = Math.max(...trace.map(item => item.file.length));
-      let rowChars = Math.max(...trace.map(item => item.row.length));
-      let colChars = Math.max(...trace.map(item => item.col.length));
-      trace = trace.map(({ file, row, col }) => `${file.padTail(fileChars)} [${row.padHead(rowChars)}:${col.padHead(colChars)}]`);
+      let lineTrace = trace.filter(t => t.type === 'line');
+      let fileChars = Math.max(...lineTrace.map(t => t.file.length));
+      let rowChars = Math.max(...lineTrace.map(t => t.row.length));
+      let colChars = Math.max(...lineTrace.map(t => t.col.length));
+      trace = trace.map(t => {
+        if (t.type === 'line') {
+          let { file, row, col } = t;
+          return `${file.padTail(fileChars)} [${row.padHead(rowChars)}:${col.padHead(colChars)}]`;
+        } else if (t.type === 'info') {
+          return t.info;
+        }
+      });
       
       let desc = fullMsg || getFormName(this);
       if (!trace.empty()) desc += '\n' + trace.join('\n').indent('\u2022 ');
@@ -804,9 +814,6 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   // Configuration
   conf: () => null,
   
-  // Network
-  createServer: () => null,
-  
   // Timing
   getMs: Date.now,
   getDate: (n=getMs()) => (new Date(n)).toLocaleString().replace(',', '').replace(' a.m.', 'am').replace(' p.m.', 'pm'),
@@ -828,11 +835,11 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   
   // Urls
   urlRaw: ({ path='', cacheBust, query }) => {
-    let result = '';
-    if (cacheBust) result = `/!${cacheBust}`;
-    if (path) result += `/${path}`;
-    if (query && !query.empty()) result += '?' + query.toArr((v, k) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
-    return result; // TODO: Sanitize `path`? (But note it needs to be allowed to have "/" - e.g. "/!static/path/to/resource.jpg")
+    let url = '';
+    if (cacheBust)               url =  `/!${cacheBust}`;
+    if (path)                    url += `/${path}`;
+    if (query && !query.empty()) url += '?' + query.toArr((v, k) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+    return url;
   },
   url: ({ path='', query }) => {
     

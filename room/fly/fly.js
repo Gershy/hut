@@ -164,10 +164,10 @@ global.rooms['fly'] = async foundation => {
         'Art', 'Axis1d', 'Decal', 'Geom', 'Press', 'Real', 'Scroll', 'Size', 'Text', 'TextInput', 'Image'
       ]);
       
-      dep.scp(hut, 'hut.owned/par', (owned, dep) => {
+      dep.scp(hut, 'hut.owned/above', (owned, dep) => {
         
         // Attach a "fly.player" Rec to every Hut
-        let kidHut = owned.m('kid');
+        let kidHut = owned.m('below');
         let termTmp = termBank.hold();
         let player = kidHut.addRecord('fly.player', [], { term: termTmp.term, name: null, score: 0, deaths: 0 });
         let hutPlayer = kidHut.addRecord('fly.hutPlayer', [ kidHut, player ]);

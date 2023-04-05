@@ -361,7 +361,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   
   let tmp = Tmp({
     desc: () => `ws${secure ? 's' : ''}://${netAddr}:${port}`,
-    secure, protocol: 'sokt', netAddr, port,
+    secure, protocol: 'sokt', netAddr, port, netProc: `${netAddr}:${port}`,
     serverOpen, serverShut,
     src: Src(), // Sends `session` Objects
     reusedServer: false,

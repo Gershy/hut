@@ -84,7 +84,7 @@ global.rooms['collabowrite'] = async foundation => {
         { form: 'Geom', ow: '10px', oh: '1em' },
         { form: 'Decal', colour: '#00f8' }
       ],
-      'main->lobby->create': [
+      'main->lobby->make': [
         { form: 'Geom', w: '100%', h: '1em' },
         { form: 'Decal', colour: '#00f8', text: { size: '1em' } }
       ],
@@ -330,17 +330,17 @@ global.rooms['collabowrite'] = async foundation => {
         let roomPersonaChooser = dep(Chooser(roomPersonaRh));
         dep.scp(roomPersonaChooser.srcs.off, (noRoomPersona, dep) => {
           
-          // View the lobby, or create a new room
+          // View the lobby, or make a new room
           
-          let createRoomAct = dep(hut.enableAction('createRoom', ({ command, ...args }) => {
+          let makeRoomAct = dep(hut.enableAction('makeRoom', ({ command, ...args }) => {
             
-            args = { ...createRoomFields.map(v => v.def), ...args };
+            args = { ...makeRoomFields.map(v => v.def), ...args };
             
             if (!args.name) throw Error(`"name" is required`);
             if (!args.desc) args.desc = '<no description>';
             
             let room = hut.addRecord('room', { cw, creator: persona.m('account') }, {
-              ...createRoomFields.map((v, k) => args[k]),
+              ...makeRoomFields.map((v, k) => args[k]),
               state: 'wait',
               numAuthors: 0,
               numIdeas: 0,
@@ -355,7 +355,7 @@ global.rooms['collabowrite'] = async foundation => {
             hut.addRecord('roomPersona', [ persona, roomAccount ]);
             
           }));
-          let createRoomFields = { /* name, desc, charLimit, submitSecs, voteSecs, maxRounds, (min|max)Authors */
+          let makeRoomFields = { /* name, desc, charLimit, submitSecs, voteSecs, maxRounds, (min|max)Authors */
             name:       { name: 'Room Name',         type: 'text', def: null     },
             desc:       { name: 'Description',       type: 'text', def: null     },
             charLimit:  { name: 'Character Limit',   type: 'int',  def: '100'    },
@@ -366,7 +366,7 @@ global.rooms['collabowrite'] = async foundation => {
             maxAuthors: { name: 'Maximum Authors',   type: 'int',  def: '10'     }
           };
           
-          let modeChooser = dep(Chooser([ 'lobby', 'create' ]));
+          let modeChooser = dep(Chooser([ 'lobby', 'make' ]));
           dep.scp(modeChooser.srcs.lobby, (lobby, dep) => {
             
             // TODO: Handle RelHandlers whose offset/limit changes sync
@@ -464,23 +464,23 @@ global.rooms['collabowrite'] = async foundation => {
             let roomsPagerOffsetDecReal = roomsPagerReal.addReal('offsetDec');
             let roomsPagerOffsetIncReal = roomsPagerReal.addReal('offsetInc');
             
-            let createReal = lobbyReal.addReal('create', [
+            let makeReal = lobbyReal.addReal('make', [
               { form: 'Text', text: 'Create New Room' },
-              { form: 'Press', pressFn: () => modeChooser.choose('create') }
+              { form: 'Press', pressFn: () => modeChooser.choose('make') }
             ]);
             
           });
-          dep.scp(modeChooser.srcs.create, (create, dep) => {
+          dep.scp(modeChooser.srcs.make, (make, dep) => {
             
-            let createReal = dep(mainReal.addReal('createRoom'));
-            let fields = createRoomFields.map(({ name: prompt, type, def }) => {
+            let makeReal = dep(mainReal.addReal('makeRoom'));
+            let fields = makeRoomFields.map(({ name: prompt, type, def }) => {
               if (def) prompt = `(${def}) ${prompt}`;
-              return dep(createReal.addReal('field', { text: '' }, [{ form: 'TextInput', prompt }]));
+              return dep(makeReal.addReal('field', { text: '' }, [{ form: 'TextInput', prompt }]));
             });
             
-            createReal.addReal('submit', [
+            makeReal.addReal('submit', [
               { form: 'Text', text: 'Create Room!' },
-              { form: 'Press', pressFn: () => createRoomAct.act(createRoomFields.map(({ type, def }, term) => {
+              { form: 'Press', pressFn: () => makeRoomAct.act(makeRoomFields.map(({ type, def }, term) => {
                 
                 let value = fields[term].params.textInputSrc.val || def;
                 if (type === 'int') {
@@ -491,7 +491,7 @@ global.rooms['collabowrite'] = async foundation => {
                 
               }))}
             ]);
-            createReal.addReal('cancel', [
+            makeReal.addReal('cancel', [
               { form: 'Text', text: 'Cancel' },
               { form: 'Press', pressFn: () => modeChooser.choose('lobby') }
             ]);

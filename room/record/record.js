@@ -28,9 +28,10 @@ global.rooms['record'] = async () => {
         // of the corresponding id (which must be configured by setting
         // the correct search functions using `addRecordSearch`!)
         recPrmCacheMs: 5000,
-        recPrms: Object.plain({ /* uid -> Promise(Record(...)) */ }),
-        recPrmTimeouts: Object.plain({ /* uid -> Timeout */ }),
-        types: Object.create(null)
+        recPrms:        Object.plain({ /* uid -> Promise(Record(...)) */ }),
+        recPrmTimeouts: Object.plain({ /* uid -> Timeout(...) */ }),
+        types:          Object.plain({ /* typeName -> Type(...) */ }),
+        formFns:        Object.plain({ /* typeName -> Function */ })
         
       });
       
@@ -43,13 +44,20 @@ global.rooms['record'] = async () => {
       
     },
     getType(name) {
-      
       if (!this.types[name]) this.types[name] = Type({ manager: this, name });
       return this.types[name];
-      
     },
     getGroup(mems) { return Group(this, mems); },
-    getRecordForm({ type, group, value }) { return Record; },
+    getRecordForm({ type, group, value }) {
+      return this.formFns[type.name]?.(value) ?? Record;
+    },
+    addFormFn(typeName, fn) {
+      /// {DEBUG=
+      if (this.formFns.has(typeName)) throw Error(`Duplicate Form function for Type named "${typeName}"`);
+      /// =DEBUG}
+      this.formFns[typeName] = fn;
+      return Tmp(() => delete this.formFns[typeName]);
+    },
     addRecord(...args /* type, group, value, uid, volatile | { type, group, value, uid, volatile } */) {
       
       let { type=null, group=Group(this, {}), value=null, uid: specifiedUid=null, volatile=false } =
@@ -57,7 +65,7 @@ global.rooms['record'] = async () => {
           ? args[0]
           : [ 'type', 'group', 'value', 'uid', 'volatile' ].toObj((key, n) => [ key, args[n] ]);
       
-      return this.getRecordFromCacheOrPlan(specifiedUid || this.getNextUid(), uid => {
+      return this.getRecordFromCacheOrPlan(specifiedUid ?? this.getNextUid(), uid => {
         
         if (!type) throw Error(`No Type provided`);
         
@@ -285,14 +293,12 @@ global.rooms['record'] = async () => {
       if (!Form.nameRegex.test(name)) throw Error(`Invalid Type name: "${name}"`);
       if (manager.types[name]) throw Error(`Instantiated Type with duplicate name: "${name}"`);
       
-      Object.defineProperties(this, {
+      // Doen't hurt to have the Type mapped immediately!
+      manager.types[name] = Object.defineProperties(this, {
         name: { value: name, enumerable: true },
         manager: { value: manager },
         termTypes: { value: {} /* Term => Type */ }
       });
-      
-      // Doen't hurt to have the Type mapped immediately!
-      manager.types[name] = this;
       
     },
     getPfx() { return this.name.cut('.')[0] },
@@ -785,18 +791,10 @@ global.rooms['record'] = async () => {
         // Record, the Chooser would turn "onn", and `chooser.srcs.off`
         // `dep` would End the Act - SYNCHRONOUSLY, so there was never
         // a possibility of multiple Acts running in quick succession
-        // and creating more "eg.type" Recs beyond the first.
-        // NOW THE PROBLEM is that while calling `hut.enableAction` will
-        // synchronously create the Record, the Banking Promise needs to
-        // resolve before the created Record is propagated to the
-        // RelHandlers of its Members! This means there is a moment
-        // where the Record is already pending creation, but the Chooser
-        // hasn't registered that its "off" Dep should trigger! I think
-        // the solution could look like kicking off the Sync Promise
-        // immediately but not `await`ing it, synchronously Sending the
-        // newly created Record (`this`) to its Members' RelHandlers,
-        // and only after that has all been completed synchronously,
-        // `await`ing the Sync Promise!
+        // and creating more "eg.type" Recs beyond the first. Want to
+        // maintain this pattern after the Banking changes; for that
+        // reason the Rec is synchronously propagated to all its Holders
+        // before `syncPrm` gets `await`ed
         
         try {
           
@@ -832,7 +830,7 @@ global.rooms['record'] = async () => {
             
           }
           
-          subcon('record.instance')(() => `PROP ${this.desc()} (await sync...)`);
+          subcon('record.instance')(() => `PROP ${this.desc()} (await sync...)`); // "propagate"
           
           await syncPrm;
           
@@ -857,7 +855,7 @@ global.rooms['record'] = async () => {
       })();
       
     },
-    desc() { return `${this.volatile ? '??' : ''}${getFormName(this)}(${this.type.name}, ${this.uid})`; },
+    desc() { return `${getFormName(this)}${this.volatile ? '??' : ''}(${this.type.name}, ${this.uid})`; },
     * iterateBreadthFirst() {
       
       let nextRecs = [ this ];
@@ -888,7 +886,7 @@ global.rooms['record'] = async () => {
       seen.add(this);
       
       // Yield Member tree
-      yield { rec: this };
+      yield this;
       for (let [ k, rec ] of this.group.mems) yield* rec.iterateAll(seen);
       
       // Yield active Holder tree
@@ -1103,7 +1101,7 @@ global.rooms['record'] = async () => {
       // depth-wise iteration order that would occur otherwise).
       for (let mem of this.iterateBreadthFirst()) {
         let val = mem.valueSrc.val;
-        if (isForm(val, Object) && val.has(key)) return val[key];
+        if (val?.constructor === Object && val.has(key)) return val[key];
       }
       
       return null;

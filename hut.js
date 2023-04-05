@@ -4,6 +4,7 @@
 // state so it can be required directly)
 Object.assign(global, { rooms: Object.create(null) });
 require('./room/setup/clearing/clearing.js');
+if (process.argv[1] !== __filename) return;
 
 if (0 || process.cwd() === '/hut') { // Low-level debug
   

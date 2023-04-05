@@ -152,7 +152,6 @@ global.rooms['internal.real.generic.Real'] = foundation => form({ name: 'Real', 
       if (!params.empty()) this.mod(params);
       for (let layout of layouts) this.addLayout(layout);
       
-      
     }
     
   },
@@ -196,7 +195,7 @@ global.rooms['internal.real.generic.Real'] = foundation => form({ name: 'Real', 
       
       // Otherwise 1st arg must be a String naming a Real
       if (!isForm(args[0], String)) throw Error(`Couldn't derive Real from given params (args[0] was of form ${getFormName(args[0])})`);
-        
+      
       // Get `name` and `pfx` separately; if no `pfx` specified, it
       // defaults to the same prefix as `this`
       let [ pfx, name ] = args[0].has('.')
@@ -214,7 +213,7 @@ global.rooms['internal.real.generic.Real'] = foundation => form({ name: 'Real', 
       
     })();
     
-    for (let innerLayout of this.layouts.map(l => l.isInnerLayout() ? l : C.skip)) {
+    for (let innerLayout of this.layouts.map(l => l.isInnerLayout() ? l : skip)) {
       real.addLayout(innerLayout.getChildLayout());
     }
     

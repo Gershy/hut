@@ -12,21 +12,36 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] = () => ({ init: as
     let trace = callSites.map(cs => {
       
       // https://v8.dev/docs/stack-trace-api
-      let rawFileName = cs.getFileName();
       let row = cs.getLineNumber();
       let col = cs.getColumnNumber();
+      
+      // Get `cs.getFileName()`; if nullish there are 2 possibilities:
+      // 1. This error is from an `eval` (check `cs.getEvalOrigin`)
+      // 2. This error is unrelated to any line (e.g. Promise.all index)
+      let rawFileName = cs.getFileName();
+      
+      // Option 1; check eval origin (note that we'll want to overwrite
+      // `row` and `col`, as their un-overwritten values will be their
+      // index within the `eval`'d String, whereas the index of where
+      // `eval` was called is *much* more useful for debugging!
       if (!rawFileName) {
         let evalOrig = cs.getEvalOrigin();
         let match = [ , rawFileName=null, row, col ] = (evalOrig ?? '').match(/(https?:[/][/].+):([0-9]+):([0-9]+)/) ?? [];
         [ row, col ] = [ row, col ].map(v => parseInt(v, 10));
       }
       
-      if (!rawFileName) rawFileName = '<unknown>';
-      let [ , roomName=rawFileName ] = rawFileName.match(/\broom=([^?&/]*)/) ?? [];
-      return { fnName: cs.getFunctionName(), keepName: roomName, row, col };
+      // We'll get to option 2 if `rawFileName` still (potentially even
+      // after having checked for an eval origin) doesn't indicate a
+      // room; in that case, `keepTerm` takes on a nullish value!
+      let match = rawFileName?.match(/\broom=([^?&/]*)/);
+      let keepTerm = match ? (match[1] ?? null) : null;
+      
+      return keepTerm
+        ? { type: 'line', fnName: cs.getFunctionName(), keepTerm, row, col }
+        : { type: 'info', info: cs.toString() };
       
     });
-    return `${err.message}{HUT${'T'}RACE=${JSON.stringify(trace)}=HUT${'T'}RACE}`;
+    return `${err.message}{HUTTRACE=${valToJson(trace)}=HUTTRACE}`;
   };
   
   let onErr = evt => {
@@ -36,8 +51,8 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] = () => ({ init: as
     // Don't modify SyntaxErrors - they only show proper
     // stack information when they're logged natively
     if (err?.constructor?.name?.hasHead('Syntax')) return;
-    
-    gsc(err.desc());
+    gsc(`Uncaught ${getFormName(err)}:`, err.desc());
+    // TODO: Refresh!! Or better yet - reset foundation (more complex)
     evt.preventDefault();
     
   };
@@ -52,9 +67,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] = () => ({ init: as
   window.evt('focus', () => cl.add('focus'));
   window.evt('blur', () => cl.remove('focus'));
   
-  let rootReal = null; // TODO: HEEERE!
-  
-  global.getMs = Date.now;
+  global.getMs = () => performance.timeOrigin + performance.now();
   global.keep = (...args) => { throw Error(`Lol wut`).mod({ args }); };
   global.conf = (...chain) => {
     
@@ -81,7 +94,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] = () => ({ init: as
       `%c${getDate().padTail(80, ' ')}\n${sc.term.padTail(80, ' ')}`,
       'background-color: rgba(0, 0, 0, 0.2);',
     );
-    console.log(...args);
+    console.log(...args.map(a => isForm(a?.desc, Function) ? a.desc() : a));
     
   };
   global.getRooms = (names, { shorten=true, ...opts }={}) => {
@@ -181,57 +194,15 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] = () => ({ init: as
   gsc('OWAWAaasaggggg');
   await (async () => {
     
-    let FakeReal = form({ name: 'FakeReal', has: { Tmp }, props: (forms, Form) => ({
-      init({ name, tech }) {
-        forms.Tmp.init.call(this);
-        Object.assign(this, {
-          name, tech,
-          fakeLayout: null,
-          params: { textInputSrc: { mod: Function.stub, route: fn => fn(''), send: Function.stub }}
-        });
-      },
-      loaded: Promise.resolve(),
-      setTree() {},
-      addReal(real) { return this; },
-      mod() {},
-      addLayout: lay => Tmp({ layout: { src: Src.stub, route: Function.stub } }),
-      getLayout() { return this.fakeLayout || (this.fakeLayout = this.getLayoutForm('FakeBoi')()); },
-      getLayoutForm(name) { return this.tech.getLayoutForm(name); },
-      getTech() { return this.tech; },
-      addNavOption() { return { activate: () => {} }; },
-      render() {}
-    })});
-    let FakeLayout = form({ name: 'FakeLayout', has: { Src }, props: (forms, Form) => ({
-      init() { forms.Src.init.call(this); this.keysSrc = Src.stub; },
-      isInnerLayout() { return false; },
-      setText(){},
-      addReal(){},
-      src: Src.stub
-    })});
-    
-    let fakeReal = FakeReal({ name: 'nodejs.fakeReal', tech: {
-      render: Function.stub,
-      informNavigation: Function.stub,
-      getLayoutForm: name => fakeLayout,
-      getLayoutForms: names => names.toObj(name => [ name, fakeReal.getLayoutForm(name) ]),
-      render: Function.stub
-    }});
-    let fakeLayout = FakeLayout();
-    
-    global.real = terms => {
-      
-      if (isForm(terms, String)) terms = terms.split(',');
-      if (terms.length !== 0) throw Error(`Must supply [] (only the RootReal can be accessed here)`);
-      return fakeReal;
-      
-    };
+    let Real = await global.getRoom('reality.real.Real');
+    let tech = {};
+    global.real = Real({ name: 'root', tech, tree: Real.Tree() });
     
   })();
   
   // `global` is set up... now run a Hut based on settings
   let { uid=null, def, hosting } = global.conf('deploy.loft');
   let { prefix, room: loftName, keep: keepTerm } = def;
-  gsc({ uid, def, hosting, prefix, loftName, keepTerm });
   let { hut, record, WeakBank=null, ...loftObj } = await global.getRooms([
     'setup.hut',
     'record',
@@ -242,17 +213,19 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] = () => ({ init: as
     global.conf('deploy.loft.def.room')
   ]);
   
+  let aboveHid = global.conf('aboveHid');
   let heartbeatMs = global.conf('deploy.loft.hosting.heartbeatMs');
   let bank = WeakBank({ subcon: global.subcon('bank') });
-  let recMan = record.Manager({ prefix, bank });
-  let aboveHut = hut.AboveHut({ hid: '!above', prefix, isHere: false, recMan, heartbeatMs });
+  let recMan = record.Manager({ bank });
+  
+  let aboveHut = hut.AboveHut({ hid: aboveHid, prefix, isHere: false, recMan, heartbeatMs });
   let belowHut = aboveHut.makeBelowHut(global.conf('hid'));
   
   // Note that `netIden` is just a stub - Hinterland will want to call
   // `netIden.runOnNetwork`; BELOW we know that the Tmp produced by this
   // will never be ended, so we manually initialize all servers ("run on
   // network" functionality), and call `loft.open`, which will call
-  // `Hinterland(...).open({ hut, netIden })` with the spoofed `netIden`
+  // `Hinterland(...).open({ ..., netIden })` with the spoofed `netIden`
   
   let { netAddr, netIden: netIdenConf, protocols } = global.conf('deploy.loft.hosting');
   
@@ -266,14 +239,10 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] = () => ({ init: as
     server.src.route(session => {
           
       // HutMsgs from the Session are sent from Above to us (Below)
+      belowHut.seenOnRoad(server, session);
       session.hear.route(({ ms, msg }) => aboveHut.tell({ trg: belowHut, road: session, ms, msg }));
       
     });
-    
-    // Every Server immediately creates a Session with the AboveHut
-    let road = Tmp({ key: '!above', tell: Src(), hear: Src() });
-    belowHut.seenOnRoad(server, road);
-    server.src.send(road);
     
   };
   
@@ -287,7 +256,12 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] = () => ({ init: as
     
   }));
   
+  let initSyncTell = conf('initSyncTell');
+  if (initSyncTell) belowHut.actOnComm({ src: aboveHut, msg: initSyncTell });
+  
   let loft = loftObj.toArr(v => v)[0];
-  await loft.open({ hut: belowHut, netIden });
+  await loft.open({ hut: belowHut, rec: aboveHut, netIden });
+  
+  gsc(`Loft opened after ${(getMs() - performance.timeOrigin).toFixed(2)}ms`);
   
 }});

@@ -670,301 +670,298 @@ module.exports = {
   Filepath,
   FilesysTransaction,
   FsKeep,
-  rootTransaction: FilesysTransaction([])
-};
-
-if (require.main === module) (async () => {
-  
-  let t = Date.now();
-  
-  let testFp = Filepath(__dirname).par(1).kid([ 'mill', 'mud' ]);
-  let trn = FilesysTransaction(testFp);
-  
-  try {
+  rootTransaction: FilesysTransaction([]),
+  runTests: async ({ sanityMult=1 }={}) => {
     
-    { // Ensure filepaths resolve as expected
+    let testFp = Filepath(__dirname).par(1).kid([ 'mill', 'mud' ]);
+    let trn = FilesysTransaction(testFp);
+    let sanitySize = Math.round(300 * sanityMult);
+    if (sanitySize < 3) throw Error(`Sanity mult is too low`);
+    
+    try {
       
-      // Note that "\\" (an irrelevant char) is mapped to backslash
-      let win = { name: 'win', path: require('path').win32 };
-      let nix = { name: 'nix', path: require('path').posix };
-      let tests = [
+      { // Ensure filepaths resolve as expected
         
-        [ win, [],              'C:\\' ],
-        [ win, '',              'C:\\' ],
-        [ win, '/',             'C:\\' ],
-        [ win, '//',            'C:\\' ],
-        [ win, '///',           'C:\\' ],
-        [ win, '\\',            'C:\\' ],
-        [ win, '\\\\',          'C:\\' ],
-        [ win, '\\\\\\',        'C:\\' ],
-        [ win, '/\\/\\/\\',     'C:\\' ],
-        [ nix, [],              '/' ],
-        [ nix, '',              '/' ],
-        [ nix, '/',             '/' ],
-        [ nix, '//',            '/' ],
-        [ nix, '///',           '/' ],
-        [ nix, '\\',            '/' ],
-        [ nix, '\\\\',          '/' ],
-        [ nix, '\\\\\\',        '/' ],
-        [ nix, '/\\/\\/\\',     '/' ],
-        
-        [ win, 'a',             'C:\\a' ],
-        [ win, '/a',            'C:\\a' ],
-        [ win, '/a/',           'C:\\a' ],
-        [ win, '\\a\\',         'C:\\a' ],
-        [ win, '\\a/',          'C:\\a' ],
-        [ nix, 'a',             '/a' ],
-        [ nix, '/a',            '/a' ],
-        [ nix, '/a/',           '/a' ],
-        [ nix, '\\a\\',         '/a' ],
-        [ nix, '\\a/',          '/a' ],
-        
-        [ win, '/a/..',         /([iI]llegal|[iI]nvalid)[ .].*[cC]omponent/ ],
-        [ win, '\\a\\..',       /([iI]llegal|[iI]nvalid)[ .].*[cC]omponent/ ],
-        [ win, '\\a/..',        /([iI]llegal|[iI]nvalid)[ .].*[cC]omponent/ ],
-        [ nix, '/a/..',         /([iI]llegal|[iI]nvalid)[ .].*[cC]omponent/ ],
-        [ nix, '\\a\\..',       /([iI]llegal|[iI]nvalid)[ .].*[cC]omponent/ ],
-        [ nix, '\\a/..',        /([iI]llegal|[iI]nvalid)[ .].*[cC]omponent/ ]
-        
-      ];
-      
-      let paths = { win: require('path').win32, nix: require('path').posix };
-      for (let [ { name, path }, inp, exp ] of tests) {
-        
-        if (hasForm(exp, RegExp)) {
+        // Note that "\\" (an irrelevant char) is mapped to backslash
+        let win = { name: 'win', path: require('path').win32 };
+        let nix = { name: 'nix', path: require('path').posix };
+        let tests = [
           
-          try {
+          [ win, [],              'C:\\' ],
+          [ win, '',              'C:\\' ],
+          [ win, '/',             'C:\\' ],
+          [ win, '//',            'C:\\' ],
+          [ win, '///',           'C:\\' ],
+          [ win, '\\',            'C:\\' ],
+          [ win, '\\\\',          'C:\\' ],
+          [ win, '\\\\\\',        'C:\\' ],
+          [ win, '/\\/\\/\\',     'C:\\' ],
+          [ nix, [],              '/' ],
+          [ nix, '',              '/' ],
+          [ nix, '/',             '/' ],
+          [ nix, '//',            '/' ],
+          [ nix, '///',           '/' ],
+          [ nix, '\\',            '/' ],
+          [ nix, '\\\\',          '/' ],
+          [ nix, '\\\\\\',        '/' ],
+          [ nix, '/\\/\\/\\',     '/' ],
+          
+          [ win, 'a',             'C:\\a' ],
+          [ win, '/a',            'C:\\a' ],
+          [ win, '/a/',           'C:\\a' ],
+          [ win, '\\a\\',         'C:\\a' ],
+          [ win, '\\a/',          'C:\\a' ],
+          [ nix, 'a',             '/a' ],
+          [ nix, '/a',            '/a' ],
+          [ nix, '/a/',           '/a' ],
+          [ nix, '\\a\\',         '/a' ],
+          [ nix, '\\a/',          '/a' ],
+          
+          [ win, '/a/..',         /([iI]llegal|[iI]nvalid)[ .].*[cC]omponent/ ],
+          [ win, '\\a\\..',       /([iI]llegal|[iI]nvalid)[ .].*[cC]omponent/ ],
+          [ win, '\\a/..',        /([iI]llegal|[iI]nvalid)[ .].*[cC]omponent/ ],
+          [ nix, '/a/..',         /([iI]llegal|[iI]nvalid)[ .].*[cC]omponent/ ],
+          [ nix, '\\a\\..',       /([iI]llegal|[iI]nvalid)[ .].*[cC]omponent/ ],
+          [ nix, '\\a/..',        /([iI]llegal|[iI]nvalid)[ .].*[cC]omponent/ ]
+          
+        ];
+        
+        let paths = { win: require('path').win32, nix: require('path').posix };
+        for (let [ { name, path }, inp, exp ] of tests) {
+          
+          if (hasForm(exp, RegExp)) {
+            
+            try {
+              let fsp = Filepath(inp, path).fsp();
+              throw Error(`Case was meant to fail`).mod({ name, inp, exp, fsp });
+            } catch (err) {
+              if (!exp.test(err.message)) throw Error(`Failure expected, but unexpected error message`).mod({ name, inp, errMsg: err.message, exp });
+              continue;
+            }
+            
+          } else {
+            
             let fsp = Filepath(inp, path).fsp();
-            throw Error(`Case was meant to fail`).mod({ name, inp, exp, fsp });
-          } catch (err) {
-            if (!exp.test(err.message)) throw Error(`Failure expected, but unexpected error message`).mod({ name, inp, errMsg: err.message, exp });
-            continue;
+            if (fsp !== exp) throw Error(`Failed`).mod({ name, inp, exp, fsp });
+            
           }
-          
-        } else {
-          
-          let fsp = Filepath(inp, path).fsp();
-          if (fsp !== exp) throw Error(`Failed`).mod({ name, inp, exp, fsp });
           
         }
         
       }
       
-    }
-    
-    { // Test "encoding" option for "getData"
-      
-      await trn.remSubtree(testFp);
-      
-      let v1 = await trn.getData(testFp, 'utf8');
-      if (!isForm(v1, String)) throw Error('Expected String');
-      if (v1.length) throw Error('Expected 0 len');
-      
-      let v2 = await trn.getData(testFp);
-      if (!isForm(v2, Buffer)) throw Error('Expected Buffer');
-      if (v2.length) throw Error('Expected 0 len');
-      
-      let v3 = await trn.getData(testFp, null);
-      if (!isForm(v3, Buffer)) throw Error('Expected Buffer');
-      if (v3.length) throw Error('Expected 0 len');
-      
-      let v4 = await trn.getData(testFp, { encoding: 'utf8' });
-      if (!isForm(v4, String)) throw Error('Expected String');
-      if (v4.length) throw Error('Expected 0 len');
-      
-      let v5 = await trn.getData(testFp, { encoding: null });
-      if (!isForm(v5, Buffer)) throw Error('Expected Buffer');
-      if (v5.length) throw Error('Expected 0 len');
-      
-    }
-    
-    { // Ensure "setData" doesn't race with "remSubtree"
-      
-      for (let n of 300) {
+      { // Test "encoding" option for "getData"
         
-        let results = [];
-        await Promise.all([
-          trn.setData(testFp, 'hihihi'),
-          trn.remSubtree(testFp),
-          trn.getData(testFp, 'utf8').then(v => results.add(v))
-        ]);
+        await trn.remSubtree(testFp);
         
-        if (results.find(r => r.length).found) throw Error('All results should be 0-length');
+        let v1 = await trn.getData(testFp, 'utf8');
+        if (!isForm(v1, String)) throw Error('Expected String');
+        if (v1.length) throw Error('Expected 0 len');
+        
+        let v2 = await trn.getData(testFp);
+        if (!isForm(v2, Buffer)) throw Error('Expected Buffer');
+        if (v2.length) throw Error('Expected 0 len');
+        
+        let v3 = await trn.getData(testFp, null);
+        if (!isForm(v3, Buffer)) throw Error('Expected Buffer');
+        if (v3.length) throw Error('Expected 0 len');
+        
+        let v4 = await trn.getData(testFp, { encoding: 'utf8' });
+        if (!isForm(v4, String)) throw Error('Expected String');
+        if (v4.length) throw Error('Expected 0 len');
+        
+        let v5 = await trn.getData(testFp, { encoding: null });
+        if (!isForm(v5, Buffer)) throw Error('Expected Buffer');
+        if (v5.length) throw Error('Expected 0 len');
         
       }
       
-      for (let n of 300) {
+      { // Ensure "setData" doesn't race with "remSubtree"
         
-        let results = [];
-        await Promise.all([
-          trn.remSubtree(testFp),
-          trn.setData(testFp, 'hihihi'),
-          trn.getData(testFp, 'utf8').then(v => results.add(v))
-        ]);
-        
-        if (results.find(r => r !== 'hihihi').found) throw Error('All results should be "hihihi"');
-        
-      }
-      
-      await trn.remSubtree(testFp);
-      
-    }
-    
-    { // Ensure "setData" and "getData" don't race
-      
-      let fp = testFp.kid('y', 'z');
-      
-      let results = [];
-      
-      await trn.transact({ name: 'test1', fp, fn: async trn => {
-        
-        await Promise.all((50).toArr(v => [
-          trn.setData(fp, `(${v.toString(10).padHead(4, '0')})`),
-          trn.getData(fp).then(v => (results.add(v.toString('utf8')), v))
-        ]).flat(1));
-        
-      }});
-      
-      for (let [ i, r ] of results.entries()) {
-        let exp = `(${i.toString().padHead(4, '0')})`;
-        if (r !== exp) throw Error(`Unexpected result: "${r}" (out of order?)`).mod({ got: r, exp });
-      }
-      
-    }
-    
-    { // Ensure "setData" and "getData" don't race within transactions
-      
-      let fp = testFp.kid('u');
-      
-      let results = [];
-      await Promise.all((50).toArr(async v => {
-        
-        let fp2 = fp.kid('2');
-        await trn.transact({ name: 'test2.1', fp: fp2, fn: async trn => {
+        for (let n of sanitySize) {
           
-          let fp3 = fp2.kid('3');
-          await trn.transact({ name: 'test2.2', fp: fp3, fn: async trn => {
-            
-            await Promise.all([
-              trn.setData(fp3, `hihi: ${v}`),
-              trn.getData(fp3).then(v => results.push(v.toString('utf8')))
-            ]);
-            
-          }});
+          let results = [];
+          await Promise.all([
+            trn.setData(testFp, 'hihihi'),
+            trn.remSubtree(testFp),
+            trn.getData(testFp, 'utf8').then(v => results.add(v))
+          ]);
+          
+          if (results.find(r => r.length).found) throw Error('All results should be 0-length');
+          
+        }
+        
+        for (let n of sanitySize) {
+          
+          let results = [];
+          await Promise.all([
+            trn.remSubtree(testFp),
+            trn.setData(testFp, 'hihihi'),
+            trn.getData(testFp, 'utf8').then(v => results.add(v))
+          ]);
+          
+          if (results.find(r => r !== 'hihihi').found) throw Error('All results should be "hihihi"');
+          
+        }
+        
+        await trn.remSubtree(testFp);
+        
+      }
+      
+      { // Ensure "setData" and "getData" don't race
+        
+        let fp = testFp.kid('y', 'z');
+        
+        let results = [];
+        
+        await trn.transact({ name: 'test1', fp, fn: async trn => {
+          
+          await Promise.all((sanitySize).toArr(v => [
+            trn.setData(fp, `(${v.toString(10).padHead(4, '0')})`),
+            trn.getData(fp).then(v => (results.add(v.toString('utf8')), v))
+          ]).flat(1));
           
         }});
         
-      }));
+        for (let [ i, r ] of results.entries()) {
+          let exp = `(${i.toString().padHead(4, '0')})`;
+          if (r !== exp) throw Error(`Unexpected result: "${r}" (out of order?)`).mod({ got: r, exp });
+        }
+        
+      }
       
-      for (let [ i, r ] of results.entries())
-        if (r !== `hihi: ${i}`) throw Error(`Unexpected result: "${r}" (out of order?)`);
+      { // Ensure "setData" and "getData" don't race within transactions
+        
+        let fp = testFp.kid('u');
+        
+        let results = [];
+        await Promise.all((sanitySize).toArr(async v => {
+          
+          let fp2 = fp.kid('2');
+          await trn.transact({ name: 'test2.1', fp: fp2, fn: async trn => {
+            
+            let fp3 = fp2.kid('3');
+            await trn.transact({ name: 'test2.2', fp: fp3, fn: async trn => {
+              
+              await Promise.all([
+                trn.setData(fp3, `hihi: ${v}`),
+                trn.getData(fp3).then(v => results.push(v.toString('utf8')))
+              ]);
+              
+            }});
+            
+          }});
+          
+        }));
+        
+        for (let [ i, r ] of results.entries())
+          if (r !== `hihi: ${i}`) throw Error(`Unexpected result: "${r}" (out of order?)`);
+        
+      }
+      
+      { // Test file->dir swap (serially, no locking really needed)
+        
+        let fp = testFp.kid('swapswap');
+        
+        await trn.setData(fp.kid('aa'), 'I AM AA');
+        await trn.setData(fp.kid('aa').kid('bb'), 'I AM BB');
+        await trn.setData(fp.kid('aa').kid('cc'), 'I AM CC');
+        await trn.setData(fp.kid('aa').kid('bb').kid('dd'), 'I AM DD');
+        await trn.setData(fp.kid('aa').kid('bb').kid('ee'), 'I AM EE');
+        
+        let r = null;
+        
+        r = await trn.getData(fp.kid('aa'), 'utf8');
+        if (r !== 'I AM AA') throw Error('Bad result').mod({ r });
+        
+        r = await trn.getData(fp.kid('aa').kid('bb'), 'utf8');
+        if (r !== 'I AM BB') throw Error('Bad result').mod({ r });
+        
+        r = await trn.getData(fp.kid('aa').kid('cc'), 'utf8');
+        if (r !== 'I AM CC') throw Error('Bad result').mod({ r });
+        
+        r = await trn.getData(fp.kid('aa').kid('bb').kid('dd'), 'utf8');
+        if (r !== 'I AM DD') throw Error('Bad result').mod({ r });
+        
+        r = await trn.getData(fp.kid('aa').kid('bb').kid('ee'), 'utf8');
+        if (r !== 'I AM EE') throw Error('Bad result').mod({ r });
+        
+      }
+      
+      { // Test file->dir swap (in parallel - locking needed!)
+        
+        let fp = testFp.kid('swapperman');
+        
+        await Promise.all([
+          trn.setData(fp.kid('aa'), 'I AM AA'),
+          trn.setData(fp.kid('aa').kid('bb'), 'I AM BB'),
+          trn.setData(fp.kid('aa').kid('cc'), 'I AM CC'),
+          trn.setData(fp.kid('aa').kid('bb').kid('dd'), 'I AM DD'),
+          trn.setData(fp.kid('aa').kid('bb').kid('ee'), 'I AM EE')
+        ]);
+        
+        let rs = await Promise.all({
+          aa: trn.getData(fp.kid('aa'), 'utf8'),
+          bb: trn.getData(fp.kid('aa').kid('bb'), 'utf8'),
+          cc: trn.getData(fp.kid('aa').kid('cc'), 'utf8'),
+          dd: trn.getData(fp.kid('aa').kid('bb').kid('dd'), 'utf8'),
+          ee: trn.getData(fp.kid('aa').kid('bb').kid('ee'), 'utf8')
+        });
+        
+        if (rs.aa !== 'I AM AA') throw Error('Bad result').mod({ r: rs.aa });
+        if (rs.bb !== 'I AM BB') throw Error('Bad result').mod({ r: rs.bb });
+        if (rs.cc !== 'I AM CC') throw Error('Bad result').mod({ r: rs.cc });
+        if (rs.dd !== 'I AM DD') throw Error('Bad result').mod({ r: rs.dd });
+        if (rs.ee !== 'I AM EE') throw Error('Bad result').mod({ r: rs.ee });
+        
+      }
+      
+      { // Test streaming (request tail stream first)
+        
+        let fp = testFp.kid('uuu');
+        let fp1 = fp.kid('xxx');
+        let fp2 = fp.kid('yyy');
+        
+        await trn.setData(fp1, 'HIYA BATMAN!');
+        
+        let [ ts, hs ] = await Promise.all([ trn.getDataTailStream(fp1), trn.getDataHeadStream(fp2) ]);
+        ts.pipe(hs);
+        
+        await Promise.all([ ts.prm, hs.prm ]);
+        
+        let result = await trn.getData(fp2);
+        if (result.toString() !== 'HIYA BATMAN!') throw Error(`Unexpected: "${result.toString()}"`);
+        
+      }
+      
+      { // Test streaming (request head stream first)
+        
+        let fp = testFp.kid('ilp');
+        let fp1 = fp.kid('iii');
+        let fp2 = fp.kid('ppp');
+        
+        await trn.setData(fp1, 'JAZZY TIMES on a SUNDAY');
+        
+        let [ hs, ts ] = await Promise.all([ trn.getDataHeadStream(fp2), trn.getDataTailStream(fp1) ]);
+        ts.pipe(hs);
+        
+        await Promise.all([ ts.prm, hs.prm ]);
+        
+        let result = await trn.getData(fp2);
+        if (result.toString() !== 'JAZZY TIMES on a SUNDAY') throw Error(`Unexpected: "${result.toString()}"`);
+        
+      }
+      
+    } catch (err) {
+      
+      gsc('TESTS FAILED', err.desc());
+      
+    } finally {
+      
+      await trn.remSubtree(testFp);
       
     }
-    
-    { // Test file->dir swap (serially, no locking really needed)
-      
-      let fp = testFp.kid('swapswap');
-      
-      await trn.setData(fp.kid('aa'), 'I AM AA');
-      await trn.setData(fp.kid('aa').kid('bb'), 'I AM BB');
-      await trn.setData(fp.kid('aa').kid('cc'), 'I AM CC');
-      await trn.setData(fp.kid('aa').kid('bb').kid('dd'), 'I AM DD');
-      await trn.setData(fp.kid('aa').kid('bb').kid('ee'), 'I AM EE');
-      
-      let r = null;
-      
-      r = await trn.getData(fp.kid('aa'), 'utf8');
-      if (r !== 'I AM AA') throw Error('Bad result').mod({ r });
-      
-      r = await trn.getData(fp.kid('aa').kid('bb'), 'utf8');
-      if (r !== 'I AM BB') throw Error('Bad result').mod({ r });
-      
-      r = await trn.getData(fp.kid('aa').kid('cc'), 'utf8');
-      if (r !== 'I AM CC') throw Error('Bad result').mod({ r });
-      
-      r = await trn.getData(fp.kid('aa').kid('bb').kid('dd'), 'utf8');
-      if (r !== 'I AM DD') throw Error('Bad result').mod({ r });
-      
-      r = await trn.getData(fp.kid('aa').kid('bb').kid('ee'), 'utf8');
-      if (r !== 'I AM EE') throw Error('Bad result').mod({ r });
-      
-    }
-    
-    { // Test file->dir swap (in parallel - locking needed!)
-      
-      let fp = testFp.kid('swapperman');
-      
-      await Promise.all([
-        trn.setData(fp.kid('aa'), 'I AM AA'),
-        trn.setData(fp.kid('aa').kid('bb'), 'I AM BB'),
-        trn.setData(fp.kid('aa').kid('cc'), 'I AM CC'),
-        trn.setData(fp.kid('aa').kid('bb').kid('dd'), 'I AM DD'),
-        trn.setData(fp.kid('aa').kid('bb').kid('ee'), 'I AM EE')
-      ]);
-      
-      let rs = await Promise.all({
-        aa: trn.getData(fp.kid('aa'), 'utf8'),
-        bb: trn.getData(fp.kid('aa').kid('bb'), 'utf8'),
-        cc: trn.getData(fp.kid('aa').kid('cc'), 'utf8'),
-        dd: trn.getData(fp.kid('aa').kid('bb').kid('dd'), 'utf8'),
-        ee: trn.getData(fp.kid('aa').kid('bb').kid('ee'), 'utf8')
-      });
-      
-      if (rs.aa !== 'I AM AA') throw Error('Bad result').mod({ r: rs.aa });
-      if (rs.bb !== 'I AM BB') throw Error('Bad result').mod({ r: rs.bb });
-      if (rs.cc !== 'I AM CC') throw Error('Bad result').mod({ r: rs.cc });
-      if (rs.dd !== 'I AM DD') throw Error('Bad result').mod({ r: rs.dd });
-      if (rs.ee !== 'I AM EE') throw Error('Bad result').mod({ r: rs.ee });
-      
-    }
-    
-    { // Test streaming (request tail stream first)
-      
-      let fp = testFp.kid('uuu');
-      let fp1 = fp.kid('xxx');
-      let fp2 = fp.kid('yyy');
-      
-      await trn.setData(fp1, 'HIYA BATMAN!');
-      
-      let [ ts, hs ] = await Promise.all([ trn.getDataTailStream(fp1), trn.getDataHeadStream(fp2) ]);
-      ts.pipe(hs);
-      
-      await Promise.all([ ts.prm, hs.prm ]);
-      
-      let result = await trn.getData(fp2);
-      if (result.toString() !== 'HIYA BATMAN!') throw Error(`Unexpected: "${result.toString()}"`);
-      
-    }
-    
-    { // Test streaming (request head stream first)
-      
-      let fp = testFp.kid('ilp');
-      let fp1 = fp.kid('iii');
-      let fp2 = fp.kid('ppp');
-      
-      await trn.setData(fp1, 'JAZZY TIMES on a SUNDAY');
-      
-      let [ hs, ts ] = await Promise.all([ trn.getDataHeadStream(fp2), trn.getDataTailStream(fp1) ]);
-      ts.pipe(hs);
-      
-      await Promise.all([ ts.prm, hs.prm ]);
-      
-      let result = await trn.getData(fp2);
-      if (result.toString() !== 'JAZZY TIMES on a SUNDAY') throw Error(`Unexpected: "${result.toString()}"`);
-      
-    }
-    
-    gsc(`Tests passed! (${((Date.now() - t) / 1000).toFixed(2)}s)`);
-    
-  } catch (err) {
-    
-    gsc('TESTS FAILED', err.desc());
-    
-  } finally {
-    
-    await trn.remSubtree(testFp);
-    gsc('Tests cleaned up.');
     
   }
-  
-})();
+};
+

@@ -51,13 +51,13 @@ global.rooms['logic.MemSrc'] = () => {
       
       // Retain new value
       this.val = tmp;
-      this.valEndRoute = tmp.endWith(() => this.cleanup());
+      this.valEndRoute = tmp.endWith(this, 'tmp');
       this.send(tmp);
       
     },
     newRoute(fn) { if (this.val) fn(this.val); },
     cleanup() {
-      this.valEndRoute && this.valEndRoute.end();
+      this.valEndRoute?.end();
       this.val = this.valEndRoute = null;
     }
     

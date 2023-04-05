@@ -5,7 +5,7 @@ global.rooms['logic.Scope'] = foundation => form({ name: 'Scope', has: { Tmp }, 
   // Scope itself ends - this latter condition requires calling
   // `endWith` on the Scope!
   
-  $createFrame: (scope, tmp) => {
+  $makeFrame: (scope, tmp) => {
     
     // TODO: Think about how `dep` interacts with Tmp.prototype.ref - a
     // single Scope can only hold a single Dep for any Tmp; this means
@@ -119,8 +119,8 @@ global.rooms['logic.Scope'] = foundation => form({ name: 'Scope', has: { Tmp }, 
     
     Object.assign(this, { fn, hooks, frameRoute: null });
     
-    // Sends from `src` are processed by `Form.createFrame`
-    this.frameRoute = src.route(Form.createFrame.bind(null, this));
+    // Sends from `src` are processed by `Form.makeFrame`
+    this.frameRoute = src.route(Form.makeFrame.bind(null, this));
     
   },
   

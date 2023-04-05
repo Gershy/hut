@@ -117,13 +117,12 @@ global.rooms['internal.real.htmlBrowser.TextInput'] = async foundation => {
       
       // User edits in the dom propagate to `textInputSrc`
       let inputEventFn = evt => textInputSrc.mod(input.value);
-      input.addEventListener('input', inputEventFn);
+      tmp.endWith(input.evt('input', inputEventFn));
       
       tmp.endWith(() => {
         input.remove();
         heightener.remove();
         updateValueRoute.end();
-        input.removeEventListener('input', inputEventFn);
       });
       
       return tmp;
