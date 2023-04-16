@@ -99,9 +99,10 @@ global.rooms['Hinterland'] = async foundation => {
       
       /// {ABOVE=
       
-      let resolveHrecsAndFollowRecs = (kidHut, tmp, dep) => {
-        if      (hasForm(tmp, Record))     { kidHut.followRec(tmp);     return tmp; }
-        else if (hasForm(tmp.rec, Record)) { kidHut.followRec(tmp.rec); return tmp.rec; }
+      let resolveHrecsAndFollowRecs = (follower, tmp) => {
+        gsc(`${follower.desc()} follow ${tmp.desc?.() ?? getFormName(tmp)}`);
+        if      (hasForm(tmp, Record))     { follower.followRec(tmp);     return tmp; }
+        else if (hasForm(tmp.rec, Record)) { follower.followRec(tmp.rec); return tmp.rec; }
         return tmp;
       };
       
@@ -122,7 +123,7 @@ global.rooms['Hinterland'] = async foundation => {
           // `owned` has { par, kid }; "par" and "kid" are both Huts
           let kidHut = owned.getMember('below');
           
-          // Records throughout `scp` get followed by `owned`
+          // Records throughout `scp` get followed by `kidHut`
           dep.scp(loftRh, { frameFn: resolveHrecsAndFollowRecs.bind(null, kidHut) }, (loftRec, dep) => {
             this.below(kidHut, loftRec, hinterlandReal, dep);
           });
