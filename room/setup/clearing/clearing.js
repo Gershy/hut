@@ -13,6 +13,7 @@ Object.assign(global, {
   GeneratorFunction: (function*(){})().constructor,
   AsyncGeneratorFunction: (async function*(){})().constructor,
   C: Object.freeze({
+    def: Object.defineProperty,
     skip: undefined,
     noFn: name => Object.assign(
       function() { throw Error(`${getFormName(this)} does not implement "${name}"`); },
@@ -431,7 +432,7 @@ Object.assign(global, {
       
       if (cause) {
         if (hasForm(cause, Error)) cause = cause.desc(seen);
-        else                       cause = cause.map(err => err.desc(seen)).join('\n');
+        else                       cause = cause.map(err => err.desc(seen)).join('\n\n');
         desc += `\nCAUSE:\n${cause.indent(2)}`;
       }
       
@@ -448,7 +449,7 @@ Object.assign(global, {
     
     let name = Cls.name;
     let Newless = global[name] = function(...args) { return new Cls(...args); };
-    Object.defineProperty(Newless, 'name', { value: name });
+    C.def(Newless, 'name', { value: name });
     Newless.Native = Cls;
     Newless.prototype = Cls.prototype;
     
@@ -739,12 +740,12 @@ Object.assign(global, global.rooms['setup.clearing'] = {
         
       }
       
-      Object.defineProperty(Form.prototype, propName, { value: collisionProps[0], enumerable: false, writable: true });
+      C.def(Form.prototype, propName, { value: collisionProps[0], enumerable: false, writable: true });
       
     }
     
-    Object.defineProperty(Form.prototype, 'Form', { value: Form, enumerable: false, writable: true });
-    Object.defineProperty(Form.prototype, 'constructor', { value: Form, enumerable: false, writable: true });
+    C.def(Form.prototype, 'Form', { value: Form, enumerable: false, writable: true });
+    C.def(Form.prototype, 'constructor', { value: Form, enumerable: false, writable: true });
     Object.freeze(Form.prototype);
     
     // Would be very satisifying to freeze `Form`, but the current
@@ -859,6 +860,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   },
   
   // Util
+  denumerate: (obj, prop) => C.def(obj, prop, { enumerable: false, value: obj[prop] }),
   formatAnyValue: val => { try { return valToJson(val); } catch (err) { return '<unformattable>'; } },
   valToJson: JSON.stringify,
   jsonToVal: JSON.parse,
@@ -894,7 +896,7 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
       mmm(this.zzz ?? this.Form.name, +1);
       
       // Allow Endable.prototype.cleanup to be masked
-      if (fn) Object.defineProperty(this, 'cleanup', { value: fn, enumerable: true, writable: true, configurable: true });
+      if (fn) C.def(this, 'cleanup', { value: fn, enumerable: true, writable: true, configurable: true });
       
     },
     onn() { return true; },
@@ -948,7 +950,7 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
       // For ref'd Endables, prevent ending if refs still exist
       if (this['~refCount'] && --this['~refCount'] > 0) return false;
       
-      Object.defineProperty(this, 'onn', Form.turnOffDefProp);
+      C.def(this, 'onn', Form.turnOffDefProp);
       this.cleanup(); mmm(this.zzz ?? this.Form.name, -1);
       return true;
       
@@ -959,8 +961,8 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
   let Src = form({ name: 'Src', props: (forms, Form) => ({
     
     init(newRoute) {
-      this.fns = Set();
-      newRoute && Object.defineProperty(this, 'newRoute', { value: newRoute });
+      C.def(this, 'fns', { enumerable: false, value: Set() });
+      newRoute && C.def(this, 'newRoute', { value: newRoute });
     },
     newRoute(fn) {},
     route(fn, mode='tmp') {
@@ -1097,7 +1099,7 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
       // is because Tmps can only Send once!
       for (let fn of [ ...this.fns ]) this.fns.has(fn) && fn(arg);
       
-      this.fns = Set.stub;
+      C.def(this, 'fns', Set.stub);
       return;
       
     };
@@ -1161,6 +1163,8 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
         // when `this` ends - but if `val` ends first, make sure the
         // relationship is automatically removed
         if (mode === 'tmp' && val.constructor['~forms'].has(Tmp)) {
+          
+          if (val.off()) return val;
           
           // If `this` ends, end `val`
           let endWithTmp = this.route(() => val.end(), 'tmp');

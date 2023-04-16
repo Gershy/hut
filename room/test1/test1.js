@@ -1,8 +1,8 @@
-global.rooms['test1'] = async foundation => {
+global.rooms['test1'] = async () => {
   
   // This single file fully defines the "test1" Hut app
   
-  let { Hinterland, HtmlBrowserHabitat } = await foundation.getRooms([
+  let { Hinterland, HtmlBrowserHabitat } = await getRooms([
     
     // Hinterland defines a network of Huts sharing an experience
     'Hinterland',
@@ -13,7 +13,7 @@ global.rooms['test1'] = async foundation => {
   ]);
   
   // First 2 params to Hinterland are the shorthand and full room name
-  return Hinterland('t1', 'test1', {
+  return Hinterland('test1', {
     
     habitats: [ HtmlBrowserHabitat() ],
     
@@ -24,8 +24,8 @@ global.rooms['test1'] = async foundation => {
     below: async (hut, test1, real, dep) => {
       
       // Users can always decrement and increment
-      let decrementAct = hut.enableAction('decrement', () => { test1.setValue(v => { v.count-- }) })
-      let incrementAct = hut.enableAction('increment', () => { test1.setValue(v => { v.count++ }) })
+      let decrementAct = hut.enableAction('decrement', () => test1.setValue(v => void v.count--))
+      let incrementAct = hut.enableAction('increment', () => test1.setValue(v => void v.count++))
       
       // Ui gives access to decrement/increment Acts
       let mainReal = dep(real.addReal('main', [

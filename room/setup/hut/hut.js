@@ -13,18 +13,10 @@ global.rooms['setup.hut'] = async () => {
     // Huts connect by Roads to other Huts, have the ability to Tell and
     // Hear to/from other Huts, and can react to what they Hear
     
-    // TODO: HEEERE: need to implement Layouts; they use the Real's tech
-    // to get anything done and set "govern" values appropriately!
-    // 
-    // TODO: HEEERE: does it really need to be:
-    //    | Comm -> RoadSrc -> (route to RoadSrc routes) -> logic
-    // Why not have
-    //    | hut.commandHandler('c2.submitMove', () => { /* ... logic ... */ });
-    // Advantages:
-    // - Less complexity
-    // - No known or thinkable use-cases for a CommandSrcTmp having
-    //   multiple Routes anyways :P
-    // - ABLE TO THROW ERRORS IN HANDLER INSTEAD OF `reply(Error(...))`
+    $commandHandlerWrapper: (handlerTmp, comm) => safe(() => handlerTmp.fn(comm), err => {
+      gsc(Error(`${handlerTmp.desc()} failed`).mod({ cause: err, comm }));
+      // comm.reply({ command: 'error', type: 'failed', orig: comm.msg })
+    }),
     
     init({ isHere=false, hid, uid, heartbeatMs, ...recordProps }) {
       
@@ -36,9 +28,10 @@ global.rooms['setup.hut'] = async () => {
       Object.assign(this, {
         hid,
         isHere, isAfar: !isHere,
-        commandSrcTmps: Map(/* command => CommandSrcTmp */),
+        commandHandlers: Object.plain(),
         heartbeatMs
       });
+      denumerate(this, 'commandHandlers');
       
       forms.Record.init.call(this, { uid, ...recordProps, volatile: true });
       
@@ -172,18 +165,17 @@ global.rooms['setup.hut'] = async () => {
       throw Error('Not implemented');
       
     },
-    
-    commandSrcTmp(command) {
-      
-      // Produce a Tmp({ src: Src() }) whose "src" sends messages whose
-      // command property is of the given value
-      
-      let commandSrcTmp = this.commandSrcTmps.get(command)?.ref();
-      if (!commandSrcTmp) this.commandSrcTmps.set(command, commandSrcTmp = Tmp({
-        src: Object.assign(Src(), { desc: () => `CommandSrc for "${command}"` })
-      }));
-      return commandSrcTmp;
-      
+    makeCommandHandler(command, fn) {
+      /// {DEBUG=
+      if (this.commandHandlers[command]) throw Error(`Pre-existing command handler for "${command}"`);
+      /// =DEBUG}
+      let tmp = Tmp({
+        desc: () => `CommandSrc(${this.desc()} -> "${command}")`,
+        cleanup: () => delete this.commandHandlers[command],
+        fn
+      });
+      this.commandHandlers[command] = Form.commandHandlerWrapper.bound(tmp);
+      return tmp;
     },
     doCommand(comm, { critical=true }={}) {
       
@@ -193,8 +185,8 @@ global.rooms['setup.hut'] = async () => {
       
       
       // Try to process the command
-      let cst = this.commandSrcTmps.get(comm.msg.command);
-      if (cst) { cst.src.send(comm); return true; }
+      let ch = this.commandHandlers[comm.msg.command];
+      if (ch) { ch(comm); return true; }
       
       // If this is "non-critical" simply return `false`, indicating we
       // couldn't fulfill the command (note a commom non-critical case
@@ -227,6 +219,7 @@ global.rooms['setup.hut'] = async () => {
       /// {DEBUG=
       if (!recMan) recMan = args?.type?.manager;
       if (!recMan) throw Error('Api: "recMan" must be provided');
+      if (!isForm(prefix, String)) throw Error(`Api: "prefix" must be String; got ${getFormName(prefix)}`);
       /// =DEBUG}
       
       forms.Hut.init.call(this, {
@@ -258,6 +251,12 @@ global.rooms['setup.hut'] = async () => {
         allFollows: Object.plain(/* uid -> { hutId -> FollowTmp } */)
         
       });
+      denumerate(this, 'allFollows');
+      /// {ABOVE=
+      denumerate(this, 'ownedHutRh');
+      denumerate(this, 'knownRoomDependencies');
+      denumerate(this, 'knownRealDependencies');
+      /// =ABOVE}
       
       this.endWith(recMan.addRecordSearch(uid => {
         
@@ -331,7 +330,7 @@ global.rooms['setup.hut'] = async () => {
           loft: {
             uid: conf('deploy.loft.uid'),
             def: {
-              prefix: this.getValue('prefix'),
+              prefix: this.prefix,
               room: conf('deploy.loft.def.room')
             },
             hosting: {
@@ -393,7 +392,7 @@ global.rooms['setup.hut'] = async () => {
         //    | };Object.assign(global.rooms['example'],{"offsets":[...]});
         //    |
         /// {DEBUG=
-        lines[tailInd] += `if(!global.rooms['${roomPcs.join('.')}'])throw Error('Failed to assign global.rooms[\\'${roomPcs.join('.')}\\']');`
+        lines[tailInd] += `if(!global.rooms['${roomPcs.join('.')}'])throw Error('No definition for global.rooms[\\'${roomPcs.join('.')}\\']');`
         /// =DEBUG}
         lines[tailInd] += `Object.assign(global.rooms['${roomPcs.join('.')}'],${valToJson({ offsets })});`;
         
@@ -457,18 +456,25 @@ global.rooms['setup.hut'] = async () => {
         throttleSyncPrm: null, // A Promise resolving when a queued sync request is sent
         followedRecs: Set(/* Record */),
         /// =ABOVE} {=BELOW
-        bufferedSyncs: Map(),
         syncHearVersion: 0,
+        bufferedSyncs: Map(),
         /// =BELOW}
         
         roads: Map(/* Server(...) => Road/Session(...) */)
       });
       
+      for (let p of 'roads,aboveHut,heartbeatTimeout'.split(',')) denumerate(this, p);
+      /// {ABOVE=
+      for (let p of 'syncTellVersion,pendingSync,throttleSyncPrm,followedRecs'.split(',')) denumerate(this, p);
+      /// =ABOVE} {BELOW=
+      for (let p of 'syncHearVersion,bufferedSyncs'.split(',')) denumerate(this, p);
+      /// =BELOW}
+      
       this.resetHeartbeatTimeout();
       
-      this.commandSrcTmp('lubdub').src.route(comm => { /* Ignore */ });
-      this.commandSrcTmp('error').src.route(comm => gsc(`${this.desc()} was informed of Error`, comm.msg));
-      this.commandSrcTmp('multi').src.route(({ src, msg: { list=null }, reply }) => {
+      this.makeCommandHandler('lubdub', comm => { /* Ignore */ });
+      this.makeCommandHandler('error', comm => gsc(`${this.desc()} was informed of Error`, comm.msg));
+      this.makeCommandHandler('multi', ({ src, msg: { list=null }, reply }) => {
         
         if (!isForm(list, Array)) return reply(Error(`Api: invalid multi list`).mod({ e: 'invalidMultiList' }));
         
@@ -485,7 +491,7 @@ global.rooms['setup.hut'] = async () => {
       });
       
       /// {BELOW=
-      this.commandSrcTmp('sync').src.route(({ src, msg, reply }) => {
+      this.makeCommandHandler('sync', ({ src, msg, reply }) => {
         
         let err = Error('');
         try {
@@ -596,6 +602,14 @@ global.rooms['setup.hut'] = async () => {
     
     enableAction(command, fn) {
       
+      // Note `enableAction` is more specific than `makeCommandHandler`:
+      // - Function provided to `makeCommandHandler` is responsible for
+      //   invoking communication with some other Hut via `comm.reply`
+      //   or `comm.src.tell({ ... })`, while Function provided to
+      //   `enableAction` can't directly communicate with the initiator;
+      //   the return value is ignored, and no `src` (for `src.tell`) or
+      //   `reply` are available
+      
       if (!command.startsWith(`${this.aboveHut.prefix}.`)) command = `${this.aboveHut.prefix}.${command}`;
       
       let tmp = Tmp({ desc: () => `Action(${this.desc()}: "${command}")`, act: null });
@@ -612,40 +626,17 @@ global.rooms['setup.hut'] = async () => {
       
       /// =BELOW} {ABOVE=
       
-      if (this.commandSrcTmps.has(command)) throw Error(`${this.desc()} got duplicate CommandSrc command "${command}"`);
-      
-      tmp.act = msg => this.tell({ trg: this.aboveHut, msg: { ...msg, command } });
-      
-      // `cmdSrcTmp` ends if `tmp` ends (if the action is disabled)
-      let cmdSrcTmp = this.commandSrcTmp(command);
-      tmp.endWith(cmdSrcTmp);
-      
-      // Route any sends from a RoadSrc so that they call `fn`. Note
-      // that `safe` allows either a value or an Error to be returned
-      // (and makes it so that `return Error(...)` behaves the same as
-      // `throw Error` within `fn`). Either the result or Error will be
-      // used as a reply
-      cmdSrcTmp.src.route(async ({ msg, reply, ms, src, trg }) => {
+      // The CommandHandler ends if `tmp` ends (if action is disabled)
+      tmp.endWith(this.makeCommandHandler(command, async ({ msg, reply, ms, src, trg }) => {
         
         if (tmp.off()) throw Error(`${tmp.desc()} has been ended`);
         
         // `result` is either response data or resulting Error
-        let result = await safe( () => fn(msg, { ms, src, trg }), err => err );
-        if (result == null) return reply(null);
+        try         { await fn(msg, { ms, src, trg }); }
+        catch (err) { return reply(err); }
         
-        let isReplyData = false
-          || [ Object, Array, String, Error ].has(result?.constructor)
-          || hasForm(result, Error)
-          || hasForm(result, Keep);
-        if (isReplyData) return reply(result);
-        
-        /// {DEBUG=
-        throw Error(`Action for "${command}" returned invalid type ${getFormName(result)} (should return response data)`);
-        /// =DEBUG}
-        
-        reply(null);
-        
-      });
+      }));
+      tmp.act = msg => this.tell({ trg: this.aboveHut, msg: { ...msg, command } });
       
       /// =ABOVE}
       
@@ -749,8 +740,6 @@ global.rooms['setup.hut'] = async () => {
       
       if (rec.off()) return Tmp.stub;             // Ignore any ended Recs
       
-      gsc(`${this.desc()} following ${rec.desc()}`);
-      
       let { allFollows } = this.aboveHut;
       let { uid: hutUid } = this;
       
@@ -823,7 +812,7 @@ global.rooms['setup.hut'] = async () => {
       if (fromScratch) {
         
         /// {DEBUG=
-        subcon('record.sync')(`${this.desc()} syncing from scratch`);
+        subcon('belowHut.sync')(`${this.desc()} needs to sync from scratch`);
         /// =DEBUG}
         
         // Reset version and clear the current sync-delta, refreshing it

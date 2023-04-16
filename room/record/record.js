@@ -296,7 +296,7 @@ global.rooms['record'] = async () => {
       // Doen't hurt to have the Type mapped immediately!
       manager.types[name] = Object.defineProperties(this, {
         name: { value: name, enumerable: true },
-        manager: { value: manager },
+        manager: { value: manager, enumerable: false },
         termTypes: { value: {} /* Term => Type */ }
       });
       
@@ -751,21 +751,18 @@ global.rooms['record'] = async () => {
       if (!volatile) volatile = group.mems.find(mem => mem.volatile).found;
       
       // Assign instance props
-      Object.defineProperty(this, 'group', {
-        enumerable: false,
-        value: group
-      });
       Object.assign(this, {
         
-        type, uid,
+        type, uid, group,
         valueSrc: MemSrc.Prm1(value), // TODO: Use Src(function newRoute(...) { ... }) to remove MemSrc dependency
         volatile,
-        relHandlers: Object.plain({}),
+        relHandlers: Object.plain(),
         
         endWithMemRoutes: group.mems.toArr(mem => mem.route(() => this.end())),
         bankedPrm: null
         
       });
+      for (let p of [ 'group', 'relHandlers', 'endWithMemRoutes', 'bankedPrm' ]) denumerate(this, p);
       
       mmm('record', +1);
       this.endWith(() => mmm('record', -1));
@@ -776,7 +773,7 @@ global.rooms['record'] = async () => {
       let err = Error('');
       this.bankedPrm = (async () => {
         
-        // TODO: Imagine:
+        // Consider:
         //  | let scp = Scope(..., (dep) => {
         //  |   
         //  |   let chooser = dep(Chooser(rec.rh('eg.type')));

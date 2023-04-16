@@ -3,7 +3,7 @@ global.rooms['internal.real.htmlBrowser.Decal'] = async foundation => {
   let Layout = await foundation.getRoom('internal.real.generic.Layout');
   return form({ name: 'Decal', has: { Layout }, props: (forms, Form) => ({
     
-    // TODO: Collision between Text/"text" and Decal/"text" (rename
+    // TODO: Collision between Text(...).text and Decal(...).text (rename
     // Decal/"text" -> "font"?
     $propNames: 'border,colour,opacity,text,transform,transition,windowing'.split(','),
     $cssPropMap: Object.plain({

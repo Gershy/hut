@@ -4,6 +4,8 @@
 // state so it can be required directly)
 Object.assign(global, { rooms: Object.create(null) });
 require('./room/setup/clearing/clearing.js');
+
+// Do nothing more than require clearing.js if this isn't the main file
 if (process.argv[1] !== __filename) return;
 
 if (0 || process.cwd() === '/hut') { // Low-level debug
@@ -56,21 +58,26 @@ require('./nodejs/foundation.js')({ hutFp: __dirname, conf: (() => { // Parse co
     
     let { argv } = process;
     let looksLikeEval = /^[{['"]/;
-    return ({}).gain(...argv.slice(argv.indexOf(__filename) + 1).map(v => {
+    
+    let conf = {};
+    for (let arg of argv.slice(2)) {
       
-      v = v.trim();
-      if (looksLikeEval.test(v)) v = eval(`(${v})`);
-      if (!v) return skip;
+      if (looksLikeEval.test(arg)) arg = eval(`(${arg})`);
+      if (!arg) continue;
       
-      // Consider string values without "=" as the single hoist room name,
-      // while strings containing "=" represent key-value pairs
-      if (isForm(v, String)) v = v.split(/[ ;,&]+/g).toObj(v => v.cut('=').map(v => v.trim()));
+      if (isForm(arg, String)) {
+        // String values without "=" are the single hoist room name;
+        // those with "=" represent key-value pairs
+        let [ k, v=null ] = arg.cut('=');
+        arg = (v === null) ? { 'deploy.loft.def': k } : { [k]: v };
+      }
       
-      if (!isForm(v, Object)) throw Error(`Couldn't process an argument: "${v}"`);
+      if (!isForm(arg, Object)) throw Error(`Failed to process argument "${arg}"`);
       
-      return v;
+      conf.merge(arg);
       
-    }));
+    }
+    return conf;
     
   } catch (err) {
     

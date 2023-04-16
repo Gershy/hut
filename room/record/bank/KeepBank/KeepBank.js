@@ -54,7 +54,7 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
         //    is queried for; if there was no hot reference it may not
         //    show up in the query, and then be created immediately
         //    after)
-        hotRecs: Object.plain({}) // { type: { uid1: rec1, uid2: rec2, ... } }
+        hotRecs: Object.plain() // { type: { uid1: rec1, uid2: rec2, ... } }
         
       });
       

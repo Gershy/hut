@@ -61,8 +61,7 @@ global.rooms['internal.install'] = async foundation => {
       stlReal.addReal('stl.step2', { text: '2. Paste into your terminal:' },      [{ form: 'Text', textSize: 'calc(90% + 1.1vw)' }]);
       
       let textReal = stlReal.addReal('stl.text', { text: '... loading ...' }, [
-        { form: 'Text', textSize: 'calc(70% + 0.4vw)' },
-        { form: 'Gap', size: 'calc(7px + 1vw)' },
+        { form: 'Text', textSize: 'calc(70% + 0.4vw)', gap: 'calc(7px + 1vw)' },
         { form: 'Decal', border: { ext: '5px', colour: 'rgba(0, 0, 0, 0.3)' } }
       ]);
       

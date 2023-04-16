@@ -1,4 +1,4 @@
-global.rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] = () => ({ init: async evt => {
+global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: async evt => {
   
   // We're going to be stingy with this code; the smaller+faster this
   // file is, the better the user experience! Note this file
@@ -7,6 +7,8 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] = () => ({ init: as
   // run after the DOMContentLoaded event (obvs we can't reference the
   // Room with `getRoom`, as the logic for doing so is only defined
   // after this code has ran!)
+  
+  let hutifyPath = 'habitat.HtmlBrowserHabitat.hutify';
   
   Error.prepareStackTrace = (err, callSites) => {
     let trace = callSites.map(cs => {
@@ -46,7 +48,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] = () => ({ init: as
   
   let onErr = evt => {
     
-    let err = evt.error || evt.reason;
+    let err = evt.error ?? evt.reason;
     
     // Don't modify SyntaxErrors - they only show proper
     // stack information when they're logged natively
@@ -54,6 +56,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] = () => ({ init: as
     gsc(`Uncaught ${getFormName(err)}:`, err.desc());
     // TODO: Refresh!! Or better yet - reset foundation (more complex)
     evt.preventDefault();
+    debugger;
     
   };
   window.evt('unhandledrejection', onErr);
@@ -72,7 +75,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] = () => ({ init: as
   global.conf = (...chain) => {
     
     // Resolve nested Arrays and period-delimited Strings
-    chain = chain.map(v => isForm(v, String) ? v.split('.') : v).flat(Infinity);
+    chain = chain.map(v => isForm(v, String) ? v.split('.').filter(Boolean) : v).flat(Infinity);
     
     let ptr = global.rawConf;
     for (let pc of chain) {
@@ -121,8 +124,12 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] = () => ({ init: as
       if (!script.roomPrm)
         script.roomPrm = Promise((rsv, rjc) => {
           if (global.rooms[name]) return rsv();
-          script.evt('load', rsv, { once: true });
-          script.evt('error', rjc, { once: true });
+          script.evt('load', rsv);
+          script.evt('error', evt => rjc(null
+            ?? evt.error
+            ?? evt.reason
+            ?? Error('Script failed - is there a transport-related Error too?')
+          ));
         })
           .then(async () => {
             
@@ -190,19 +197,58 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] = () => ({ init: as
   };
   /// =DEBUG}
   
+  let { hid: belowHid } = global.conf();
+  let { uid=null, def, hosting } = global.conf('deploy.loft');
+  let { prefix, room: loftName, keep: keepTerm } = def;
+  
+  // TODO: HEEERE refreshing is broken!! (should reload state perfectly)
+  // Make sure that refreshes redirect to the same session
+  document.cookie = 'hut=' + global.btoa(valToJson({ hid: belowHid }));
+  
   // Enable `global.real`
   gsc('OWAWAaasaggggg');
   await (async () => {
     
+    let TextNode = document.createTextNode('').constructor;
+    
     let Real = await global.getRoom('reality.real.Real');
-    let tech = {};
-    global.real = Real({ name: 'root', tech, tree: Real.Tree() });
+    let tech = {
+      makeNode: real => {
+        let fullName = `${real.prefix}.${real.name}`;
+        let cssName = fullName.replace(/([^a-zA-Z0-9]+)([a-zA-Z0-9])?/g, (f, p, c) => c ? c.upper() : '');
+        let elem = document.createElement('div');
+        elem.classList.add(cssName);
+        return elem;
+      },
+      attachKid: (par, kid) => par.node.appendChild(kid.node),
+      removeKid: (kid) => kid.node.remove(),
+      reset: real => {
+        
+        let node = real.node;
+        
+        // Reset text - in Hut, browser text is always the only child
+        // within its parent Node; i.e. it is always wrapped
+        let kids = node.childNodes;
+        if (kids.length === 1 && kids[0].constructor === TextNode) kids[0].remove();
+        
+        node.removeAttribute('style');
+        
+      },
+      getLayoutTech: name => {
+        let [ pc0, ...pcs ] = name.split(/[.$]/);
+        name = pc0[0].lower() + pc0.slice(1);
+        name += pcs.map(pc => pc[0].upper() + pc.slice(1)).join('');
+        return getRoom(`${hutifyPath}.layoutTech.${name}`)
+      }
+    };
+    let body = document.body;
+    if (/^[\s]+$/.test(body.textContent)) body.textContent = '';
+    
+    global.real = Real({ prefix, name: 'root', tech, tree: Real.Tree(), node: body });
     
   })();
   
   // `global` is set up... now run a Hut based on settings
-  let { uid=null, def, hosting } = global.conf('deploy.loft');
-  let { prefix, room: loftName, keep: keepTerm } = def;
   let { hut, record, WeakBank=null, ...loftObj } = await global.getRooms([
     'setup.hut',
     'record',
@@ -219,7 +265,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] = () => ({ init: as
   let recMan = record.Manager({ bank });
   
   let aboveHut = hut.AboveHut({ hid: aboveHid, prefix, isHere: false, recMan, heartbeatMs });
-  let belowHut = aboveHut.makeBelowHut(global.conf('hid'));
+  let belowHut = aboveHut.makeBelowHut(belowHid);
   
   // Note that `netIden` is just a stub - Hinterland will want to call
   // `netIden.runOnNetwork`; BELOW we know that the Tmp produced by this
@@ -250,13 +296,16 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] = () => ({ init: as
     
     let { protocol, port, ...opts } = protocolObj;
     
-    let protocolServer = await global.getRoom(`habitat.HtmlBrowserHabitat.hutify.protocol.${protocol}`);
+    let protocolServer = await global.getRoom(`${hutifyPath}.protocol.${protocol}`);
     let server = protocolServer.createServer({ hut: belowHut, netIden, netProc: `${netAddr}:${port}`, ...opts });
     setupServer(protocolObj, server);
     
   }));
   
   let initSyncTell = conf('initSyncTell');
+  gsc({ initSyncTell });
+  return;
+  
   if (initSyncTell) belowHut.actOnComm({ src: aboveHut, msg: initSyncTell });
   
   let loft = loftObj.toArr(v => v)[0];

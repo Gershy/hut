@@ -6,7 +6,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
   // for all road names, but "hutify" won't work if prefixed. Maybe the
   // best solution requires changing how the Hut form handles "hutify"
   
-  init({ rootRoadSrcName='hutify', prefix='html', debug=false, ...moreOpts }={}) {
+  init({ prefix='html', name='hut', rootRoadSrcName='hutify', debug=false, ...moreOpts }={}) {
     
     /// {ABOVE=
     let { multiUserSim=null } = moreOpts;
@@ -20,22 +20,19 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       /// =ABOVE}
       
       prefix,
+      name,
       rootRoadSrcName,
       
     });
     
   },
   
-  async prepare(roomName, hut) {
+  async prepare(hut) {
     
     /// {ABOVE=
     
     let tmp = Tmp();
-    let cmd = (name, fn) => {
-      let cmdSrcTmp = hut.commandSrcTmp(name);
-      tmp.endWith(cmdSrcTmp);
-      cmdSrcTmp.src.route(fn);
-    };
+    let cmd = (name, fn) => tmp.endWith(hut.makeCommandHandler(name, fn));
     
     // TODO: `tmp.end()` should undo these dependency additions
     hut.addKnownRoomDependencies([
@@ -63,16 +60,11 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       // data will always arrive together)
       
       let initSyncTell = src.consumePendingSync({ fromScratch: true });
-      
-      let depRooms = Set([
-        roomName,
-        ...hut.knownRoomDependencies,
-        ...hut.knownRealDependencies.map(realName => `internal.real.htmlBrowser.${realName}`)
-      ]);
+      gsc({ initSyncTell });
       
       let roomScript = (room, loadType='async') => {
         let src = url({ path: `${this.prefix}.room`, query: { room } });
-        return `<script ${loadType} type="text/javascript" src="${src}" data-room="${room}"></script>`;
+        return `<script ${loadType} src="${src}" data-room="${room}"></script>`;
       };
       
       let belowConf = hut.getBelowConf();
@@ -86,21 +78,23 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
         <html lang="en" spellcheck="false">
           <head>
             
-            <meta charset="utf-8" />
-            <title>${roomName.split('.').slice(-1)[0].upper()}</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-            <link rel="shortcut icon" type="image/x-icon" href="${url({ path: this.prefix + '.icon' })}" />
-            <style type="text/css">
-              html, body, body > div {
-                position: absolute; left: 0; top: 0; width: 100%; height: 100%;
-                margin: 0; padding: 0; font-family: monospace; overflow: hidden;
+            <meta charset="utf-8">
+            <title>${this.name.split('.').slice(-1)[0].upper()}</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <link rel="shortcut icon" type="image/x-icon" href="${url({ path: this.prefix + '.icon' })}">
+            <style>
+              html, body, body * {
+                position: relative; display: flex;
+                box-sizing: border-box;
+                width: -moz-fit-content; width: fit-content;
               }
-              html > body * { position: relative; }
-              body { opacity: 0; font-size: ${textSize}; transition: opacity 200ms linear; }
+              html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
+              body { font-family: monospace; white-space: pre-wrap; opacity: 0; font-size: ${textSize}; transition: opacity 200ms linear; }
               body.loaded { opacity: 1; }
+              body > * { width: 100%; height: 100%; }
             </style>
             
-            <script type="text/javascript">
+            <script>
               Object.assign(window.global = window, { rooms: Object.create(null) });
               let evtSrc = EventTarget.prototype;
               Object.defineProperty(evtSrc, 'evt', { writable: true, value: function(...args) {
@@ -113,11 +107,11 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
             ${roomScript('setup.clearing', 'defer')}
             ${roomScript('habitat.HtmlBrowserHabitat.hutify.foundation', 'defer')}
             ${protocolRooms.toArr(n => roomScript(n, 'defer')).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
-            ${depRooms.toArr(n => roomScript(n, 'async')).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
+            ${hut.knownRoomDependencies.toArr(n => roomScript(n, 'async')).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
 
-            <link rel="stylesheet" type="text/css" href="${url({ path: this.prefix + '.css' })}" />
+            <link rel="stylesheet" type="text/css" href="${url({ path: this.prefix + '.css' })}">
             
-            <script type="text/javascript">Object.assign(global,{rawConf:JSON.parse('${valToJson({
+            <script>Object.assign(global,{rawConf:JSON.parse('${valToJson({
               
               // Encode to String server-side; decode client-side
               
@@ -128,8 +122,11 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
               initSyncTell
               
             }).replace(/[\\']/g, '\\$&') /* The payload will be single-quoted, so escape it appropriately */ }')})</script>
+            
           </head>
+          
           <body></body>
+          
         </html>
       `));
       
@@ -147,7 +144,6 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
         return reply(Error(`Api: illegal room name: "${msg.room}"`));
       
       try {
-        gsc('ROOM', msg);
         reply(await hut.getCompiledKeep('below', msg.room));
       } catch (err) {
         reply(`'use strict';global.rooms['${msg.room}']=()=>{throw Error('Api: no room named "${msg.room}"');}`);
@@ -268,16 +264,16 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
         <!doctype html>
         <html lang="en" spellcheck="false">
           <head>
-            <meta charset="utf-8" />
-            <title>${roomName.split('.').slice(-1)[0].upper()}</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-            <link rel="shortcut icon" type="image/x-icon" href="${url({ path: this.prefix + '.icon' })}" />
-            <style type="text/css">
+            <meta charset="utf-8">
+            <title>${this.name.split('.').slice(-1)[0].upper()}</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <link rel="shortcut icon" type="image/x-icon" href="${url({ path: this.prefix + '.icon' })}">
+            <style>
               body, html { padding: 0; margin: 0; }
               body { margin: 2px; text-align: center; }
               iframe { display: inline-block; margin: 1px; vertical-align: top; border: none; box-shadow: 0 0 0 1px #000; }
             </style>
-            <script type="text/javascript">window.addEventListener('load', () => document.querySelector('iframe').focus())</script>
+            <script>window.addEventListener('load', () => document.querySelector('iframe').focus())</script>
           </head>
           <body>${parseInt(num, 10).toArr(genIframe).join('')}</body>
         </html>

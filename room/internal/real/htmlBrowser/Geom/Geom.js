@@ -25,7 +25,7 @@ global.rooms['internal.real.htmlBrowser.Geom'] = async foundation => {
     
     init({ shape='rect', w=null, h=null, ow=null, oh=null, anchor=null, x=null, y=null, z=null }) {
       
-      if (anchor === null) anchor = (x !== null || y !== null) ? 'cen' : 'none';
+      if (anchor === null) anchor = (x !== null || y !== null) ? 'mid' : 'none';
       
       // Note "anchor" is a bit overloaded; it defines the anchor for
       // both parent and child! So, e.g., if `{ anchor: 'tl' }`, the
@@ -47,8 +47,8 @@ global.rooms['internal.real.htmlBrowser.Geom'] = async foundation => {
       if (oh) { let v = `calc(${oh} / 2)`; Object.assign(domNode.style, { paddingTop:  v, paddingBottom: v }); }
       
       // Apply shape
-      if      (shape.type === 'rect')   { /* Do nothing */ }
-      else if (shape.type === 'circle') { domNode.style.borderRadius = '100%'; }
+      if      (shape.type === 'rect') { /* Do nothing */ }
+      else if (shape.type === 'oval') { domNode.style.borderRadius = '100%'; }
       
       // Apply z index
       if (z !== null) domNode.style.zIndex = z.toString();
@@ -59,7 +59,7 @@ global.rooms['internal.real.htmlBrowser.Geom'] = async foundation => {
       // Ensure Geom won't poorly interact with Axis1d.Item
       gsc('HHffkkkkoooooo');
       let hasAxis1d = real.layouts.find(lay => isForm(lay, Axis1d.Item)).found;
-      if (hasAxis1d && (x !== null || y !== null || anchor !== 'cen'))
+      if (hasAxis1d && (x !== null || y !== null || anchor !== 'mid'))
         throw Error(`Geom with Axis1d.Item forbids providing x, y, or non-cen anchor`);
       
       // Skip the rest of the positioning if Axis1d.Item is in effect

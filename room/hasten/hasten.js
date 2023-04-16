@@ -582,7 +582,7 @@ global.rooms['hasten'] = async foundation => {
             dep(setupReal.addLayout({ form: 'Decal', opacity: 0 }));
             
             let worldReal = dep(mainReal.addReal('hst.world', { opacity: 0, printKeys: 0 }, [
-              { form: 'Geom', w: '100vmin', h: '100vmin', shape: 'circle', anchor: 'cen', z: 3 },
+              { form: 'Geom', w: '100vmin', h: '100vmin', shape: 'oval', anchor: 'mid', z: 3 },
               { form: 'Decal', colour: '#000', windowing: true, transition: { opacity: { ms: worldFadeInMs } } },
             ]));
             

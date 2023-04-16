@@ -282,12 +282,8 @@ global.rooms['internal.docs.topic.real'] = foundation => decorator => {
     realFormModify.code(String.baseline(`
       | let real = rootReal.addReal('exampleReal', [
       |   { form: 'Text', text: 'initial text', size: '200%' },
-      |   { form: 'Press' }
+      |   { form: 'Press', pressFn: () => real.modify({ text: 'updated text!' }) }
       | ]);
-      | 
-      | real.getLayout('Press').route(() => {
-      |   real.modify({ text: 'updated text!' });
-      | });
     `));
     
   })();

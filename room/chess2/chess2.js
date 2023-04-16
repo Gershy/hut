@@ -32,9 +32,7 @@ global.rooms['chess2'] = async () => {
   let tsP1 = 'calc(90% + 1.00vmin)';
   let lay = {
     text: (text, textSize=ts00, align='mid') => [
-      { form: 'Geom', w: 'calc(100% - 7vmin)' },
-      { form: 'Text', textSize, align, text },
-      { form: 'Gap', horz: '0.75vmin', vert: '0.5vmin' }
+      { form: 'Text', size: textSize, align, text, spacing: '0.75vmin' },
     ],
     textFwd: (text, textSize=ts00, align='fwd') => lay.text(text, textSize, align),
     link: (keepText, uri, { textSize=ts00, protocol=null, mode='separate' }={}) => [
@@ -43,15 +41,13 @@ global.rooms['chess2'] = async () => {
     ],
     gap: (amt='1em') => [{ form: 'Geom', h: amt }],
     button: (text, pressFn, textSize=ts00) => [
-      { form: 'Gap', horz: '1.5vmin', vert: '1vmin' },
-      { form: 'Text', textSize, text },
+      { form: 'Text', textSize, text, spacing: { outer: { h: '1.5vmin', v: '1vmin' } } },
       { form: 'Decal', colour: '#bcbcd29c', border: { ext: '2px', colour: '#00000020' } },
       { form: 'Press', pressFn }
     ],
     input: (prompt, textInputSrc) => [
-      { form: 'Gap', vert: '1vmin' },
       { form: 'Geom', w: '10em' },
-      { form: 'TextInput', textSize: ts00, textInputSrc, prompt: 'Code?' },
+      { form: 'TextInput', textSize: ts00, textInputSrc, prompt: 'Code?', gap: { vert: '1vmin' } },
       { form: 'Decal', colour: '#a0a0ff30' }
     ]
   };
@@ -285,7 +281,7 @@ global.rooms['chess2'] = async () => {
   };
   /// =ABOVE}
   
-  return Hinterland('c2', 'chess2', {
+  return Hinterland('chess2', {
     
     habitats: [ HtmlBrowserHabitat() ],
     above: async (hut, chess2, real, dep) => {
@@ -309,7 +305,6 @@ global.rooms['chess2'] = async () => {
       hut.addKnownRealDependencies([
         'Axis1d',
         'Decal',
-        'Gap',
         'Geom',
         'Keep',
         'Press',
@@ -456,12 +451,13 @@ global.rooms['chess2'] = async () => {
       // Create Player Records for each Hut that joins
       dep.scp(hut, 'hut.owned/above', (owned, dep) => {
         
+        /*
         let kidHut = owned.m('below');
         let desc = kidHut.desc() + ' @ ' + kidHut.getKnownNetAddrs().toArr(v => v).join('+');
         
         let timerSrc = dep(TimerSrc({ ms: 1500 }));
         timerSrc.route(() => c2Subcon(`${desc} FAILED to make player!`), 'prm');
-        //timerSrc.route(() => (kidHut.strike(0.075, 'Failed timely chess2 player creation'), kidHut.end()), 'prm');
+        timerSrc.route(() => (/*kidHut.strike(0.075, 'Failed timely chess2 player creation'), * /kidHut.end()), 'prm');
         
         dep.scp(kidHut, 'c2.player', (player, dep) => {
           
@@ -470,6 +466,7 @@ global.rooms['chess2'] = async () => {
           timerSrc.end(); // If we get the Player before the Timeout cancel the Timeout
           
         });
+        */
         
       });
       
@@ -600,12 +597,11 @@ global.rooms['chess2'] = async () => {
       // We can initiate loading these rooms immediately, and hope they
       // load in time to affect any elements in need of uprighting!
       
-      gsc('CHESS2', real);
-      
       dep(real.addLayout({ form: 'Axis1d', axis: 'x', dir: '+', mode: 'compactCenter' }));
       dep(real.addLayout({ form: 'Decal', colour: '#646496', text: { colour: '#ffffff' } }));
       
       let mainReal = real.addReal('c2.main', [{ form: 'Geom', w: '100vmin', h: '100vmin' }]);
+      
       let nodePlayerless = (dep, real) => {
         
         let makePlayerAct = dep(hut.enableAction('c2.makePlayer', () => {
@@ -638,13 +634,12 @@ global.rooms['chess2'] = async () => {
         
         /// {BELOW=
         dep(TimerSrc({ ms: 500 })).route(() => makePlayerAct.act(), 'prm');
-        let paneReal = dep(real.addReal('c2.pane', [
-          { form: 'Geom', w: '80%', h: '80%', anchor: 'cen' },
+        let playerlessReal = dep(real.addReal('pane', [
+          { form: 'Geom', anchor: 'mid' },
           { form: 'Axis1d', axis: 'y', mode: 'compactCenter' },
-          { form: 'Decal', colour: 'rgba(120, 120, 170, 1)' }
         ]));
-        paneReal.addReal('c2.title', lay.text('Entering Chess2...', tsP1));
-        paneReal.addReal('c2.title', lay.link('(Stuck? Try clicking here...)', '/?hutId=reset', { mode: 'replace', textSize: tsM2 }));
+        playerlessReal.addReal('c2.title', lay.text('Entering Chess2...', tsP1));
+        playerlessReal.addReal('c2.title', lay.link('(Stuck? Try clicking here...)', '/?hid=reset', { mode: 'replace', size: tsM2 }));
         /// =BELOW}
         
       };
@@ -652,7 +647,7 @@ global.rooms['chess2'] = async () => {
         
         /// {BELOW=
         let chillReal = dep(real.addReal('chill', [
-          { form: 'Geom', w: '100%', h: '100%' },
+          { form: 'Geom', anchor: 'mid' },
           { form: 'Axis1d', axis: 'y', dir: '+', mode: 'compactCenter' }
         ]));
         chillReal.addReal('info', lay.text('You\'re playing Chess2!', tsP1));
@@ -848,7 +843,7 @@ global.rooms['chess2'] = async () => {
         dep.scp(match, 'c2.piece', (piece, dep) => {
           
           let pieceReal = dep(boardReal.addReal('c2.piece', tileCoord(0, 0), [
-            { form: 'Geom', anchor: 'tl', shape: 'circle', w: tileVal(1), h: tileVal(1) },
+            { form: 'Geom', anchor: 'tl', shape: 'oval', w: tileVal(1), h: tileVal(1) },
             { form: 'Image' },
             { form: 'Transform' }, // TODO: Roll this into Decal (or Geom)?
             { form: 'Decal', transition: {
@@ -943,19 +938,19 @@ global.rooms['chess2'] = async () => {
             
             /// {BELOW=
             let timeBarReal = dep(myPlayerHolderReal.addReal('c2.timer', [
-              { form: 'Geom', anchor: 'cen', z: 0, w: '0', h: '100%' },
+              { form: 'Geom', anchor: 'mid', z: 0, w: '0', h: '100%' },
               { form: 'Decal', colour: 'rgba(40, 40, 100, 0.35)', transition: {
                 x: { ms: 800, curve: 'linear' },
                 w: { ms: 800, curve: 'linear' }
               }}
             ]));
             let passReal = dep(myPlayerHolderReal.addReal('c2.pass', [
-              { form: 'Geom', shape: 'circle', anchor: 'br', z: 1, w: '10vmin', h: '10vmin' },
+              { form: 'Geom', shape: 'oval', anchor: 'br', z: 1, w: '10vmin', h: '10vmin' },
               { form: 'Text', textSize: ts00, text: 'Pass' },
               { form: 'Decal', colour: '#ffffff20' }
             ]));
             let resignReal = dep(myPlayerHolderReal.addReal('c2.resign', [
-              { form: 'Geom', shape: 'circle', anchor: 'br', z: 1, w: '10vmin', h: '10vmin', y: '10vmin' },
+              { form: 'Geom', shape: 'oval', anchor: 'br', z: 1, w: '10vmin', h: '10vmin', y: '10vmin' },
               { form: 'Text', textSize: ts00, text: 'Resign' },
               { form: 'Decal', colour: '#ff808020', windowing: false }
             ]));
@@ -1012,7 +1007,7 @@ global.rooms['chess2'] = async () => {
               dep.scp(feelSrc, (feel, dep) => {
                 
                 let holdReal = dep(resignReal.addReal('c2.hold', { colour: '#faa2', w: '120%', h: '120%' }, [
-                  { form: 'Geom', shape: 'circle', anchor: 'cen', z: -1 },
+                  { form: 'Geom', shape: 'oval', anchor: 'mid', z: -1 },
                   { form: 'Decal', transition: {
                     colour: { ms: 2000, curve: 'linear' },
                     x:      { ms: 2000, curve: 'linear' },
@@ -1067,7 +1062,7 @@ global.rooms['chess2'] = async () => {
                   
                   optionReal.addReal('c2.indicator', [
                     
-                    { form: 'Geom', shape: 'circle', anchor: 'cen', w: cap ? '80%' : '40%', h: cap ? '80%' : '40%' },
+                    { form: 'Geom', shape: 'oval', anchor: 'mid', w: cap ? '80%' : '40%', h: cap ? '80%' : '40%' },
                     { form: 'Decal', border: cap ? { ext: '5px', colour: moveColour } : null, colour: cap ? null : moveColour }
                     
                   ]);
@@ -1121,22 +1116,22 @@ global.rooms['chess2'] = async () => {
               if (cap) {
                 
                 moveReal.addReal('c2.indicator1', [
-                  { form: 'Geom', shape: 'circle', anchor: 'cen', w: '95%', h: '95%' },
+                  { form: 'Geom', shape: 'oval', anchor: 'mid', w: '95%', h: '95%' },
                   { form: 'Decal', border: { ext: '2px', colour: moveColour } }
                 ]);
                 moveReal.addReal('c2.indicator2', [
-                  { form: 'Geom', shape: 'circle', anchor: 'cen', w: '80%', h: '80%' },
+                  { form: 'Geom', shape: 'oval', anchor: 'mid', w: '80%', h: '80%' },
                   { form: 'Decal', border: { ext: '4px', colour: moveColour } }
                 ]);
                 
               } else {
                 
                 moveReal.addReal('c2.indicator1', [
-                  { form: 'Geom', shape: 'circle', anchor: 'cen', w: '50%', h: '50%' },
+                  { form: 'Geom', shape: 'oval', anchor: 'mid', w: '50%', h: '50%' },
                   { form: 'Decal', border: { ext: '2px', colour: moveColour } }
                 ]);
                 moveReal.addReal('c2.indicator2', [
-                  { form: 'Geom', shape: 'circle', anchor: 'cen', w: '35%', h: '35%' },
+                  { form: 'Geom', shape: 'oval', anchor: 'mid', w: '35%', h: '35%' },
                   { form: 'Decal', colour: moveColour }
                 ]);
                 
@@ -1152,9 +1147,13 @@ global.rooms['chess2'] = async () => {
         
       };
       
+      let paneReal = dep(mainReal.addReal('pane', [
+        { form: 'Geom', w: '80%', h: '80%', anchor: 'mid' },
+        { form: 'Decal', colour: 'rgba(120, 120, 170, 1)' }
+      ]));
       let playerRh = dep(hut.rh('c2.player'));
       let playerExistsChooser = dep(Chooser(playerRh, null));
-      dep.scp(playerExistsChooser.srcs.off, (noPlayer, dep) => nodePlayerless(dep, mainReal, chess2));
+      dep.scp(playerExistsChooser.srcs.off, (noPlayer, dep) => nodePlayerless(dep, paneReal, chess2));
       dep.scp(playerExistsChooser.srcs.onn, (player, dep) => {
         
         let changeStatusAct = dep(hut.enableAction('c2.changeStatus', async msg => {
@@ -1170,11 +1169,6 @@ global.rooms['chess2'] = async () => {
           /// =ABOVE}
           
         }));
-        
-        let paneReal = dep(mainReal.addReal('pane', [
-          { form: 'Geom', w: '80%', h: '80%', anchor: 'cen' },
-          { form: 'Decal', colour: 'rgba(120, 120, 170, 1)' }
-        ]));
         
         dep.scp(player, 'c2.playerStatus', (status, dep) => {
           

@@ -93,7 +93,7 @@ global.rooms['fly'] = async foundation => {
     
     let { Axis1d, Scroll, Decal, Geom, Press, Text, TextInput } = lay;
     
-    define('root', Geom({ w: '100vmin', h: '100vmin', anchor: 'cen' }));
+    define('root', Geom({ w: '100vmin', h: '100vmin', anchor: 'mid' }));
     
     define('content1', Text({ textSize: '200%' }));
     define('content2', Text({ textSize: '150%' }));

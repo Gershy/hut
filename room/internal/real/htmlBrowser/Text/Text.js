@@ -30,7 +30,6 @@ global.rooms['internal.real.htmlBrowser.Text'] = async foundation => {
     
     render: function(real, domNode) {
       
-      
       // Apply text
       let span = domNode.querySelector(':scope > span._text');
       span.textContent = this.getParam(real, 'text');
@@ -56,7 +55,6 @@ global.rooms['internal.real.htmlBrowser.Text'] = async foundation => {
         
       });
       domNode.style.gain({ display: 'flex', flexDirection: 'column', justifyContent: 'center', overflow: 'hidden', textOverflow: 'ellipsis' });
-      
       
     }
     

@@ -42,10 +42,10 @@ global.rooms['collabowrite'] = async foundation => {
         { form: 'Geom', w: '100%', h: '3em' }
       ],
       'root->header->title': [
-        // TODO: Would be so nice if Geom centering ({ anchor: 'cen', x: '0', y: '0' })
+        // TODO: Would be so nice if Geom centering ({ anchor: 'mid', x: '0', y: '0' })
         // could work when the element width is dynamic (e.g. based on text)
         { form: 'Decal', text: { size: '2em' } },
-        { form: 'Geom', anchor: 'cen' }
+        { form: 'Geom', anchor: 'mid' }
       ],
       'root->header->logout': [
         { form: 'Decal', text: { size: '0.75em', colour: '#fffa' } },
