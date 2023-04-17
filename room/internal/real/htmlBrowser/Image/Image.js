@@ -14,7 +14,7 @@ global.rooms['internal.real.htmlBrowser.Image'] = async foundation => {
       
       Object.assign(domNode.style, {
         imageRendering: this.smoothing ? '' : 'pixelated',
-        backgroundImage: `url("${encodeURI(url(imgKeep.getUrlParams(), { fixed: true }))}")`,
+        backgroundImage: `url("${encodeURI(uri(imgKeep.getUrlParams(), { fixed: true }))}")`,
         backgroundRepeat: 'no-repeat',
         backgroundPosition: 'center',
         backgroundSize: (this.scale === 1) ? 'cover' : `${(this.scale * 100).toFixed(3)}%`

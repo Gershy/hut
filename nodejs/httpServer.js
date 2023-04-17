@@ -118,9 +118,8 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     if (hasForm(msg, Keep)) keep = msg;
     
     // These values determine headers
-    let mime = null;
-    let cache = null;
-    let encode = null;
+    let mime;
+    let cache;
     
     if      (keep)                        { mime = await keep.getContentType();       cache = 'private'; } // TODO: Can we determine that some Keeps are public?
     else if (msg === null)                { mime = 'application/json; charset=utf-8'; cache = null; msg = valToJson(msg); }
@@ -158,6 +157,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     // compression options available, and either the message is known
     // to be long enough to be worth compressing, or the message's
     // length isn't known (it's streamed)
+    let encode = null;
     let tryEncode = compression.length && (keep || msg.length > 75) && !precompressedMimes.has(mime);
     if (tryEncode) {
       
@@ -242,7 +242,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
       err.suppress();
       errSubcon(`Failed to respond with ${getFormName(keep ?? msg)}: ${keep ? keep.desc() : (msg?.slice?.(0, 100) ?? msg)}`, err);
-      forceEnd(res, {}, 400);
+      forceEnd(res, {}, 400, 'Invalid request');
       
     } finally {
       
@@ -255,7 +255,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     
     let errs = [];
     try { res.writeHead(code, headers); } catch (err) { err.suppress(); errs.push(err); }
-    try { res.end(body || skip);        } catch (err) { err.suppress(); errs.push(err); }
+    try { res.end(body ?? skip);        } catch (err) { err.suppress(); errs.push(err); }
     
     if (errs.empty()) return;
     errSubcon(`Errors occurred trying to end response (with code ${code})`, ...errs.map(err => {

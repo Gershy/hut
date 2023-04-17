@@ -144,7 +144,7 @@ global.rooms['internal.real.htmlBrowser.Art'] = async foundation => {
           let hw = w >> 1;
           let hh = h >> 1;
           
-          let url = global.url(keep.getUrlParams(), { fixed: true });
+          let url = global.uri(keep.getUrlParams(), { fixed: true });
           let img = !draw.imgCache.has(url)
             ? draw.imgCache[url] = Object.assign(new Image(), { src: url })
             : draw.imgCache[url];

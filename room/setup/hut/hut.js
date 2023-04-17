@@ -2,21 +2,35 @@ global.rooms['setup.hut'] = async () => {
   
   let { Record } = await getRoom('record');
   
-  // TRACK:
-  // above+below: CommandSrcTmps
-  // above: typeToClsFns
-  // above: below huts track pendingSync
-  // above: known deps
-  
   let Hut = form({ name: 'Hut', has: { Record }, props: (forms, Form) => ({
     
     // Huts connect by Roads to other Huts, have the ability to Tell and
     // Hear to/from other Huts, and can react to what they Hear
     
-    $commandHandlerWrapper: (handlerTmp, comm) => safe(() => handlerTmp.fn(comm), err => {
-      gsc(Error(`${handlerTmp.desc()} failed`).mod({ cause: err, comm }));
-      // comm.reply({ command: 'error', type: 'failed', orig: comm.msg })
-    }),
+    $handleCommError: (handlerHut, comm, err) => {
+      
+      // Errors can occur when processing Comms from other Huts; when
+      // this happens we ideally inform the other Hut of the Error, and
+      // if this isn't possible we ensure
+      
+      let msg = { command: 'error', type: 'failed', orig: comm.msg };
+      let isExpectedError = err.message?.startsWith?.('Api: ') ?? false;
+      msg.detail = isExpectedError ? err.message : 'Logic error';
+      
+      // If the Error couldn't be communicated back, or if the Error was
+      // unexpected, we need awareness of it
+      if (!isExpectedError) gsc(err.mod( m => ({ message: `${handlerHut.desc()} failed to handle Comm!\n${m}`, comm }) ));
+      
+      // Try to reply
+      comm.reply?.(err.mod({ e: msg }));
+      
+    },
+    $commandHandlerWrapper: async (handlerHut, handlerTmp, comm) => {
+      
+      try         { await handlerTmp.fn(comm); }
+      catch (err) { Form.handleCommError(handlerHut, comm, err); }
+      
+    },
     
     init({ isHere=false, hid, uid, heartbeatMs, ...recordProps }) {
       
@@ -44,6 +58,10 @@ global.rooms['setup.hut'] = async () => {
       // Causes `this` to tell `trg` a Message
       // Note that `ms` should typically be provided, and should
       // represent the high-precision time at which the tell occurred
+      // Note that the action resulting from the Tell is implemented in
+      // `actOnComm`
+      // Note that `actOnComm` is always called with a `reply` function
+      // unless the Comm was Srcless (e.g. self-initiated)
       
       // How communication happens
       // | SrcHut  | TrgHut  | Road
@@ -174,7 +192,7 @@ global.rooms['setup.hut'] = async () => {
         cleanup: () => delete this.commandHandlers[command],
         fn
       });
-      this.commandHandlers[command] = Form.commandHandlerWrapper.bound(tmp);
+      this.commandHandlers[command] = Form.commandHandlerWrapper.bound(this, tmp);
       return tmp;
     },
     doCommand(comm, { critical=true }={}) {
@@ -183,10 +201,9 @@ global.rooms['setup.hut'] = async () => {
       if (!isForm(comm?.msg?.command, String)) throw Error(`${this.desc()} given Comm without "command"`).mod({ comm });
       /// =DEBUG}
       
-      
       // Try to process the command
       let ch = this.commandHandlers[comm.msg.command];
-      if (ch) { ch(comm); return true; }
+      if (ch) { ch(comm); return true; } // That is fire-and-forget - I guess we tolerate that??
       
       // If this is "non-critical" simply return `false`, indicating we
       // couldn't fulfill the command (note a commom non-critical case
@@ -196,10 +213,7 @@ global.rooms['setup.hut'] = async () => {
       if (!critical) return false;
       
       // Failed to run critical command; reply with Error if possible...
-      if (comm.reply) return comm.reply(Error(`Api: invalid command: "${comm.msg.command}"`).mod({ e: 'invalidCommand' }));
-      
-      // ... otherwise indicate this Error
-      subcon('warning')(`${this.desc()} failed without reply on command "${comm.msg.command}"`, { comm });
+      Form.handleCommError(this, comm, Error(`Api: invalid command: "${comm.msg.command}"`));
       
     }
     
@@ -246,6 +260,7 @@ global.rooms['setup.hut'] = async () => {
         knownRoomDependencies: Set(),
         knownRealDependencies: Set(),
         serverInfos: [],
+        enabledKeeps: Map(),
         /// =ABOVE}
         
         allFollows: Object.plain(/* uid -> { hutId -> FollowTmp } */)
@@ -272,6 +287,25 @@ global.rooms['setup.hut'] = async () => {
         return null;
         
       }));
+      
+      /// {ABOVE=
+      this.makeCommandHandler('asset', async ({ src, msg: { chain }, reply }) => {
+        
+        // Expects `chain` to begin with an "Enabled Keep"
+        
+        chain = resolveChain(chain);
+        
+        let [ term, ...innerChain ] = chain;
+        if (!this.enabledKeeps.has(term)) throw Error(`Api: invalid asset term "${term}"`).mod({ chain });
+        
+        let keep = this.enabledKeeps.get(term).seek(innerChain);
+        
+        if (!keep) throw Error(`Api: invalid asset chain`).mod({ term, innerChain });
+        if (await keep.exists()) reply(keep);
+        else                     throw Error(`Api: invalid asset chain`).mod({ term, innerChain });
+        
+      });
+      /// =ABOVE}
       
     },
     getRoadFor(trg) { return trg.getRoadFor(this); },
@@ -427,6 +461,31 @@ global.rooms['setup.hut'] = async () => {
       return cmpKeep;
       
     },
+    enableKeep(...args /* term, keep | keep */) {
+      
+      // Adds a Keep to `this.enabledKeeps`; this makes it available as
+      // AboveHuts expose such Keeps via a CommandHandler named "asset"
+      
+      /// {DEBUG= // TODO: Nested markers!
+      if (![ 1, 2 ].has(args.length)) throw Error(`Api: expected 1 or 2 arguments; got ${args.length}`).mod({ args });
+      /// =DEBUG}
+      
+      let term;
+      let keep;
+      if      (args.length === 1) term = keep = args[0]; // No alias for the `keepKey`
+      else if (args.length === 2) [ term, keep ] = args;
+      
+      /// {DEBUG=
+      if (term?.constructor !== String) throw Error(`Api: term must resolve to String`).mod({ term });
+      /// =DEBUG}
+      
+      if (this.enabledKeeps.has(term)) throw Error(`Api: already enabled Keep termed "${term}"`);
+      
+      if (!hasForm(keep, Keep)) keep = global.keep(keep);
+      this.enabledKeeps.add(term, keep);
+      return Tmp(() => this.enabledKeeps.rem(term));
+      
+    },
     /// =ABOVE}
     
     addRecord(...args) { return this.type.manager.addRecord(...args); },
@@ -476,7 +535,7 @@ global.rooms['setup.hut'] = async () => {
       this.makeCommandHandler('error', comm => gsc(`${this.desc()} was informed of Error`, comm.msg));
       this.makeCommandHandler('multi', ({ src, msg: { list=null }, reply }) => {
         
-        if (!isForm(list, Array)) return reply(Error(`Api: invalid multi list`).mod({ e: 'invalidMultiList' }));
+        if (!isForm(list, Array)) throw Error(`Api: invalid multi list`);
         
         let replies = [];
         let multiReply = msg => replies.push(msg);
@@ -495,6 +554,7 @@ global.rooms['setup.hut'] = async () => {
         
         let err = Error('');
         try {
+          
           let { v: version, content } = msg;
           if (!isForm(version, Number)) throw Error('Invalid "version"');
           if (!version.isInteger()) throw Error('Invalid "version"');
@@ -519,10 +579,7 @@ global.rooms['setup.hut'] = async () => {
           
         } catch (cause) {
           
-          throw err.mod({
-            msg: 'Error while Syncing - this can occur if the AboveHut was restarted unexpectedly',
-            cause
-          });
+          throw err.mod({ msg: 'Error syncing - did the AboveHut restart unexpectedly?', cause });
           
         }
         
@@ -599,7 +656,6 @@ global.rooms['setup.hut'] = async () => {
       this.aboveHut.doCommand(comm, { critical: true });
       
     },
-    
     enableAction(command, fn) {
       
       // Note `enableAction` is more specific than `makeCommandHandler`:
@@ -656,10 +712,6 @@ global.rooms['setup.hut'] = async () => {
       if (!this.pendingSync.has(type)) throw Error(`Invalid type: ${type}`);
       /// =ASSERT}
       
-      if (this.off()) return;
-      
-      if (isForm(rec, AboveHut)) gsc(Error('UGH'));
-      
       let { add, upd, rem } = this.pendingSync;
       
       // add, rem: cancel out! No information on Record is sent
@@ -670,7 +722,6 @@ global.rooms['setup.hut'] = async () => {
       // Can rem and upd occur together? YES (e.g. state is in the midst of change as deletion occurs)
       
       if (type === 'add') {
-        
         
         if (rem.has(rec.uid)) delete rem[rec.uid];
         else {
@@ -696,17 +747,17 @@ global.rooms['setup.hut'] = async () => {
       }
       
       // Don't schedule a sync if one is already scheduled!
-      if (this.throttleSyncPrm) return;
+      if (this.off() || this.throttleSyncPrm) return;
       
       let err = Error('trace');
       let prm = this.throttleSyncPrm = soon(() => {
         
         // Can cancel scheduled sync by setting `this.throttleSyncPrm`
-        // to another value
+        // to any other value
         if (this.throttleSyncPrm !== prm) return;
         this.throttleSyncPrm = null;
         
-        // Hut may have dried between scheduling and executing sync
+        // Hut may have ended between scheduling and executing sync
         if (this.off()) return;
         
         let updateTell = this.consumePendingSync({ fromScratch: false });
@@ -806,8 +857,8 @@ global.rooms['setup.hut'] = async () => {
     },
     consumePendingSync({ fromScratch=false }={}) {
       
-      let pendingSync = this.pendingSync;
-      this.pendingSync = { add: {}, upd: {}, rem: {} };
+      // Cancel any previously pending sync (this full sync encompasses it)
+      this.throttleSyncPrm = null;
       
       if (fromScratch) {
         
@@ -819,26 +870,27 @@ global.rooms['setup.hut'] = async () => {
         // to indicate an "add" for every followed Record - essentially
         // this is "sync-from-scratch" behaviour!
         this.syncTellVersion = 0;
-        pendingSync = { add: {}, upd: {}, rem: {} };
+        this.pendingSync = { add: {}, upd: {}, rem: {} };
+        let add = this.followedRecs.toObj(rec => [ rec.uid, rec ]);
+        for (let rec of this.followedRecs) add[rec.uid] = rec;
         for (let rec of this.followedRecs) this.toSync('add', rec);
-        //let { add } = pendingSync = { add: {}, upd: {}, rem: {} };
+        //let { add } = toSync = { add: {}, upd: {}, rem: {} };
         //for (let rec of this.followedRecs) add[rec.uid] = rec;
         
       }
       
       // Creates sync for the BelowHut and modifies its representation
       // to be considered fully up-to-date
-      let add = pendingSync.add.toArr(rec => {
+      let add = this.pendingSync.add.toArr(rec => {
         
-        let { terms, mems } = rec.group;
         return {
           type: rec.type.name,
           uid: rec.uid,
           val: rec.getValue(),
-          mems: terms.toObj(term => {
+          mems: rec.group.terms.toObj(term => {
             
-            if (!mems.has(term)) return [ term, null ];
-            let mem = mems[term];
+            if (!rec.group.mems.has(term)) return [ term, null ];
+            let mem = rec.group.mems[term];
             
             // Both ParHut and KidHut map to KidHut uid
             if (mem === this)        return [ term, this.uid ];
@@ -854,13 +906,13 @@ global.rooms['setup.hut'] = async () => {
         };
         
       });
-      let upd = pendingSync.upd.toArr((val, uid) => ({ uid, val }));
-      let rem = pendingSync.rem.toArr(r => r.uid);
+      let upd = this.pendingSync.upd.toArr((val, uid) => ({ uid, val }));
+      let rem = this.pendingSync.rem.toArr(r => r.uid);
+      this.pendingSync = { add: {}, upd: {}, rem: {} };
       
       let content = { add, upd, rem }.map(v => v.empty() ? skip : v);
       if (content.empty()) return null;
       
-      this.throttleSyncPrm = null; // Cancel any previously pending sync (the full-sync will encompass it)
       return { command: 'sync', v: this.syncTellVersion++, content };
       
     },
@@ -869,6 +921,18 @@ global.rooms['setup.hut'] = async () => {
     },
     
     /// =ABOVE}
+    
+    getKeep(chain) {
+      
+      chain = resolveChain(chain);
+      
+      /// {BELOW=
+      return global.keep(chain);
+      /// =BELOW} {ABOVE=
+      return this.aboveHut.enabledKeeps.get(chain[0]).seek(chain.slice(1));
+      /// =ABOVE}
+      
+    },
     
     tell({ trg, ...args }) {
       

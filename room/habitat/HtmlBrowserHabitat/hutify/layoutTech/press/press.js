@@ -13,7 +13,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.press'] = () => ({
       processEvt(evt);
     }));
     
-    if (layout.modes.has('discrete') && layout.modes.has('continuous')) {
+    if (layout.modes.has('discrete')) {
       real.node.setAttribute('tabIndex', '0');
       cleanupTmp.endWith(() => real.node.removeAttribute('tabIndex'));
     }

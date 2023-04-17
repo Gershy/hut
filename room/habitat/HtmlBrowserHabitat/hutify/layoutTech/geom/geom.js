@@ -9,11 +9,20 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.geom'] = () => ({
     if      (props.shape === 'rect') { /* Do nothing */ }
     else if (props.shape === 'oval') style.borderRadius = '100%';
     
+    // TODO: Neither "absolute" nor "relative" position covers all neded
+    // use-cases - e.g. chess board tiles need to be absolute (so they
+    // don't shift each other) but most other stuff needs to be relative
+    // to benefit from auto margins!!
+    
     if (props.z) style.zIndex = props.z.toString();
     
-    if (props.anchor === 'mid') {
-      style.margin = 'auto';
+    if (props.anchor !== 'none') {
+      let { x, y } = props;
+      // TODO: This is jankkkk with the inset nonsense
+      Object.assign(style, { position: 'absolute', inset: '0', left: x ?? '0', top: y ?? '0' });
     }
+    
+    if (props.anchor === 'mid') style.margin = 'auto';
     if (props.anchor.length === 1 /* t, b, l, r */) {
       
       Object.assign(style, [ 't', 'b' ].has(props.anchor)
@@ -33,8 +42,6 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.geom'] = () => ({
       else if (props.anchor === 'br') Object.assign(style, { marginTop: 'auto', marginLeft: 'auto' });
       
     }
-    
-    if (props.anchor !== 'none') Object.assign(style, { left: props.x ?? '0', top: props.y ?? '0' });
     
   }
     

@@ -17,31 +17,46 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.text'] = () => ({
     // lines will wrap all the way to the leftmost side of the child
     // This may, however, overload the functionality of the Text Layout;
     // it could be better to use define something new like RichText
-    real.node.querySelector(':scope > span.text').textContent = layout.getParam(real, 'text') ?? '';
+    let span = real.node.querySelector(':scope > span.text');
+    span.textContent = layout.getParam(real, 'text') ?? '\u2022'.repeat(3);
     
     Object.assign(real.node.style, {
       
       // Manage `span` within the bounding of `real`, as applied by
       // other Layouts
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'center',
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
+      //display: 'flex',
+      //flexDirection: 'column',
+      //justifyContent: 'center',
       
+      // Apply decals
       fontSize: layout.getParam(real, 'size') ?? '',
       fontWeight: layout.style.has('bold') ? 'bold' : '',
       fontStyle: layout.style.has('italic') ? 'italic' : '',
+      
+      // Handle overflow with ellipsis
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
       
       // Convert hut-style Realism to css
       textAlign: { fwd: 'left', bwd: 'right', mid: 'center', justify: 'justify' }[layout.align]
       
     });
     
-    let { inner, outer: { h, v } } = layout.spacing;
+    // TODO: This is really more "anchoring" than "alignment"
+    Object.assign(span.style, {
+      
+      fwd:     { textAlign: 'left',   marginRight: 'auto', marginBottom: 'auto' },
+      bwd:     { textAlign: 'right',  marginLeft: 'auto', marginBottom: 'auto' },
+      mid:     { textAlign: 'center', margin: 'auto' },
+      justify: { textAlign: 'center', margin: 'auto' }
+      
+    }[layout.align]);
+    
+    
+    let { h, v, line } = layout.spacing;
     if (h) Object.assign(real.node.style, { paddingLeft: h, paddingRight: h });
     if (v) Object.assign(real.node.style, { paddingTop: v, paddingBottom: v });
-    if (inner) Object.assign(real.node.style, { lineHeight: inner }); // TODO: line-height also adds "outer" padding (half the line-height value); really it should be subtracted from any padding (note padding can't go negative, so 0 outer padding with some line-height always results in "outer padding")
+    if (line) Object.assign(real.node.style, { lineHeight: line }); // TODO: line-height also adds "outer" padding (half the line-height value); really it should be subtracted from any padding (note padding can't go negative, so 0 outer padding with some line-height always results in "outer padding")
     
   }
 });

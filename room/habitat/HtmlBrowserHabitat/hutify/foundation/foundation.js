@@ -70,8 +70,20 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   window.evt('focus', () => cl.add('focus'));
   window.evt('blur', () => cl.remove('focus'));
   
+  let HttpKeep = form({ name: 'HttpKeep', has: { Keep }, props: (forms, Form) => ({
+    init(chain) { Object.assign(this, { chain }); },
+    getUri() {
+      let chain = this.chain;
+      if (chain?.constructor === Array) {
+        // TODO: What if chain contains a literal "/"??????
+        chain = `/${chain.join('/')}`;
+      }
+      return uri({ path: 'asset', query: { chain } });
+    },
+  })});
+  
   global.getMs = () => performance.timeOrigin + performance.now();
-  global.keep = (...args) => { throw Error(`Lol wut`).mod({ args }); };
+  global.keep = chain => HttpKeep(resolveChain(chain));
   global.conf = (...chain) => {
     
     // Resolve nested Arrays and period-delimited Strings
@@ -115,41 +127,36 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
         // attribute as they are always async
         script = document.createElement('script');
         script.setAttribute('type', 'text/javascript');
-        script.setAttribute('src', global.url({ path: 'html.room', query: { type: 'room', room: name } }));
+        script.setAttribute('src', global.uri({ path: 'html.room', query: { type: 'room', room: name } }));
         script.setAttribute('data-room', name);
         document.head.appendChild(script);
         
       }
       
-      if (!script.roomPrm)
-        script.roomPrm = Promise((rsv, rjc) => {
-          if (global.rooms[name]) return rsv();
-          script.evt('load', rsv);
-          script.evt('error', evt => rjc(null
-            ?? evt.error
-            ?? evt.reason
-            ?? Error('Script failed - is there a transport-related Error too?')
-          ));
+      if (!script.room) script.room = Promise((rsv, rjc) => {
+        if (global.rooms[name]) return rsv();
+        script.evt('load', rsv);
+        script.evt('error', evt => rjc(evt.error ?? evt.reason ?? Error('Script failed to load - are there transport-related Errors?')));
+      })
+        .then(async () => {
+          
+          let room = global.rooms[name];
+          
+          /// {DEBUG=
+          if (!room) throw Error(`Room "${name}" does not set global.rooms['${name}']!`);
+          if (!hasForm(room, Function)) throw Error(`Dang, room "${name}" doesn't define a global Function`);
+          /// =DEBUG}
+          
+          // Note that `room.offsets` exists based on how Rooms are
+          // compiled for BELOW!
+          return room();
+          
         })
-          .then(async () => {
-            
-            let room = global.rooms[name];
-            
-            /// {DEBUG=
-            if (!room) throw Error(`Room "${name}" does not set global.rooms['${name}']!`);
-            if (!hasForm(room, Function)) throw Error(`Dang, room "${name}" doesn't define a global Function`);
-            /// =DEBUG}
-            
-            // Note that `room.offsets` exists based on how Rooms are
-            // compiled for BELOW!
-            return room();
-            
-          })
-          .catch(cause => err.propagate({ cause, msg: `Failed to load room "${name}"` }))
-          .then(room => script.roomPrm = room);
+        .catch(cause => err.propagate({ cause, msg: `Failed to load room "${name}"` }))
+        .then(room => script.room = room);
       
       let resultName = shorten ? name.split('.').slice(-1)[0] : name;
-      return [ resultName, script.roomPrm ];
+      return [ resultName, script.room ];
       
     }));
     
@@ -201,7 +208,6 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   let { uid=null, def, hosting } = global.conf('deploy.loft');
   let { prefix, room: loftName, keep: keepTerm } = def;
   
-  // TODO: HEEERE refreshing is broken!! (should reload state perfectly)
   // Make sure that refreshes redirect to the same session
   document.cookie = 'hut=' + global.btoa(valToJson({ hid: belowHid }));
   
@@ -213,6 +219,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     
     let Real = await global.getRoom('reality.real.Real');
     let tech = {
+      installedAttrs: Set([ 'class', 'type', 'tabIndex' ]),
       makeNode: real => {
         let fullName = `${real.prefix}.${real.name}`;
         let cssName = fullName.replace(/([^a-zA-Z0-9]+)([a-zA-Z0-9])?/g, (f, p, c) => c ? c.upper() : '');
@@ -231,7 +238,9 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
         let kids = node.childNodes;
         if (kids.length === 1 && kids[0].constructor === TextNode) kids[0].remove();
         
-        node.removeAttribute('style');
+        for (let attr of node.getAttributeNames())
+          if (!tech.installedAttrs.has(attr))
+            node.removeAttribute(attr);
         
       },
       getLayoutTech: name => {
@@ -302,11 +311,8 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     
   }));
   
-  let initSyncTell = conf('initSyncTell');
-  gsc({ initSyncTell });
-  return;
-  
-  if (initSyncTell) belowHut.actOnComm({ src: aboveHut, msg: initSyncTell });
+  let initComm = conf('initComm');
+  if (initComm) belowHut.actOnComm({ src: aboveHut, msg: initComm });
   
   let loft = loftObj.toArr(v => v)[0];
   await loft.open({ hut: belowHut, rec: aboveHut, netIden });

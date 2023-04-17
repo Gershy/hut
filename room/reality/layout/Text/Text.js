@@ -3,33 +3,25 @@ global.rooms['reality.layout.Text'] = async () => {
   let { Layout } = await getRoom('reality.real.Real');
   return form({ name: 'Text', has: { Layout }, props: (forms, Form) => ({
     
-    // solid |        | massive | concrete |
-    //       |        |         | physical | 
-    //       |        |         | tangible |
-    // 
-    // ghost | vapour | emitted | radiated | intangible | holographic
-    //       | liquid | diffuse |          | immaterial |
-    //       | shadow | radiant |          |            |
-    //       |        | ghostly |
     /// {DEBUG=
     $alignOpts: 'fwd,bwd,mid,justify'.split(','),
+    $styleOpts: 'bold,italic'.split(','),
     /// =DEBUG}
     
     init({ text=null, size=null, align='mid', style='', spacing={} }={}) {
       
+      if (style.constructor === String) style = style.split(',').map(v => v.trim() ?? skip);
+      
       /// {DEBUG=
-      if (![ Array, String ].has(style?.constructor)) throw Error(`Api: "style" should be Array or String; got ${getFormName(style)}`);
+      if (!Form.alignOpts.has(align)) throw Error(`Api: invalid "align" value`).mod({ align });
+      if (!isForm(style, Array)) throw Error(`Api: "style" should be Array or String; got ${getFormName(style)}`);
+      if (!style.any(v => !Form.styleOpts.has(v))) throw Error(`Api: invalid "style" value`).mod({ style });
       /// =DEBUG}
       
-      if (spacing?.constructor !== Object) spacing = { outer: spacing };
-      let { inner=null, outer=null } = spacing;
-      let h = outer;
-      let v = outer;
-      if (isForm(outer, Object)) ({ h=null, v=null } = outer);
+      if (spacing?.constructor !== Object) spacing = { h: spacing, v: spacing };
+      spacing = { h: null, v: null, line: null, ...spacing };
+      // TODO: Validate??
       
-      spacing = { outer: { h, v }, inner };
-      
-      if (style.constructor === String) style = style.split(',').map(v => v.trim() ?? skip);
       Object.assign(this, { text, size, align, style, spacing });
       
     },

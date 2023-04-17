@@ -297,6 +297,13 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     
   },
   
+  async getType(fp) {
+    
+    this.checkFp(fp);
+    
+    return this.doLocked({ name: 'getType', locks: [{ type: 'nodeRead', fp }], fn: () => this.xGetType(fp) });
+    
+  },
   async getDataBytes(fp) {
     
     this.checkFp(fp);
@@ -503,7 +510,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     
     let prm = this.doLocked({ name: 'iterateNode', locks: [{ type: 'nodeRead', fp }], fn: async () => {
       
-      let dir = null;
+      let dir;
       try         { dir = await fs.opendir(fp.fsp(), { bufferSize }); }
       catch (err) { if (err.code !== 'ENOENT') return itPrm.reject(err); } // Note that `prm` still succeeds in this case!
       
@@ -570,6 +577,7 @@ let FsKeep = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => ({
       
     },
     getContentByteLength() { return Buffer.bytelength(this.getContent()); },
+    streamable() { return true; },
     getHeadPipe() { return {}; }, // TODO: Mock this
     getTailPipe() { return ({ pipe: writable => writable.end(this.getContent()) }); }
     
@@ -655,6 +663,7 @@ let FsKeep = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => ({
       ? names.filter(name => !this.forbid.has(name))
       : names;
   },
+  async streamable() { return (await this.trn.getType(this.fp)) === 'leaf'; },
   async getHeadPipe() { return this.trn.getDataHeadStream(this.fp); },
   async getTailPipe() { return this.trn.getDataTailStream(this.fp); },
   iterateChildren(dbg=Function.stub) {
@@ -869,7 +878,7 @@ module.exports = {
         await trn.setData(fp.kid('aa').kid('bb').kid('dd'), 'I AM DD');
         await trn.setData(fp.kid('aa').kid('bb').kid('ee'), 'I AM EE');
         
-        let r = null;
+        let r;
         
         r = await trn.getData(fp.kid('aa'), 'utf8');
         if (r !== 'I AM AA') throw Error('Bad result').mod({ r });

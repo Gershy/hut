@@ -100,7 +100,6 @@ global.rooms['Hinterland'] = async foundation => {
       /// {ABOVE=
       
       let resolveHrecsAndFollowRecs = (follower, tmp) => {
-        gsc(`${follower.desc()} follow ${tmp.desc?.() ?? getFormName(tmp)}`);
         if      (hasForm(tmp, Record))     { follower.followRec(tmp);     return tmp; }
         else if (hasForm(tmp.rec, Record)) { follower.followRec(tmp.rec); return tmp.rec; }
         return tmp;

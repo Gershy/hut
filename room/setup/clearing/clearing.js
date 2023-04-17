@@ -170,6 +170,7 @@ Object.assign(global, {
     },
     all(fn=Boolean) { return this.every(fn); },
     any(fn=Boolean) { return this.some(fn); },
+    sift(fn=Boolean) { return this.filter(fn); },
     empty() { return !this.length; },
     add(...args) { this.push(...args); return args[0]; },
     rem(val) { let ind = this.indexOf(val); if (ind > -1) this.splice(ind, 1); },
@@ -272,10 +273,7 @@ Object.assign(global, {
     toArr(fn) { let arr = new Array(this); for (let i = 0; i < this; i++) arr[i] = fn(i); return arr; },
     toObj(fn) { // Iterator: n => [ key, val ]
       let ret = [];
-      for (let i = 0; i < this; i++) {
-        let v = fn(i);
-        if (v !== skip) ret.push(v);
-      }
+      for (let i = 0; i < this; i++) { let v = fn(i); if (v !== skip) ret.push(v); }
       return Object.fromEntries(ret);
     },
     encodeStr(a1, a2 /* String, Number; String -> chrs=String.base62, Number -> padLen=0 */) {
@@ -395,7 +393,6 @@ Object.assign(global, {
         if (!match) return line;
         let [ , file, row, col=null ] = match;
         let mapped = mapSrcToCmp(file, row, col ?? 0);
-        gsc({ mapped });
         return `${mapped.file.replace(/[\\]+/g, '/')} [${mapped.row}:${mapped.col}]`;
         
       }).join('\n');
@@ -833,14 +830,14 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   },
   
   // Urls
-  urlRaw: ({ path='', cacheBust, query }) => {
+  uriRaw: ({ path='', cacheBust, query }) => {
     let url = '';
     if (cacheBust)               url =  `/!${cacheBust}`;
     if (path)                    url += `/${path}`;
-    if (query && !query.empty()) url += '?' + query.toArr((v, k) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+    if (query && !query.empty()) url += '?' + query.toArr((v, k) => `${k}=${v}`).join('&'); // Note: DON'T encode here!
     return url;
   },
-  url: ({ path='', query }) => {
+  uri: ({ path='', query }) => {
     
     let maturity = conf('deploy.maturity');
     
@@ -855,11 +852,38 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     // TODO: How are we caching in alpha?
     else if (maturity === 'alpha') cacheBust = null;
     
-    return global.urlRaw({ path, cacheBust, query });
+    return global.uriRaw({ path, cacheBust, query });
     
   },
   
   // Util
+  resolveChain: chain => {
+    
+    // Consider the ability to specify "indirection chains" as Strings
+    // to be a fundamental feature of Hut! This function allows `chain`
+    // to be provided as some arbitrary kind of value and then resolved
+    // to an Array (or iterable?)
+    // Note this function does not guarantee the items within the
+    // resolved "indirection chain" (e.g. that they are all Strings);
+    // this function is very tolerant when passed an actual Array, and
+    // neither examines its children nor performs any flattening
+    
+    // Handle `null`, empty string
+    if (!chain) chain = [];
+    
+    // Strings beginning with a "funky" character are split by that
+    // character, otherwise they are split by "."; any empty cmps are
+    // filtered out
+    if (chain?.constructor === String)
+      chain = ('./>-+='.has(chain[0]) ? chain.slice(1).split(chain[0]) : chain.split('.')).sift();
+    
+    /// {DEBUG=
+    if (chain?.constructor !== Array) throw Error(`Api: chain must resolve to Array; got ${getFormName(chain)}`).mod({ chain });
+    /// =DEBUG}
+    
+    return chain;
+    
+  },
   denumerate: (obj, prop) => C.def(obj, prop, { enumerable: false, value: obj[prop] }),
   formatAnyValue: val => { try { return valToJson(val); } catch (err) { return '<unformattable>'; } },
   valToJson: JSON.stringify,
@@ -1201,13 +1225,18 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
     },
     init() {},
     access: C.noFn('access', arg => {}),
-    seek(...args) {
+    seek(chain, noSecondArg) {
+      
+      /// {DEBUG=
+      if (noSecondArg) throw Error(`Provide 1 arg`);
+      /// =DEBUG}
       
       let val = this;
-      for (let arg of args) {
-        if (isForm(val, Promise)) val = val.then(v => Form.tryAccess(v, arg));
-        else if (val)             val = Form.tryAccess(val, arg);
-        else                      { val = null; break; }
+      for (let pc of resolveChain(chain)) {
+        if (!val) { val = null; break; }
+        val = (val.constructor === Promise.Native)
+          ? val.then(v => Form.tryAccess(v, pc))
+          : Form.tryAccess(val, pc);
       }
       return val;
       
@@ -1219,12 +1248,13 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
     
     // Ansi red
     $separator: '\u0010', //'\u22b3', //'\u25b8', // '\u00bb', //'\u25bb', //'\u25b7', //'\u25b8', //'\u2192', //'\u25b7',
-    $components: str => str.split(Form.sep).slice(1),
     
     init() {},
     
     /// {DEBUG=
     desc: C.noFn('desc'),
+    exists: C.noFn('exists'),
+    getUri: C.noFn('getUri'),
     getContent: C.noFn('getContent'),
     setContent: C.noFn('setContent'),
     getContentType: C.noFn('getContentType'),
@@ -1233,6 +1263,7 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
       // Generator returning [ key, Keep(...) ] entries, where
       // `this.access(key)` is expected to return the same Keep(...)
     }),
+    streamable: C.noFn('streamable'),
     getHeadPipe: C.noFn('getHeadPipe'), // The "head" precedes the content; it allows piping *into* the Keep
     getTailPipe: C.noFn('getTailPipe') // The "tail" comes after the conent; it allows piping *out of* the Keep
     /// =DEBUG}

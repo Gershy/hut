@@ -59,11 +59,10 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       // included within the html response (the initial html and sync
       // data will always arrive together)
       
-      let initSyncTell = src.consumePendingSync({ fromScratch: true });
-      gsc({ initSyncTell });
+      let initComm = src.consumePendingSync({ fromScratch: true });
       
       let roomScript = (room, loadType='async') => {
-        let src = url({ path: `${this.prefix}.room`, query: { room } });
+        let src = uri({ path: `${this.prefix}.room`, query: { room } });
         return `<script ${loadType} src="${src}" data-room="${room}"></script>`;
       };
       
@@ -81,7 +80,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
             <meta charset="utf-8">
             <title>${this.name.split('.').slice(-1)[0].upper()}</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <link rel="shortcut icon" type="image/x-icon" href="${url({ path: this.prefix + '.icon' })}">
+            <link rel="shortcut icon" type="image/x-icon" href="${uri({ path: this.prefix + '.icon' })}">
             <style>
               html, body, body * {
                 position: relative; display: flex;
@@ -109,7 +108,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
             ${protocolRooms.toArr(n => roomScript(n, 'defer')).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
             ${hut.knownRoomDependencies.toArr(n => roomScript(n, 'async')).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
 
-            <link rel="stylesheet" type="text/css" href="${url({ path: this.prefix + '.css' })}">
+            <link rel="stylesheet" type="text/css" href="${uri({ path: this.prefix + '.css' })}">
             
             <script>Object.assign(global,{rawConf:JSON.parse('${valToJson({
               
@@ -119,7 +118,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
               ...belowConf,
               ageMs: getMs(),
               utcMs: getMs(),
-              initSyncTell
+              initComm
               
             }).replace(/[\\']/g, '\\$&') /* The payload will be single-quoted, so escape it appropriately */ }')})</script>
             
@@ -137,11 +136,8 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       // TODO: Watch out for traversal with room name??
       // TODO: Parameterize debug??
       
-      if (!isForm(msg?.room, String))
-        return reply(Error(`Api: "room" must be String; got ${getFormName(msg?.room)}`));
-      
-      if (!/^[a-zA-Z0-9]([a-zA-Z0-9.])*$/.test(msg.room))
-        return reply(Error(`Api: illegal room name: "${msg.room}"`));
+      if (!isForm(msg?.room, String)) throw Error(`Api: "room" must be String; got ${getFormName(msg?.room)}`);
+      if (!/^[a-zA-Z0-9]([a-zA-Z0-9.])*$/.test(msg.room)) throw Error(`Api: illegal room name: "${msg.room}"`);
       
       try {
         reply(await hut.getCompiledKeep('below', msg.room));
@@ -267,7 +263,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
             <meta charset="utf-8">
             <title>${this.name.split('.').slice(-1)[0].upper()}</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <link rel="shortcut icon" type="image/x-icon" href="${url({ path: this.prefix + '.icon' })}">
+            <link rel="shortcut icon" type="image/x-icon" href="${uri({ path: this.prefix + '.icon' })}">
             <style>
               body, html { padding: 0; margin: 0; }
               body { margin: 2px; text-align: center; }

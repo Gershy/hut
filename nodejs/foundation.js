@@ -169,7 +169,7 @@ let RoomLoader = form({ name: 'RoomLoader', props: (forms, Form) => ({
     
     // The file executed and defined `global.room[name]` to be a
     // function; return a call to that function!
-    return Object.assign(global.rooms[name], { offsets })();
+    return Object.assign(global.rooms[name], { offsets })(this.srcKeep.access(namePcs));
     
   },
   async getCompiledKeep(name, { bearing='above', debug=true, ...opts }) {
@@ -849,43 +849,9 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       
       init(map) { Object.assign(this, { map: Object.plain(map) }); },
       access(prop) {
-        
         if (!this.map[prop]) throw Error(`Api: invalid ${getFormName(this)} Slot: "${prop}"`);
         return this.map[prop];
-        
       }
-      
-    })});
-    let StaticKeep = form({ name: 'StaticKeep', has: { Keep }, props: (forms, Form) => ({
-      
-      init({ keep }) {
-        
-        Object.assign(this, { keep, hutMap: Map(/* Hut(...) -> StaticHutKeep */) });
-        
-      },
-      access(hut) {
-        
-        // TODO: Really we want to make sure `hut` is a Hut; blacklist
-        // approach is not the best here (only doing it because it's
-        // awkward to require the "hut" Room at this stage)
-        for (let Form of [ String, Array, Object ]) throw Error(`Api: access param should be Hut (got ${Form.name})`);
-        
-        let mapped = this.hutMap.get(hut);
-        if (!mapped) this.hutMap.set(hut, mapped = Form.StaticHutKeep(hut));
-        return mapped;
-        
-      },
-      
-      $StaticHutKeep: form({ name: 'StaticHutKeep', has: { Endable, Keep }, props: (forms, Form) => ({
-        
-        init(hut) {
-          
-          Object.assign(this, { hut });
-          // TODO: ...
-          
-        }
-        
-      })})
       
     })});
     
@@ -897,32 +863,26 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       'file:repo': hutKeep,
       'file:mill': hutKeep.seek('mill'),
       'file:code:src': hutKeep.seek('room'),
-      'file:code:cmp': hutKeep.seek('mill', 'cmp'),
-      
-      'asset': StaticKeep({ keep: hutKeep })
+      'file:code:cmp': hutKeep.seek('mill.cmp')
       
     });
     
-    global.keep = (...chain) => {
+    global.keep = (chain) => {
       
-      if (chain.length === 1 && isForm(chain[0], String) && chain[0].hasHead('[')) {
+      if (chain?.constructor === String && chain.hasHead('[')) {
         
-        // Note that "\\" produces a single backslash in single-quotes,
-        // and two such backslashes are needed to additionally escape
+        // Note that "\\" produces a literal backslash in single-quotes,
+        // and two literal backslashes are needed to additionally escape
         // a single backslash within regex; hence "\" x 4
-        let pcs = chain[0].split(RegExp(`(?:[/\\\\]|->|${Keep.separator})+`));
+        let pcs = chain.split(RegExp(`(?:[/\\\\]|->|${Keep.separator})+`));
         if (!pcs[0].hasTail(']')) throw Error(`Api: invalid KeepTerm "${chain[0]}"`);
         
         pcs[0] = pcs[0].slice(1, -1);
         chain = pcs;
         
-      } else {
-        
-        chain = chain.map(v => isForm(v, String) ? v.split('.') : v).flat(Infinity);
-        
       }
       
-      return rootKeep.seek(...chain);
+      return rootKeep.seek(chain);
       
     };
     
@@ -1534,7 +1494,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
             isHere: false,
             isAfar: true,
             desc: () => `AnonHut(${session.netAddr})`,
-            actOnComm: (comm) => aboveHut.doCommand(comm)
+            actOnComm: (comm) => aboveHut.doCommand(comm) // Anon Comms always handled by AboveHut
           };
           hut.Hut.prototype.tell.call(anonHut, {
             // Note that `hut.BelowHut.prototype.tell` would trigger
