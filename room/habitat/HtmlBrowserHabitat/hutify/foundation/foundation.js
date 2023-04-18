@@ -71,8 +71,11 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   window.evt('blur', () => cl.remove('focus'));
   
   let HttpKeep = form({ name: 'HttpKeep', has: { Keep }, props: (forms, Form) => ({
-    init(chain) { Object.assign(this, { chain }); },
-    getUri() {
+    init(uri) {
+      Object.assign(this, { uri });
+    },
+    getUri() { return this.uri;
+      
       let chain = this.chain;
       if (chain?.constructor === Array) {
         // TODO: What if chain contains a literal "/"??????
@@ -81,13 +84,25 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
       return uri({ path: 'asset', query: { chain } });
     },
   })});
+  let seenHttpKeeps = Map();
   
   global.getMs = () => performance.timeOrigin + performance.now();
-  global.keep = chain => HttpKeep(resolveChain(chain));
+  global.keep = chain => {
+    
+    chain = resolveChain(chain);
+    if (chain?.constructor === Array) chain = `/${chain.join('/')}`;
+    if (chain?.constructor !== String) throw Error(`Api: chain must resolve to String; got ${getFormName(chain)}`);
+    
+    if (!seenHttpKeeps.has(chain)) {
+      seenHttpKeeps.set(chain, HttpKeep( uri({ path: 'asset', query: { chain } }) ));
+    }
+    return seenHttpKeeps.get(chain);
+    
+  };
   global.conf = (...chain) => {
     
     // Resolve nested Arrays and period-delimited Strings
-    chain = chain.map(v => isForm(v, String) ? v.split('.').filter(Boolean) : v).flat(Infinity);
+    chain = chain.map(v => isForm(v, String) ? v.split('.').sift() : v).flat(Infinity);
     
     let ptr = global.rawConf;
     for (let pc of chain) {
@@ -103,7 +118,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     let { inline=false, therapist=false } = global.rawConf.subcons[term]?.output ?? {};
     if (!inline) return;
     
-    args = args.map(arg => isForm(arg, Function) ? arg() : arg).filter(Boolean);
+    args = args.map(arg => isForm(arg, Function) ? arg() : arg).sift();
     if (!args.length) return;
     console.log(
       `%c${getDate().padTail(80, ' ')}\n${sc.term.padTail(80, ' ')}`,

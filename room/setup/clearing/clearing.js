@@ -111,6 +111,9 @@ Object.assign(global, {
     },
     merge(o) {
       for (let [ k, v ] of o) {
+        // `skip` can be passed to remove properties
+        if (v === skip) { delete this[k]; continue; }
+        
         // Incoming non-Object properties are simple
         if (v?.constructor !== Object) { this[k] = v; continue; }
         
@@ -863,9 +866,9 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     // to be a fundamental feature of Hut! This function allows `chain`
     // to be provided as some arbitrary kind of value and then resolved
     // to an Array (or iterable?)
-    // Note this function does not guarantee the items within the
-    // resolved "indirection chain" (e.g. that they are all Strings);
-    // this function is very tolerant when passed an actual Array, and
+    // Note this function says nothing about the items in the resolved
+    // "indirection chain" (e.g. that they are all Strings); this
+    // function is very tolerant when passed an actual Array, and
     // neither examines its children nor performs any flattening
     
     // Handle `null`, empty string

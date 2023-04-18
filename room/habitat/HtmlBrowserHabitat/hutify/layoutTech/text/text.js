@@ -44,14 +44,11 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.text'] = () => ({
     
     // TODO: This is really more "anchoring" than "alignment"
     Object.assign(span.style, {
-      
       fwd:     { textAlign: 'left',   marginRight: 'auto', marginBottom: 'auto' },
       bwd:     { textAlign: 'right',  marginLeft: 'auto', marginBottom: 'auto' },
       mid:     { textAlign: 'center', margin: 'auto' },
-      justify: { textAlign: 'center', margin: 'auto' }
-      
+      justify: { textAlign: 'center', margin: 'auto' },
     }[layout.align]);
-    
     
     let { h, v, line } = layout.spacing;
     if (h) Object.assign(real.node.style, { paddingLeft: h, paddingRight: h });

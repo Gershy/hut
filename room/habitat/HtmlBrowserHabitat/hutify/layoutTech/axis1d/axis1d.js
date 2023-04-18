@@ -1,7 +1,5 @@
 global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.axis1d'] = () => ({
-  install: (real, layout, cleanupTmp) => {
-    
-  },
+  install: (real, layout, cleanupTmp) => {},
   render: (real, layout) => {
     
     let axis = layout.getParam(real, 'axis');

@@ -19,24 +19,20 @@ global.rooms['reality.layout.Axis1d'] = async () => {
     },
     getKidLayouts() { return [ this.kid ]; },
     install(real) {
-      
       let tmp = Tmp();
       tmp.endWith(this.holdFacet(real, 'content'));
       return tmp;
-      
     },
     
     $Item: form({ name: 'Axis1d.Item', has: { Layout }, props: (forms, Axis1d$Item) => ({
       init(axis1d) { this.axis1d = axis1d; },
       install(real) {
-        
         let tmp = Tmp();
         let { mode, axis } = this.axis1d;
         tmp.endWith(this.holdFacet(real, 'x'));
         tmp.endWith(this.holdFacet(real, 'y'));
         if (this.axis1d.mode === 'stretch') tmp.endWith(this.holdFacet(real, axis === 'x' ? 'w' : 'h'));
         return tmp;
-        
       }
     })})
     

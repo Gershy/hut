@@ -31,23 +31,23 @@ global.rooms['chess2'] = async chess2Keep => {
   let ts00 = 'calc(80% + 0.85vmin)';
   let tsP1 = 'calc(90% + 1.00vmin)';
   let lay = {
-    text: (text, textSize=ts00, align='mid') => [
-      { form: 'Text', size: textSize, align, text, spacing: { h: '1.2vmin', v: '0.75vmin' } },
+    text: (text, size=ts00, align='mid') => [
+      { form: 'Text', size, align, text, spacing: { h: '1.2vmin', v: '0.75vmin' } },
     ],
-    textFwd: (text, textSize=ts00) => [ ...lay.text(text, textSize, 'fwd'), { form: 'Geom', w: '100%' } ],
-    link: (keepText, uri, { textSize=ts00, protocol=null, mode='separate' }={}) => [
+    textFwd: (text, size=ts00) => [ ...lay.text(text, size, 'fwd'), { form: 'Geom', w: '100%' } ],
+    link: (keepText, uri, { size=ts00, protocol=null, mode='separate' }={}) => [
       { form: 'Keep', protocol, uri, keepText, mode },
-      { form: 'Decal', text: { colour: '#c4d2ff', size: textSize } }
+      { form: 'Decal', text: { colour: '#c4d2ff', size } }
     ],
     gap: (amt='1em') => [{ form: 'Geom', h: amt }],
-    button: (text, pressFn, textSize=ts00) => [
-      { form: 'Text', textSize, text, spacing: { h: '1.5vmin', v: '1vmin' } },
+    button: (text, pressFn, size=ts00) => [
+      { form: 'Text', size, text, spacing: { h: '1.5vmin', v: '1vmin' } },
       { form: 'Decal', colour: '#bcbcd29c', border: { ext: '2px', colour: '#00000020' } },
       { form: 'Press', pressFn }
     ],
     input: (prompt, textInputSrc) => [
       { form: 'Geom', w: '10em' },
-      { form: 'TextInput', textSize: ts00, textInputSrc, prompt: 'Code?', gap: { vert: '1vmin' } },
+      { form: 'TextInput', size: ts00, textInputSrc, prompt: 'Code?', spacing: { h: '1.5vmin', v: '1vmin' } },
       { form: 'Decal', colour: '#a0a0ff30' }
     ]
   };
@@ -696,7 +696,7 @@ global.rooms['chess2'] = async chess2Keep => {
         learnReal.addReal('item', lay.textFwd('- If both players pass simultaneously the game ends in a draw'));
         learnReal.addReal('item', lay.gap());
         learnReal.addReal('item', lay.text('Chess2 by Gershom Maes'));
-        learnReal.addReal('item', lay.link('(Hut also by Gershom Maes)', 'https://github.com/Gershy/hut', { textSize: tsM2 }));
+        learnReal.addReal('item', lay.link('(Hut also by Gershom Maes)', 'https://github.com/Gershy/hut', { size: tsM2 }));
         learnReal.addReal('item', lay.gap());
         learnReal.addReal('item', lay.button('Click to go back', () => changeStatusAct.act({ status: 'chill' })));
         learnReal.addReal('item', lay.gap('3em'));
@@ -816,7 +816,7 @@ global.rooms['chess2'] = async chess2Keep => {
           let holderReal = (colour === 'white') ? whitePlayerHolderReal : blackPlayerHolderReal;
           let playerReal = dep(holderReal.addReal('c2.player', { text: term }, [
             { form: 'Geom', z: 1, w: '100%', h: '100%' },
-            { form: 'Text', align: 'mid' }
+            { form: 'Text', align: 'mid', size: ts00 }
           ]));
           
           // Show when we're waiting for our Opponent to move
@@ -950,12 +950,12 @@ global.rooms['chess2'] = async chess2Keep => {
             ]));
             let passReal = dep(myPlayerHolderReal.addReal('c2.pass', [
               { form: 'Geom', shape: 'oval', anchor: 'br', z: 1, w: '10vmin', h: '10vmin' },
-              { form: 'Text', textSize: ts00, text: 'Pass' },
+              { form: 'Text', size: ts00, text: 'Pass' },
               { form: 'Decal', colour: '#ffffff20' }
             ]));
             let resignReal = dep(myPlayerHolderReal.addReal('c2.resign', [
               { form: 'Geom', shape: 'oval', anchor: 'br', z: 1, w: '10vmin', h: '10vmin', y: '10vmin' },
-              { form: 'Text', textSize: ts00, text: 'Resign' },
+              { form: 'Text', size: ts00, text: 'Resign' },
               { form: 'Decal', colour: '#ff808020', windowing: false }
             ]));
             dep(TimerSrc({ ms: 500, num: Infinity })).route(() => {
@@ -1182,8 +1182,8 @@ global.rooms['chess2'] = async chess2Keep => {
           if (type === 'queue') nodeQueue(dep, paneReal, { player, status, changeStatusAct });
           if (type === 'match') dep.scp(status, 'c2.matchPlayer', (matchPlayer, dep) => {
             
-            //paneReal.mod({ w: '100%', h: '100%' });
-            //dep(() => paneReal.mod({ w: '80%', h: '80%' }));
+            paneReal.mod({ w: '100%', h: '100%' });
+            dep(() => paneReal.mod({ w: skip, h: skip }));
             nodeMatch(dep, paneReal, { matchPlayer, changeStatusAct });
             
           });

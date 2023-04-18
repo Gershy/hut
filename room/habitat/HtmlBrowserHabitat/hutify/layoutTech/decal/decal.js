@@ -1,38 +1,61 @@
-global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.decal'] = () => ({
-  install: (real, layout, cleanupTmp) => {},
-  render: (real, layout) => {
-    
-    let style = real.node.style;
-    for (let [ k, v ] of layout.decals) {
-      if      (k === 'colour')    style.backgroundColor = v;
-      else if (k === 'opacity')   style.opacity = `${k}`;
-      else if (k === 'windowing') style.overflow = v ? 'hidden' : 'visible';
-      else if (k === 'border') style.boxShadow = `inset 0 0 0 ${v?.ext ?? 0} ${v?.colour ?? '#0000'}`;
-      else if (k === 'text') {
-        if (v?.colour) style.color = v.colour;
-        if (v?.size)   style.fontSize = v.size;
+global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.decal'] = () => {
+  
+  let mapTransitionProps = Object.plain({
+    colour:        [ 'background-color' ],
+    border:        [ 'box-shadow' ],
+    opacity:       [ 'opacity' ],
+    scale:         [ 'transform' ],
+    rotate:        [ 'transform' ],
+    x:             [ 'left', 'right' ],
+    y:             [ 'top', 'bottom' ],
+    w:             [ 'width' ],
+    h:             [ 'height' ],
+    'text.colour': [ 'color' ],
+    'text.size':   [ 'font-size' ],
+  });
+  let mapTransitionCurve = Object.plain({
+    linear: 'linear',
+    gentle: 'ease-in-out',
+    accel: 'ease-in',
+    decel: 'ease-out'
+  });
+  
+  return {
+  
+    install: (real, layout, cleanupTmp) => {},
+    render: (real, layout) => {
+      
+      let style = real.node.style;
+      let { transition, ...decals } = layout.getDecals(real);
+      
+      for (let [ k, v ] of decals) {
+        if      (k === 'border')    style.boxShadow = `inset 0 0 0 ${v?.ext ?? '0'} ${v?.colour ?? '#0000'}`;
+        else if (k === 'colour')    style.backgroundColor = v;
+        else if (k === 'opacity')   style.opacity = `${k}`;
+        else if (k === 'text') {
+          if (v?.colour) style.color = v.colour;
+          if (v?.size)   style.fontSize = v.size;
+        }
+        else if (k === 'windowing') style.overflow = v ? 'hidden' : 'visible';
       }
+      
+      if (transition) {
+        
+        let trns = [];
+        for (let [ k, props ] of Object.entries(mapTransitionProps)) {
+          if (!transition.has(k)) continue;
+          for (let prop of props) trns.push({ prop, trn: transition[k] });
+        }
+        
+        if (trns.length) real.node.style.transition = trns
+          .map(({ prop, trn: { ms=1000, curve='linear', delayMs=0 } }) => {
+            return `${prop} ${ms}ms ${mapTransitionCurve[curve]} ${delayMs}ms`;
+          });
+        
+      }
+      
     }
     
-    // $propNames: 'border,colour,opacity,text,transform,transition,windowing'.split(','),
-    // $cssPropMap: Object.plain({
-    //   'colour': [ 'background-color' ],
-    //   'border': [ 'box-shadow' ],
-    //   'opacity': [ 'opacity' ],
-    //   'scale': [ 'transform' ],
-    //   'x': [ 'left', 'margin-left', 'margin-right' ],
-    //   'y': [ 'top', 'margin-top', 'margin-bottom' ],
-    //   'w': [ 'width' ],
-    //   'h': [ 'height' ],
-    //   'text.colour': [ 'color' ],
-    //   'text.size': [ 'font-size' ]
-    // }),
-    // $cssAnimCurveMap: Object.plain({
-    //   linear: 'linear',
-    //   gentle: 'ease-in-out',
-    //   accel: 'ease-in',
-    //   decel: 'ease-out'
-    // }),
+  };
     
-  }
-});
+};
