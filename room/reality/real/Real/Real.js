@@ -19,7 +19,7 @@ global.rooms['reality.real.Real'] = () => form({ name: 'Real', has: { Tmp }, pro
       node
     });
     
-    if (!node) this.node = tech.makeNode(this);
+    if (!node) tech.makeNode(this);
     
     for (let layout of layouts) this.addLayout(layout);
     
@@ -34,8 +34,15 @@ global.rooms['reality.real.Real'] = () => form({ name: 'Real', has: { Tmp }, pro
   addReal(givenName, ...args /* ... [ ... layouts ... ] ... { ... params ... } ...  */) {
     
     let [ prefix, name ] = givenName.has('.') ? givenName.cut('.') : [ this.prefix, givenName ];
-    let params = args.find(v => isForm(v, Object)).val ?? {};
+    let rawParams = args.find(v => isForm(v, Object)).val ?? {};
     let layouts = args.find(v => isForm(v, Array)).val ?? [];
+    
+    // Params with capital 1st letters represent Layouts
+    let { params={}, layoutParams={} } = rawParams.categorize((v, k) => {
+      return (k[0].lower() === k[0]) ? 'params' : 'layoutParams';
+    });
+    
+    if (!layoutParams.empty()) layouts = [ ...layouts, ...layoutParams.toArr((args, form) => ({ form, ...args })) ];
     
     let kid = Real({ par: this, tech: this.tech, prefix, name, params, layouts });
     kid.tree = this.tree?.kidTree(kid) ?? null;
@@ -56,24 +63,24 @@ global.rooms['reality.real.Real'] = () => form({ name: 'Real', has: { Tmp }, pro
           tmp.endWith(kid.addLayout(kidLay));
     
     this.kids.add(kid);
-    this.tech.attachKid(this, kid);
-    kid.endWith(() => {
-      this.tech.removeKid(kid);
-      this.kids.rem(kid);
-    });
+    kid.endWith(() => this.kids.rem(kid));
     
     return kid;
     
   },
-  addLayout(layout) {
+  addLayout(layout, args=null) {
     
     /// {DEBUG=
     let trace = Error('trace');
     /// =DEBUG}
     
+    // Allow:
+    //    | myReal.addLayout('Geom', { w: '20px', h: '50px' });
+    if (isForm(layout, String)) layout = { form: layout, ...args };
+    
     // Convert from `{ form: 'LayForm', ...args }` -> `LayForm(args)`
     let formName = null;
-    if (isForm(layout, Object)) {
+    if (layout?.constructor === Object) {
       
       let { form, ...args } = layout;
       if (form?.constructor !== String) throw Error(`Api: "form" must be String; got ${getFormName(form)}`);
@@ -94,7 +101,7 @@ global.rooms['reality.real.Real'] = () => form({ name: 'Real', has: { Tmp }, pro
     } else {
       
       /// {DEBUG=
-      if (!hasForm(layout, Real.Layout)) throw Error(`Api: provided value isn't interperable as a Layout: ${getFormName(layout)}`);
+      if (!hasForm(layout, Real.Layout)) throw Error(`Api: provided value isn't interperable as a Layout: ${getFormName(layout)}`).mod({ layout });
       /// =DEBUG}
       formName = getFormName(layout);
       
@@ -133,10 +140,21 @@ global.rooms['reality.real.Real'] = () => form({ name: 'Real', has: { Tmp }, pro
     
   },
   render(someKindOfDelta) {
+    
     this.tech.reset(this);
+    
     for (let tmp of this.layoutTmps)
       if (tmp.layout.constructor !== Promise.Native)
         tmp.layout.techRender(this, tmp);
+    
+    if (this.off()) this.tech.killInteractivity(this);
+    
+  },
+  
+  cleanup() {
+    let { endDelayMs=0 } = this.params;
+    if (!endDelayMs) this.par.tech.dropNode(this);
+    else             setTimeout(() => this.par.tech.dropNode(this), endDelayMs);
   },
   
   $Tree: form({ name: 'Tree', props: (forms, Tree) => ({

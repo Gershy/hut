@@ -1,4 +1,4 @@
-global.rooms['test2'] = async foundation => {
+global.rooms['internal.test.test2'] = async foundation => {
   
   let rooms = await foundation.getRooms([
     'Hinterland',
@@ -7,7 +7,7 @@ global.rooms['test2'] = async foundation => {
   
   let { Hinterland, HtmlBrowserHabitat } = rooms;
   
-  return Hinterland('t2', 'test2', {
+  return Hinterland('test2', {
     
     habitats: [ HtmlBrowserHabitat() ],
     above: async (hut, appRec, real, dep) => {

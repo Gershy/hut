@@ -32,6 +32,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.text'] = () => ({
       fontSize: layout.getParam(real, 'size') ?? '',
       fontWeight: layout.style.has('bold') ? 'bold' : '',
       fontStyle: layout.style.has('italic') ? 'italic' : '',
+      textDecoration: layout.style.has('underline') ? 'underline' : '',
       
       // Handle overflow with ellipsis
       overflow: 'hidden',

@@ -31,13 +31,14 @@ global.rooms['chess2'] = async chess2Keep => {
   let ts00 = 'calc(80% + 0.85vmin)';
   let tsP1 = 'calc(90% + 1.00vmin)';
   let lay = {
-    text: (text, size=ts00, align='mid') => [
-      { form: 'Text', size, align, text, spacing: { h: '1.2vmin', v: '0.75vmin' } },
-    ],
-    textFwd: (text, size=ts00) => [ ...lay.text(text, size, 'fwd'), { form: 'Geom', w: '100%' } ],
-    link: (keepText, uri, { size=ts00, protocol=null, mode='separate' }={}) => [
-      { form: 'Keep', protocol, uri, keepText, mode },
-      { form: 'Decal', text: { colour: '#c4d2ff', size } }
+    text: (text, size=ts00, align='mid') => ({
+      Text: { size, align, text, spacing: { h: '1.2vmin', v: '0.75vmin' } }
+    }),
+    textFwd: (text, size=ts00) => ({ ...lay.text(text, size, 'fwd'), Geom: { w: '100%' } }),
+    link: (text, uri, { size=ts00, mode='spawn' }={}) => [
+      { form: 'Keep', uri, mode },
+      { form: 'Text', text, size, style: 'underline' },
+      { form: 'Decal', text: { colour: '#c4d2ff' } }
     ],
     gap: (amt='1em') => [{ form: 'Geom', h: amt }],
     button: (text, pressFn, size=ts00) => [
@@ -637,10 +638,11 @@ global.rooms['chess2'] = async chess2Keep => {
         
         /// {BELOW=
         dep(TimerSrc({ ms: 500 })).route(() => makePlayerAct.act(), 'prm');
-        let playerlessReal = dep(real.addReal('pane', [
-          { form: 'Geom', anchor: 'mid' },
-          { form: 'Axis1d', axis: 'y', mode: 'compactCenter' },
-        ]));
+        let playerlessReal = dep(real.addReal('pane', {
+          Geom: { anchor: 'mid' },
+          Axis1d: { axis: 'y', mode: 'compactCenter' }
+        }));
+        
         playerlessReal.addReal('c2.title', lay.text('Entering Chess2...', tsP1));
         playerlessReal.addReal('c2.title', lay.link('(Stuck? Try clicking here...)', '/?hid=reset', { mode: 'replace', size: tsM2 }));
         /// =BELOW}
@@ -649,10 +651,10 @@ global.rooms['chess2'] = async chess2Keep => {
       let nodeChill = (dep, real, { player, status, changeStatusAct }) => {
         
         /// {BELOW=
-        let chillReal = dep(real.addReal('chill', [
-          { form: 'Geom', anchor: 'mid' },
-          { form: 'Axis1d', axis: 'y', dir: '+', mode: 'compactCenter' }
-        ]));
+        let chillReal = dep(real.addReal('chill', {
+          Geom: { anchor: 'mid' },
+          Axis1d: { axis: 'y', dir: '+', mode: 'compactCenter' }
+        }));
         chillReal.addReal('info', lay.text('You\'re playing Chess2!', tsP1));
         chillReal.addReal('info', lay.text(`Opponents will know you as "${player.getValue('term')}"`));
         let numPlayersReal = chillReal.addReal('info', lay.text());
@@ -696,9 +698,9 @@ global.rooms['chess2'] = async chess2Keep => {
         learnReal.addReal('item', lay.textFwd('- If both players pass simultaneously the game ends in a draw'));
         learnReal.addReal('item', lay.gap());
         learnReal.addReal('item', lay.text('Chess2 by Gershom Maes'));
-        learnReal.addReal('item', lay.link('(Hut also by Gershom Maes)', 'https://github.com/Gershy/hut', { size: tsM2 }));
+        learnReal.addReal('item', lay.link('(Hut framework also by Gershom Maes)', 'https://github.com/Gershy/hut', { size: tsM2 }));
         learnReal.addReal('item', lay.gap());
-        learnReal.addReal('item', lay.button('Click to go back', () => changeStatusAct.act({ status: 'chill' })));
+        learnReal.addReal('item', lay.button('Go back', () => changeStatusAct.act({ status: 'chill' })));
         learnReal.addReal('item', lay.gap('3em'));
         
       };
@@ -827,6 +829,8 @@ global.rooms['chess2'] = async chess2Keep => {
           
         });
         
+        /// {BELOW=
+        
         let tileDecals = {
           white: { colour: '#9a9abb', border: { ext: '1px', colour: '#c0c0d8' } },
           black: { colour: '#8989af', border: { ext: '1px', colour: '#c0c0d8' } }
@@ -842,22 +846,34 @@ global.rooms['chess2'] = async chess2Keep => {
           ]);
         }
         
+        /// =BELOW}
+        
         // Render pieces
         let pieceControls = dep(MemSrc.TmpM());
         dep.scp(match, 'c2.piece', (piece, dep) => {
           
-          let pieceReal = dep(boardReal.addReal('c2.piece', tileCoord(0, 0), [
-            { form: 'Geom', anchor: 'tl', shape: 'oval', w: tileVal(1), h: tileVal(1) },
-            { form: 'Image' },
-            { form: 'Transform' }, // TODO: Roll this into Decal (or Geom)?
-            { form: 'Decal', transition: {
+          /// {BELOW=
+          
+          let dbg = (Math.random() < 0.1) ? gsc : ()=>{};
+          
+          let pieceReal = dep(boardReal.addReal('c2.piece', {
+            
+            Geom: { anchor: 'tl', shape: 'oval', w: tileVal(1), h: tileVal(1) },
+            Image: {},
+            Transform: {},
+            Decal: { transition: {
               opacity: { ms: 400, curve: 'linear', delayMs: 200 },
               scale: { ms: 400, curve: 'linear', delayMs: 200 },
-              x: { ms: 400, curve: 'decel' },
-              y: { ms: 400, curve: 'decel' }
-            }}
-          ]));
-          pieceReal.mod({ endDelayMs: 1000, keep: null, rotate: (myColour === 'white') ? 0 : -0.5 });
+              loc: { ms: 400, curve: 'decel' },
+            }},
+            
+            ...tileCoord(0, 0), // x, y
+            endDelayMs: 1000,
+            keep: null,
+            rotate: (myColour === 'white') ? 0 : -0.5,
+            opacity: 1
+            
+          }));
           
           dep(piece.valueSrc.route(() => {
             
@@ -867,7 +883,7 @@ global.rooms['chess2'] = async chess2Keep => {
             
             pieceReal.mod({
               ...tileCoord(col, row),
-              keep: hut.getKeep([ 'pieces', fp ]), 
+              keep: hut.getKeep(`/pieces/${fp}`), 
               colour: (wait > 0) ? 'rgba(255, 110, 0, 0.4)' : null
             });
             
@@ -876,6 +892,8 @@ global.rooms['chess2'] = async chess2Keep => {
           
           let pieceControl = dep(Tmp({ piece, pieceReal }));
           pieceControls.mod(pieceControl);
+          
+          /// =BELOW}
           
         });
         
@@ -1014,10 +1032,8 @@ global.rooms['chess2'] = async chess2Keep => {
                   { form: 'Geom', shape: 'oval', anchor: 'mid', z: -1 },
                   { form: 'Decal', transition: {
                     colour: { ms: 2000, curve: 'linear' },
-                    x:      { ms: 2000, curve: 'linear' },
-                    y:      { ms: 2000, curve: 'linear' },
-                    w:      { ms: 2000, curve: 'linear' },
-                    h:      { ms: 2000, curve: 'linear' }
+                    loc:    { ms: 2000, curve: 'linear' },
+                    size:   { ms: 2000, curve: 'linear' }
                   }}
                 ]));
                 

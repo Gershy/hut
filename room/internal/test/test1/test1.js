@@ -1,4 +1,4 @@
-global.rooms['test1'] = async () => {
+global.rooms['internal.test.test1'] = async () => {
   
   // This single file fully defines the "test1" Hut app
   

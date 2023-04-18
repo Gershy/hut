@@ -8,8 +8,10 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.decal'] = () => {
     rotate:        [ 'transform' ],
     x:             [ 'left', 'right' ],
     y:             [ 'top', 'bottom' ],
+    loc:           [ 'left', 'right', 'top', 'bottom' ],
     w:             [ 'width' ],
     h:             [ 'height' ],
+    size:          [ 'width', 'height' ],
     'text.colour': [ 'color' ],
     'text.size':   [ 'font-size' ],
   });
@@ -31,7 +33,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.decal'] = () => {
       for (let [ k, v ] of decals) {
         if      (k === 'border')    style.boxShadow = `inset 0 0 0 ${v?.ext ?? '0'} ${v?.colour ?? '#0000'}`;
         else if (k === 'colour')    style.backgroundColor = v;
-        else if (k === 'opacity')   style.opacity = `${k}`;
+        else if (k === 'opacity')   style.opacity = `${v}`;
         else if (k === 'text') {
           if (v?.colour) style.color = v.colour;
           if (v?.size)   style.fontSize = v.size;

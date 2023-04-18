@@ -11,6 +11,9 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   let hutifyPath = 'habitat.HtmlBrowserHabitat.hutify';
   
   Error.prepareStackTrace = (err, callSites) => {
+    
+    if (err?.constructor === SyntaxError) return;
+    
     let trace = callSites.map(cs => {
       
       // https://v8.dev/docs/stack-trace-api
@@ -44,6 +47,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
       
     });
     return `${err.message}{HUTTRACE=${valToJson(trace)}=HUTTRACE}`;
+    
   };
   
   let onErr = evt => {
@@ -238,12 +242,16 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
       makeNode: real => {
         let fullName = `${real.prefix}.${real.name}`;
         let cssName = fullName.replace(/([^a-zA-Z0-9]+)([a-zA-Z0-9])?/g, (f, p, c) => c ? c.upper() : '');
-        let elem = document.createElement('div');
-        elem.classList.add(cssName);
-        return elem;
+        real.node = document.createElement('div');
+        real.node.classList.add(cssName);
+        real.par.node.appendChild(real.node);
+        return real.node;
       },
-      attachKid: (par, kid) => par.node.appendChild(kid.node),
-      removeKid: (kid) => kid.node.remove(),
+      dropNode: real => real.node.remove(),
+      killInteractivity: real => {
+        real.node.removeAttribute('tabIndex');
+        real.node.style.pointerEvents = 'none';
+      },
       reset: real => {
         
         let node = real.node;

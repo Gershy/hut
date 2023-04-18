@@ -14,6 +14,7 @@ global.rooms['reality.layout.Decal'] = async () => {
         return (val !== null) ? [ p, val ] : skip;
       });
     }
+    
   })});
   
 };

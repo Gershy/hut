@@ -17,12 +17,19 @@ global.rooms['setup.hut'] = async () => {
       let isExpectedError = err.message?.startsWith?.('Api: ') ?? false;
       msg.detail = isExpectedError ? err.message : 'Logic error';
       
-      // If the Error couldn't be communicated back, or if the Error was
+      /// {BELOW=
+      isExpectedError = false;
+      msg.detail = err.message;
+      /// =BELOW}
+      
+      // If the Error couldn't be communicated back or if the Error was
       // unexpected, we need awareness of it
       if (!isExpectedError) gsc(err.mod( m => ({ message: `${handlerHut.desc()} failed to handle Comm!\n${m}`, comm }) ));
       
-      // Try to reply
+      /// {ABOVE=
+      // Above should inform Below of the failure so Below can react
       comm.reply?.(err.mod({ e: msg }));
+      /// =ABOVE}
       
     },
     $commandHandlerWrapper: async (handlerHut, handlerTmp, comm) => {
