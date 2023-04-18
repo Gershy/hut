@@ -44,6 +44,6 @@ of the counter is synced for all users!
 
 This is probably the worst webapp ever, but it demonstrates the central aim of Hut: **facilitating shared experiences!**
 
-This example involved a very minor amount of configuration, and ran [out-of-the-box source code](room/test1/test1.js). The following examples will iteratively increase our understanding of both configuration, and the code that forms a Hut.
+This example involved a very minor amount of configuration, and ran [out-of-the-box source code](room/internal/test1/test1.js). The following examples will iteratively increase our understanding of both configuration, and the code that forms a Hut.
 
 *This readme is not complete yet!*

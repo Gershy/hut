@@ -1021,7 +1021,7 @@ global.rooms['record'] = async () => {
         
       } else {
         
-        this.relHandlers[key].ref();
+        this.relHandlers[key].hold();
         
       }
       

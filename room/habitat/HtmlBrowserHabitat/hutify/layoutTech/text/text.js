@@ -22,12 +22,6 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.text'] = () => ({
     
     Object.assign(real.node.style, {
       
-      // Manage `span` within the bounding of `real`, as applied by
-      // other Layouts
-      //display: 'flex',
-      //flexDirection: 'column',
-      //justifyContent: 'center',
-      
       // Apply decals
       fontSize: layout.getParam(real, 'size') ?? '',
       fontWeight: layout.style.has('bold') ? 'bold' : '',

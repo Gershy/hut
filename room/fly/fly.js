@@ -168,7 +168,7 @@ global.rooms['fly'] = async foundation => {
         
         // Attach a "fly.player" Rec to every Hut
         let kidHut = owned.m('below');
-        let termTmp = termBank.hold();
+        let termTmp = termBank.checkout();
         let player = kidHut.addRecord('fly.player', [], { term: termTmp.term, name: null, score: 0, deaths: 0 });
         let hutPlayer = kidHut.addRecord('fly.hutPlayer', [ kidHut, player ]);
         player.endWith(termTmp);

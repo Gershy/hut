@@ -930,17 +930,17 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
     off() { return !this.onn(); },
     cleanup() {},
     
-    ref() {
+    hold() {
       
-      // Note that "ref'ing" an Endable indicates that it has additional
+      // Note that "holding" an Endable indicates that it has additional
       // "ownership" - that is, other owning contexts that may try to
       // end it do not have sole authority to determine the Endable's
-      // end. We could describe ref'ing as "bolstering" or "demanding".
+      // end. We could describe holding as "bolstering" or "supporting"
       
-      if (this.off()) throw Error(`Can't ref ended ${getFormName(this)}`);
+      if (this.off()) throw Error(`Can't hold ended ${getFormName(this)}`);
       
-      // I had to decide whether the initial call to `ref` initializes
-      // "~refCount" to 1 or 2. Imagine this scenario:
+      // I had to decide whether the initial call to `hold` initializes
+      // "~holdCnt" to 1 or 2. Imagine this scenario:
       // 
       //    | let initMyEndable = () => {
       //    |   let e = initEndableSomehow();
@@ -948,22 +948,22 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
       //    |   uponSomeCondition(() => e.end());
       //    | };
       // 
-      // If "~refCount" initialized to 1 it would be necessary for
+      // If "~holdCnt" initialized to 1 it would be necessary for
       // `initMyEndable` to be aware that the `e` it is initializing is
-      // destined to be ref'd (by `doThingThatRefsEndable`). This is
-      // because `doThingThatRefsEndable` will call `e.ref()`, setting
-      // `e['~refCount'] === 1`, and then `e.end()`, decrementing
-      // `e['~refCount'] === 0` - the ref count would hit 0, and `e`
+      // destined to be held (by `doThingThatRefsEndable`). This is
+      // because `doThingThatRefsEndable` will call `e.hold)`, setting
+      // `e['~holdCnt'] === 1`, and then `e.end()`, decrementing
+      // `e['~holdCnt'] === 0` - the hold count would hit 0, and `e`
       // would fully end, which is not good for `initMyEndable` which
       // doesn't expect `e` to end from `doThingThatRefsEndable` - since
       // `initMyEndable` is the "initializer" (or "owner") of `e`. This
-      // is why setting the initial "~refCount" to 2 improves behaviour;
+      // is why setting the initial "~holdCnt" to 2 improves behaviour;
       // the "owner" of an Endable(...) never needs to know whether `e`
-      // will go on to be ref'd later. Only non-owners will be ref'ing
-      // Endables; this means the first call to `ref` increments 1 for
+      // will go on to be held later. Only non-owners will be holding
+      // Endables; this means the first call to `hold` increments 1 for
       // the non-owner's context, plus an additional 1 (total 2)
       // indicating that another context also owns the Endable!
-      this['~refCount'] = (this['~refCount'] || 1) + 1;
+      this['~holdCnt'] = (this['~holdCnt'] || 1) + 1;
       
       return this;
       
@@ -974,8 +974,8 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
       
       if (this.off()) return false;
       
-      // For ref'd Endables, prevent ending if refs still exist
-      if (this['~refCount'] && --this['~refCount'] > 0) return false;
+      // For held Endables, prevent ending if refs still exist
+      if (this['~holdCnt'] && --this['~holdCnt'] > 0) return false;
       
       C.def(this, 'onn', Form.turnOffDefProp);
       this.cleanup(); mmm(this.zzz ?? this.Form.name, -1);

@@ -103,14 +103,14 @@ global.rooms['TermBank'] = async () => {
       'wunderkind', 'youngster', 'younker', 'youth', 'xenophile'
     ],
     
-    init: function(terms=Form.stockTerms, r=random.NativeRandom()) { // TODO: global.getRootRandom()?
+    init(terms=Form.stockTerms, r=random.NativeRandom()) { // TODO: global.getRootRandom()?
       
       let [ initTerm, ...otherTerms ] = r.genShuffled(terms);
       this.termsHead = this.termsTail = { term: initTerm, next: null };
       for (let term of otherTerms) this.termsTail = this.termsTail.next = { term, next: null };
       
     },
-    hold: function() {
+    checkout() {
       
       if (!this.termsHead) throw Error(`No terms available :'(`);
       
@@ -129,12 +129,12 @@ global.rooms['TermBank'] = async () => {
       return tmp;
       
     },
-    toArr: function() {
+    toArr() {
       let ret = [], ptr = this.termsHead;
       while (ptr) { ret.add(ptr.term); ptr = ptr.next; }
       return ret;
     },
-    count: function() {
+    count() {
       let ret = 0, ptr = this.termsHead;
       while (ptr) { count++; ptr = ptr.next; }
       return ret;

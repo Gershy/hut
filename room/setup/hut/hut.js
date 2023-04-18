@@ -817,7 +817,7 @@ global.rooms['setup.hut'] = async () => {
         // Scope chain ends and `end` is called on its Follow doesn't
         // mean the BelowHut has entirely unfollowed the Record!
         let preexistingFollowTmp = allFollows[rec.uid]?.[hutUid]; // This says "the Follow of `rec` by a Hut, id'd with `hutUid`"
-        if (preexistingFollowTmp) return preexistingFollowTmp.ref();
+        if (preexistingFollowTmp) return preexistingFollowTmp.hold();
         
         // First time following `rec`!
         let followTmp = Tmp({ rec, desc: () => `FollowSingle(${rec.desc()})` });

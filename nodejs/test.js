@@ -239,34 +239,34 @@ module.exports = async () => {
       // Tmp when a new one arrives
       
       let tmp = Tmp();
-      tmp.ref();
+      tmp.hold();
       tmp.end();
-      if (tmp.off()) throw Error(`Tmp was referenced then ended, but was off (it should take end x 2 to end a Tmp ref'd once)`);
+      if (tmp.off()) throw Error(`Tmp was referenced then ended, but was off (it should take end x 2 to end a Tmp held once)`);
       
     },
     async m => { // Tmps with refs end appropriately #2
       
       let tmp = Tmp();
-      tmp.ref();
+      tmp.hold();
       tmp.end();
       tmp.end();
-      if (tmp.onn()) throw Error(`Tmp was referenced then ended twice, but was onn (ref x 1 + end x 2 should end the Tmp)`);
+      if (tmp.onn()) throw Error(`Tmp was referenced then ended twice, but was onn (hold x 1 + end x 2 should end the Tmp)`);
       
     },
     async m => { // Tmps with refs end appropriately #3
       
       let tmp = Tmp();
-      tmp.ref();
-      tmp.ref();
+      tmp.hold();
+      tmp.hold();
       tmp.end();
       tmp.end();
-      if (tmp.off()) throw Error(`Tmp referenced twice, ended twice, but was off (it should take end x 3 to end a Tmp ref'd twice)`);
+      if (tmp.off()) throw Error(`Tmp referenced twice, ended twice, but was off (it should take end x 3 to end a Tmp held twice)`);
       
     },
     async m => { // Tmps with refs end appropriately #4
       
       let tmp = Tmp();
-      for (let i = 0; i < 10; i++) tmp.ref();
+      for (let i = 0; i < 10; i++) tmp.hold();
       for (let i = 0; i < 11; i++) tmp.end();
       if (tmp.onn()) throw Error(`Tmp was referenced x 10, ended x 11, but was onn`);
       
@@ -274,7 +274,7 @@ module.exports = async () => {
     async m => { // Tmps with refs end appropriately #5
       
       let tmp = Tmp();
-      for (let i = 0; i < 10; i++) tmp.ref();
+      for (let i = 0; i < 10; i++) tmp.hold();
       for (let i = 0; i < 10; i++) tmp.end();
       if (tmp.off()) throw Error(`Tmp was referenced x 10, ended x 10, but was off`);
       

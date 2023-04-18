@@ -611,7 +611,7 @@ global.rooms['chess2'] = async chess2Keep => {
         let makePlayerAct = dep(hut.enableAction('c2.makePlayer', () => {
           
           /// {ABOVE=
-          let termTmp = termBank.hold();
+          let termTmp = termBank.checkout();
           let player = hut.addRecord('c2.player', [ chess2, hut ], { term: termTmp.term, status: 'chill' });
           
           mmm('chess2Player', +1);
