@@ -1,25 +1,21 @@
 global.rooms['Hinterland'] = async foundation => {
   
-  let rooms = await getRooms([ 'logic.Scope', 'record' ]);
-  let { Record } = rooms.record;
-  let { Scope } = rooms;
-  
+  let { record: { Record }, Scope } = await getRooms([ 'record', 'logic.Scope' ]);
   return form({ name: 'Hinterland', props: (forms, Form) => ({
     
     // Hinterland is the space in which multiple Huts interact according
     // to the rules of the AboveHut
     
-    init(roomName, params={}) {
+    init({ habitats=[], recordForms={}, above=Function.stub, below=Function.stub }) {
       
-      let { habitats=[], recordForms={} } = params;
-      let { above=Function.stub, below=Function.stub } = params;
-      if (!habitats.count()) throw Error(`Hinterland requires at least 1 habitat`);
+      /// {DEBUG=
+      if (!habitats.count()) throw Error(`Api: provide at least 1 habitat`);
+      /// =DEBUG}
       
-      Object.assign(this, { roomName, habitats, recordForms, above, below });
+      Object.assign(this, { habitats, recordForms, above, below });
       
     },
-    
-    async open({ hut, rec=hut, netIden }) {
+    async open({ prefix, hut, rec=hut, netIden }) {
       
       // TODO: Maybe here is the place to define the connection from
       // `netIden` to `hut`? I.e. that network communications to the
@@ -100,9 +96,16 @@ global.rooms['Hinterland'] = async foundation => {
       /// {ABOVE=
       
       let resolveHrecsAndFollowRecs = (follower, tmp) => {
-        if      (hasForm(tmp, Record))     { follower.followRec(tmp);     return tmp; }
-        else if (hasForm(tmp.rec, Record)) { follower.followRec(tmp.rec); return tmp.rec; }
+        
+        if      (     tmp.Form?.['~forms']?.has(Record)) { follower.followRec(tmp);     return tmp; }
+        else if (tmp.rec?.Form?.['~forms']?.has(Record)) { follower.followRec(tmp.rec); return tmp.rec; }
         return tmp;
+        
+        
+        //if      (hasForm(tmp, Record))     { follower.followRec(tmp);     return tmp; }
+        //else if (hasForm(tmp.rec, Record)) { follower.followRec(tmp.rec); return tmp.rec; }
+        //return tmp;
+        
       };
       
       // Create the AppRecord identified by `<prefix>.loft`

@@ -1526,7 +1526,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     }
     
     let loft = await getRoom(loftName);
-    await loft.open({ hut: aboveHut, netIden });
+    await loft.open({ prefix: aboveHut.prefix, hut: aboveHut, netIden });
     
     process.on('exit', () => {
       aboveHut.end();

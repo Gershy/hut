@@ -78,29 +78,21 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     init(uri) {
       Object.assign(this, { uri });
     },
-    getUri() { return this.uri;
-      
-      let chain = this.chain;
-      if (chain?.constructor === Array) {
-        // TODO: What if chain contains a literal "/"??????
-        chain = `/${chain.join('/')}`;
-      }
-      return uri({ path: 'asset', query: { chain } });
-    },
+    getUri() { return this.uri; }
   })});
   let seenHttpKeeps = Map();
   
   global.getMs = () => performance.timeOrigin + performance.now();
-  global.keep = chain => {
+  global.keep = diveToken => {
     
-    chain = resolveChain(chain);
-    if (chain?.constructor === Array) chain = `/${chain.join('/')}`;
-    if (chain?.constructor !== String) throw Error(`Api: chain must resolve to String; got ${getFormName(chain)}`);
+    let dive = token.dive(diveToken);
+    if (dive?.constructor === Array) dive = `/${dive.join('/')}`;
+    if (dive?.constructor !== String) throw Error(`Api: dive must resolve to String; got ${getFormName(dive)}`);
     
-    if (!seenHttpKeeps.has(chain)) {
-      seenHttpKeeps.set(chain, HttpKeep( uri({ path: 'asset', query: { chain } }) ));
+    if (!seenHttpKeeps.has(dive)) {
+      seenHttpKeeps.set(dive, HttpKeep( uri({ path: 'asset', query: { dive } }) ));
     }
-    return seenHttpKeeps.get(chain);
+    return seenHttpKeeps.get(dive);
     
   };
   global.conf = (...chain) => {
@@ -338,7 +330,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   if (initComm) belowHut.actOnComm({ src: aboveHut, msg: initComm });
   
   let loft = loftObj.toArr(v => v)[0];
-  await loft.open({ hut: belowHut, rec: aboveHut, netIden });
+  await loft.open({ prefix, hut: belowHut, rec: aboveHut, netIden });
   
   gsc(`Loft opened after ${(getMs() - performance.timeOrigin).toFixed(2)}ms`);
   

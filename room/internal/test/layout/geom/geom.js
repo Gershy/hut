@@ -1,47 +1,48 @@
-global.rooms['internal.test.geom'] = async () => {
+global.rooms['internal.test.layout.geom'] = async () => {
   
-  let HtmlBrowserHabitat = await getRoom('habitat.HtmlBrowserHabitat');
-  let Hinterland = await getRoom('Hinterland');
-  let TimerSrc = await getRoom('logic.TimerSrc');
-  
-  return Hinterland('geom', {
+  let { HtmlBrowserHabitat, Hinterland, TimerSrc } = await getRooms([
+    'habitat.HtmlBrowserHabitat',
+    'Hinterland',
+    'logic.TimerSrc'
+  ]);
+  return Hinterland({
     
     habitats: [ HtmlBrowserHabitat() ],
     above: async (hut, geom, real, dep) => {},
     below: async (hut, geom, real, dep) => {
       
-      let testsReal = dep(real.addReal('tests', [
-        { form: 'Geom', w: '100%', h: '100%' },
-        { form: 'Axis1d', axis: 'y' }
-      ]));
+      let testsReal = dep(real.addReal('tests', {
+        Geom: { w: '100%', h: '100%' },
+        Axis1d: { axis: 'y' }
+      }));
       
       let addTest = (name, makeReal) => {
         
-        let testReal = testsReal.addReal('test', [
-          { form: 'Geom', w: '100%' },
-          { form: 'Axis1d', axis: 'y', window: 'clip' },
-          { form: 'Decal', border: { ext: '3px', colour: '#000' } }
-        ]);
+        let testReal = testsReal.addReal('test', {
+          Geom: { w: '100%' },
+          Axis1d: { axis: 'y', window: 'clip' },
+          Decal: { border: { ext: '3px', colour: '#000' } }
+        });
         
-        testReal.addReal('title', [
-          { form: 'Text', size: '200%', text: name, spacing: { v: '10px' } },
-        ]);
+        testReal.addReal('title', {
+          Text: { size: '200%', text: name, spacing: { v: '10px' } },
+        });
         
-        let content = testReal.addReal('content', [
-          { form: 'Geom', w: '200px', h: '200px' },
-          { form: 'Decal', colour: '#0001' }
-        ]);
+        let content = testReal.addReal('content', {
+          Geom: { w: '200px', h: '200px' },
+          Decal: { colour: '#0001' }
+        });
         
-        testReal.addReal('gap', [
-          { form: 'Text', size: '200%', text: '-', spacing: { v: '10px' } },
-        ]);
+        testReal.addReal('gap', {
+          Text: { size: '200%', text: '-', spacing: { v: '10px' } },
+        });
         
         makeReal((propsForGeom={}) => {
           
-          return content.addReal('geom', [
-            { form: 'Geom', w: '50px', h: '50px', ...propsForGeom },
-            { form: 'Decal', colour: '#f008' }
-          ]);
+          return content.addReal('geom', {
+            Geom: { w: '50px', h: '50px', ...propsForGeom },
+            Decal: { colour: '#f008' }
+          });
           
         });
         
@@ -139,10 +140,10 @@ global.rooms['internal.test.geom'] = async () => {
       addTest('MID, VARIABLE SIZE', fn => {
         
         let geom = fn({ anchor: 'mid', w: null, h: null });
-        let changing = geom.addReal('changing', [
-          { form: 'Text', text: 'LOLER\nLOL' },
-          { form: 'Decal', transition: { 'text.size': { ms: 200 } }}
-        ]);
+        let changing = geom.addReal('changing', {
+          Text: { text: 'LOLER\nLOL' },
+          Decal: { transition: { 'text.size': { ms: 200 } }}
+        });
         
         dep(TimerSrc({ ms: 500, num: Infinity }))
           .route(() => changing.mod({ size: `${(5 + Math.random() * 150).toFixed(2)}px` }));
@@ -152,10 +153,10 @@ global.rooms['internal.test.geom'] = async () => {
       addTest('MID (+50, +50), VARIABLE SIZE', fn => {
         
         let geom = fn({ anchor: 'mid', w: null, h: null, x: '+50px', y: '+50px' });
-        let changing = geom.addReal('changing', [
-          { form: 'Text', text: 'LOLER\nLOL' },
-          { form: 'Decal', transition: { 'text.size': { ms: 200 } }}
-        ]);
+        let changing = geom.addReal('changing', {
+          Text: { text: 'LOLER\nLOL' },
+          Decal: { transition: { 'text.size': { ms: 200 } }}
+        });
         
         dep(TimerSrc({ ms: 500, num: Infinity }))
           .route(() => changing.mod({ size: `${(5 + Math.random() * 150).toFixed(2)}px` }));

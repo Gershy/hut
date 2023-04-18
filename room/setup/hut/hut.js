@@ -296,20 +296,17 @@ global.rooms['setup.hut'] = async () => {
       }));
       
       /// {ABOVE=
-      this.makeCommandHandler('asset', async ({ src, msg: { chain }, reply }) => {
+      this.makeCommandHandler('asset', async ({ src, msg: { dive: diveToken }, reply }) => {
         
         // Expects `chain` to begin with an "Enabled Keep"
         
-        chain = resolveChain(chain);
+        let dive = token.dive(diveToken);
         
-        let [ term, ...innerChain ] = chain;
-        if (!this.enabledKeeps.has(term)) throw Error(`Api: invalid asset term "${term}"`).mod({ chain });
+        let [ term, ...innerDive ] = dive;
+        let keep = this.enabledKeeps.get(term)?.seek(innerDive) ?? null;
+        if (!await keep?.exists()) throw Error(`Api: invalid asset chain`).mod({ dive: diveToken });
         
-        let keep = this.enabledKeeps.get(term).seek(innerChain);
-        
-        if (!keep) throw Error(`Api: invalid asset chain`).mod({ term, innerChain });
-        if (await keep.exists()) reply(keep);
-        else                     throw Error(`Api: invalid asset chain`).mod({ term, innerChain });
+        reply(keep);
         
       });
       /// =ABOVE}
@@ -929,14 +926,14 @@ global.rooms['setup.hut'] = async () => {
     
     /// =ABOVE}
     
-    getKeep(chain) {
+    getKeep(diveToken) {
       
-      chain = resolveChain(chain);
+      let dive = token.dive(diveToken);
       
       /// {BELOW=
-      return global.keep(chain);
+      return global.keep(dive);
       /// =BELOW} {ABOVE=
-      return this.aboveHut.enabledKeeps.get(chain[0]).seek(chain.slice(1));
+      return this.aboveHut.enabledKeeps.get(dive[0]).seek(dive.slice(1));
       /// =ABOVE}
       
     },

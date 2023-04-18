@@ -130,12 +130,14 @@ global.rooms['TermBank'] = async () => {
       
     },
     toArr() {
-      let ret = [], ptr = this.termsHead;
+      let ret = [];
+      let ptr = this.termsHead;
       while (ptr) { ret.add(ptr.term); ptr = ptr.next; }
       return ret;
     },
     count() {
-      let ret = 0, ptr = this.termsHead;
+      let ret = 0;
+      let ptr = this.termsHead;
       while (ptr) { count++; ptr = ptr.next; }
       return ret;
     }

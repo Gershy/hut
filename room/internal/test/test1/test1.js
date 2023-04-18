@@ -12,7 +12,6 @@ global.rooms['internal.test.test1'] = async () => {
     
   ]);
   
-  // First 2 params to Hinterland are the shorthand and full room name
   return Hinterland('test1', {
     
     habitats: [ HtmlBrowserHabitat() ],

@@ -860,31 +860,52 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   },
   
   // Util
-  resolveChain: chain => {
+  token: {
     
-    // Consider the ability to specify "indirection chains" as Strings
-    // to be a fundamental feature of Hut! This function allows `chain`
-    // to be provided as some arbitrary kind of value and then resolved
-    // to an Array (or iterable?)
-    // Note this function says nothing about the items in the resolved
-    // "indirection chain" (e.g. that they are all Strings); this
-    // function is very tolerant when passed an actual Array, and
-    // neither examines its children nor performs any flattening
+    // The ability to specify functionality via compact notation is a
+    // fundamental feature of Hut. Such compact values are "Tokens".
+    // Note that theoretically, compact notation could indicate all
+    // kinds of operations: walking graphs, defining deep merges,
+    // multi-property extraction, schema validation, etc! The "type of
+    // functionality" could even be embedded within the Token - this
+    // would mean a single function (`token.resolve`) could process any
+    // given Token. For now, Hut only supports Diving (`token.dive`),
+    // which converts a Token into an Array of items, typically for use
+    // with indirection (diving through successive references).
+    // Note that Tokens are usually Strings, but could be other compact
+    // values!
     
-    // Handle `null`, empty string
-    if (!chain) chain = [];
+    resolve: (...args) => token.dive,
+    dive: token => {
+      
+      // Note this function says nothing about the items in the resolved
+      // "indirection chain" (e.g. that they are all Strings). If the
+      // Token is an actual Array
+      // function is very tolerant when passed an actual Array, and
+      // neither examines its children nor performs any flattening
+      
+      // Handle `null`, empty string
+      if (!token) token = [];
+      
+      // Strings beginning with a "funky" character are split by that
+      // character, otherwise they are split by "."; any empty cmps are
+      // filtered out
+      if (token?.constructor === String)
+        token = ('./>-+='.has(token[0]) ? token.slice(1).split(token[0]) : token.split('.')).sift();
+      
+      /// {DEBUG=
+      if (token?.constructor !== Array) throw Error(`Api: token must resolve to Array; got ${getFormName(token)}`).mod({ token });
+      /// =DEBUG}
+      
+      return token;
+      
+    }
     
-    // Strings beginning with a "funky" character are split by that
-    // character, otherwise they are split by "."; any empty cmps are
-    // filtered out
-    if (chain?.constructor === String)
-      chain = ('./>-+='.has(chain[0]) ? chain.slice(1).split(chain[0]) : chain.split('.')).sift();
+  },
+  resolveToken: chain => {
     
-    /// {DEBUG=
-    if (chain?.constructor !== Array) throw Error(`Api: chain must resolve to Array; got ${getFormName(chain)}`).mod({ chain });
-    /// =DEBUG}
     
-    return chain;
+    
     
   },
   denumerate: (obj, prop) => C.def(obj, prop, { enumerable: false, value: obj[prop] }),
@@ -1228,18 +1249,18 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
     },
     init() {},
     access: C.noFn('access', arg => {}),
-    seek(chain, noSecondArg) {
+    seek(diveToken, noSecondArg) {
       
       /// {DEBUG=
       if (noSecondArg) throw Error(`Provide 1 arg`);
       /// =DEBUG}
       
       let val = this;
-      for (let pc of resolveChain(chain)) {
+      for (let d of token.dive(diveToken)) {
         if (!val) { val = null; break; }
         val = (val.constructor === Promise.Native)
-          ? val.then(v => Form.tryAccess(v, pc))
-          : Form.tryAccess(val, pc);
+          ? val.then(v => Form.tryAccess(v, d))
+          : Form.tryAccess(val, d);
       }
       return val;
       
