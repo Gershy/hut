@@ -399,10 +399,10 @@ global.rooms['setup.hut'] = async () => {
       if (isForm(roomPcs, String)) roomPcs = roomPcs.split('.');
       if (!isForm(roomPcs, Array)) throw Error(`Invalid "roomPcs" (${getFormName(roomPcs)})`);
       
-      let cmpKeep = keep(`[file:code:cmp]->${bearing}->${roomPcs.join('->')}->${roomPcs.slice(-1)[0]}.js`);
+      let cmpKeep = keep([ 'file:code:cmp', bearing, ...roomPcs, `${roomPcs.slice(-1)[0]}.js` ]);
       if (await cmpKeep.exists()) return cmpKeep;
       
-      let srcKeep = keep(`[file:code:src]->${roomPcs.join('->')}->${roomPcs.slice(-1)[0]}.js`);
+      let srcKeep = keep([ 'file:code:src', ...roomPcs, `${roomPcs.slice(-1)[0]}.js` ]);
       if (!await srcKeep.exists()) throw Error(`Room ${roomPcs.join('.')} (${srcKeep.desc()}) doesn't exist`);
       
       let srcContent = await srcKeep.getContent('utf8');

@@ -889,9 +889,14 @@ Object.assign(global, global.rooms['setup.clearing'] = {
       
       // Strings beginning with a "funky" character are split by that
       // character, otherwise they are split by "."; any empty cmps are
-      // filtered out
+      // filtered out; note these chars are typically "directionful" as
+      // in they are typically rendered similarly to or reminiscent of a
+      // right-pointing-arrow
       if (token?.constructor === String)
-        token = ('./>-+='.has(token[0]) ? token.slice(1).split(token[0]) : token.split('.')).sift();
+        token = ('./>\u0010\u001a'.has(token[0]) // \u0010 - arrowhead-right; \u001a - arrow-right
+          ? token.slice(1).split(token[0])
+          : token.split('.')
+        ).sift();
       
       /// {DEBUG=
       if (token?.constructor !== Array) throw Error(`Api: token must resolve to Array; got ${getFormName(token)}`).mod({ token });
@@ -900,12 +905,6 @@ Object.assign(global, global.rooms['setup.clearing'] = {
       return token;
       
     }
-    
-  },
-  resolveToken: chain => {
-    
-    
-    
     
   },
   denumerate: (obj, prop) => C.def(obj, prop, { enumerable: false, value: obj[prop] }),
@@ -1269,9 +1268,6 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
   })});
   
   let Keep = form({ name: 'Keep', has: { Slots }, props: (forms, Form) => ({
-    
-    // Ansi red
-    $separator: '\u0010', //'\u22b3', //'\u25b8', // '\u00bb', //'\u25bb', //'\u25b7', //'\u25b8', //'\u2192', //'\u25b7',
     
     init() {},
     

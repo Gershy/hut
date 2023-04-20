@@ -864,11 +864,6 @@ global.rooms['chess2'] = async chess2Keep => {
             Geom: { anchor: 'tl', shape: 'oval', w: tileVal(1), h: tileVal(1) },
             Image: {},
             Transform: {},
-            Decal: { transition: {
-              opacity: { ms: 400, curve: 'linear', delayMs: 200 },
-              scale: { ms: 400, curve: 'linear', delayMs: 200 },
-              loc: { ms: 400, curve: 'decel' },
-            }},
             
             ...tileCoord(0, 0), // x, y
             endDelayMs: 1000,
@@ -877,6 +872,16 @@ global.rooms['chess2'] = async chess2Keep => {
             opacity: 1
             
           }));
+          
+          // Block initial animation by delaying Decal application until
+          // after rotation has been applied
+          dep(TimerSrc({ num: 1, ms: 500 })).route(() => {
+            pieceReal.addLayout('Decal', { transition: {
+              opacity: { ms: 400, curve: 'linear', delayMs: 200 },
+              scale: { ms: 400, curve: 'linear', delayMs: 200 },
+              loc: { ms: 400, curve: 'decel' },
+            }});
+          });
           
           dep(piece.valueSrc.route(() => {
             

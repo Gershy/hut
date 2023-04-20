@@ -9,11 +9,10 @@ Error.prepareStackTrace = (err, callSites) => {
     
     let file = cs.getFileName();
     if (!file || file.hasHead('node:')) return skip;
-    
     return {
       type: 'line',
       fnName: cs.getFunctionName(),
-      keepTerm: '[file]' + Keep.separator + cs.getFileName().split(/[/\\]+/).join(Keep.separator),
+      keepTerm: [ '', '[file]', ...cs.getFileName().split(/[/\\]+/) ].join('/'),
       row: cs.getLineNumber(),
       col: cs.getColumnNumber()
     };
@@ -183,23 +182,15 @@ let RoomLoader = form({ name: 'RoomLoader', props: (forms, Form) => ({
     
     // Note `file` is a String with sequential slashes (bwds and fwds)
     // replaced with a single forward slash
-    // Returns `[ file, col, row, context ]`
+    // Returns `{ file, col, row, context }`
     
-    // Format filepaths into KeepTerms
-    let sep = Keep.separator;
-    if (/^([A-Z]:)?[/\\]/.test(file)) file = `[file]${sep}${file.replace(/[/\\]/g, sep)}`;
+    let givenKeep = global.keep(file);
     
-    let cmpFp = this.cmpKeep.fp.desc();
-    if (!file.hasHead(cmpFp + sep)) return { file, row, col, context: null };
+    // Only map compiled files
+    if (!this.cmpKeep.contains(givenKeep)) return { file: givenKeep.desc(), row, col, context: null };
     
-    let pcs = file.slice((cmpFp + sep).length).split(sep);
+    let pcs = givenKeep.fp.cmps.slice(this.cmpKeep.fp.cmps.length);
     let [ bearing, name, cmp ] = pcs;
-    
-    let mappable = true
-      && [ 'above', 'below', 'between' ].has(bearing)
-      && !!global.rooms[name]
-      && cmp === 'cmp';
-    if (!mappable) return { file, row, col, context: null };
     
     let { offsets } = global.rooms[name];
     
@@ -309,9 +300,11 @@ let makeSchema = () => {
         if (!val.isInteger()) error(chain, val, 'requires integer');
       }
       
-      if (v === 'keep') {
-        validate(chain, val, { regex: /^\[[a-zA-Z0-9:]+\](?:[/\\]|[-][>])/, desc: 'represent a Keep' });
-      }
+      if (v === 'keep') validate(chain, val, token.dive); // "keep" values are simply valid for `token.dive`
+      
+    } else if (isForm(v, Function)) {
+      
+      try { v(val); } catch (err) { error(chain, val, err.message); }
       
     } else {
       
@@ -353,7 +346,7 @@ let makeSchema = () => {
   let scm = Schema({ name: '(root)' });
   scm.at('confs').fn = (val, schema, chain) => {
     
-    if (val === null) return [ '[file:mill]->conf->def.js' ];
+    if (val === null) return [ '/file:mill/conf/def.js' ];
     if (val === String) val = val.split(',').map(v => v.trim());
     
     validate(chain, val, { form: Array });
@@ -514,7 +507,7 @@ let makeSchema = () => {
     
     // @netIdens.tester
     // @netIdens.main
-    // { name: 'zzz', keep: '[file:mill]->netIden->zzz', secureBits: 2048, ... }
+    // { name: 'zzz', keep: '/file:mill/netIden/zzz', secureBits: 2048, ... }
     
     if (isForm(val, String))
       return validate(chain, val, { regex: /^@netIdens./, desc: 'begins with "@netIdens.", e.g. "@netIdens.myIden"' });
@@ -849,6 +842,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       
       init(map) { Object.assign(this, { map: Object.plain(map) }); },
       access(prop) {
+        if (prop[0] === '[') prop = prop.slice(1, -1);
         if (!this.map[prop]) throw Error(`Api: invalid ${getFormName(this)} Slot: "${prop}"`);
         return this.map[prop];
       }
@@ -867,24 +861,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       
     });
     
-    global.keep = (chain) => {
-      
-      if (chain?.constructor === String && chain.hasHead('[')) {
-        
-        // Note that "\\" produces a literal backslash in single-quotes,
-        // and two literal backslashes are needed to additionally escape
-        // a single backslash within regex; hence "\" x 4
-        let pcs = chain.split(RegExp(`(?:[/\\\\]|->|${Keep.separator})+`));
-        if (!pcs[0].hasTail(']')) throw Error(`Api: invalid KeepTerm "${chain[0]}"`);
-        
-        pcs[0] = pcs[0].slice(1, -1);
-        chain = pcs;
-        
-      }
-      
-      return rootKeep.seek(chain);
-      
-    };
+    global.keep = (diveToken) => rootKeep.seek(token.dive(diveToken));
     
   })();
   
@@ -983,21 +960,17 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       }
       
     };
-    global.conf = (...chain) => {
+    global.conf = diveToken => {
       
-      chain = chain.map(v => isForm(v, String) ? v.split('.') : v).flat(Infinity);
-      
+      // Resolve nested Arrays and period-delimited Strings
+      let dive = token.dive(diveToken);
       let ptr = conf;
-      for (let pc of chain) {
-        
+      for (let pc of dive) {
         /// {DEBUG= TODO: how to compile out these markers??
-        if (!isForm(ptr, Object) || !ptr.has(pc)) throw Error('Api: invalid Conf chain').mod({ chain });
+        if (!isForm(ptr, Object) || !ptr.has(pc)) throw Error('Api: invalid dive token').mod({ diveToken });
         /// =DEBUG}
-        
         ptr = ptr[pc];
-        
       }
-      
       return ptr;
       
     };
@@ -1321,7 +1294,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
   await (async () => {
     
     // Wipe out code from previous run
-    await keep('[file:code:cmp]').rem();
+    await keep([ 'file:code:cmp' ]).rem();
     
     let { uid=null, def, hosting } = global.conf('deploy.loft');
     let { heartbeatMs } = hosting;

@@ -45,20 +45,20 @@ let Filepath = form({ name: 'Filepath', props: (forms, Form) => ({
     });
     
   },
-  desc() { return `[file]${Keep.separator}${this.cmps.join(Keep.separator)}`; },
+  desc() { return [ '[file]', ...this.cmps ].join('\u0010'); },
   
   count() { return this.cmps.length; },
   kid(...fp) { return Filepath([ this.cmps, fp ]); },
   sib(cmp) { return Filepath([ this.cmps.slice(0, -1), cmp ]); },
   par(n=1) { return (n <= 0) ? this : Filepath(this.cmps.slice(0, -n)); },
   contains(fp) { return this.cmps.length  <= fp.cmps.length && this.cmps.every((v, i) => fp.cmps[i] === v); },
-  equals(fp) { return this.cmps.length === fp.cmps.length && this.cmps.every((v, i) => fp.cmps[i] === v); },
-  fsp() {
+  equals(fp)   { return this.cmps.length === fp.cmps.length && this.cmps.every((v, i) => fp.cmps[i] === v); },
+  fsp() { // "file system pointer"
     
     if (!this.fspVal) {
       let fspVal = this.path.resolve('/', ...this.cmps);
       /// {DEBUG=
-      if (!/^([/\\]|[A-Z]+:)/.test(fspVal)) throw Error(`${this.desc()} path doesn't start with component separator or drive`).mod({ fsp: fspVal });
+      if (!/^([A-Z]+[:])?[/\\]/.test(fspVal)) throw Error(`${this.desc()} path doesn't start with optional drive indicator (e.g. "C:") followed by "/" or "\\"`).mod({ fsp: fspVal });
       /// =DEBUG}
       this.fspVal = fspVal;
     }
@@ -657,6 +657,8 @@ let FsKeep = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => ({
   async rem() { return this.trn.remSubtree(this.fp); },
   
   // Tree
+  contains(keep) { return hasForm(keep, Form) && this.fp.contains(keep.fp); },
+  equals(keep) { return hasForm(keep, Form) && this.fp.equals(keep.fp); },
   async getChildNames(opts={}) {
     let names = await this.trn.getKidNames(this.fp);
     return this.forbid

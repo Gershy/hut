@@ -4,9 +4,9 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   // file is, the better the user experience! Note this file
   // interoperates nicely with the typical Hut style of loading Rooms,
   // but in the browser this code should be referenced manually and
-  // run after the DOMContentLoaded event (obvs we can't reference the
-  // Room with `getRoom`, as the logic for doing so is only defined
-  // after this code has ran!)
+  // run after the DOMContentLoaded event (obvs we can't reference this
+  // Room with `getRoom`, as the logic for doing so only gets defined
+  // after this Room has been initialized!)
   
   let hutifyPath = 'habitat.HtmlBrowserHabitat.hutify';
   
@@ -57,52 +57,45 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     // Don't modify SyntaxErrors - they only show proper
     // stack information when they're logged natively
     if (err?.constructor?.name?.hasHead('Syntax')) return;
-    gsc(`Uncaught ${getFormName(err)}:`, err.desc());
+    gsc(`Uncaught ${getFormName(err)}:\n${err?.desc()}`);
     // TODO: Refresh!! Or better yet - reset foundation (more complex)
     evt.preventDefault();
-    debugger;
     
   };
   window.evt('unhandledrejection', onErr);
   window.evt('error', onErr);
   
   let document = window.document;
-  let { classList: cl } = document.body;
-  cl.add('focus');
-  window.evt('load', () => cl.add('loaded'));
-  window.evt('beforeunload', () => cl.remove('loaded'));
-  window.evt('focus', () => cl.add('focus'));
-  window.evt('blur', () => cl.remove('focus'));
+  let bc = document.body.classList; // "body classlist"
+  bc.add('focus');
+  window.evt('load', () => bc.add('loaded'));
+  window.evt('beforeunload', () => bc.remove('loaded'));
+  window.evt('focus', () => bc.add('focus'));
+  window.evt('blur', () => bc.remove('focus'));
   
   let HttpKeep = form({ name: 'HttpKeep', has: { Keep }, props: (forms, Form) => ({
-    init(uri) {
-      Object.assign(this, { uri });
-    },
+    init(uri) { Object.assign(this, { uri }); },
     getUri() { return this.uri; }
   })});
   let seenHttpKeeps = Map();
   
   global.getMs = () => performance.timeOrigin + performance.now();
   global.keep = diveToken => {
-    
     let dive = token.dive(diveToken);
-    if (dive?.constructor === Array) dive = `/${dive.join('/')}`;
-    if (dive?.constructor !== String) throw Error(`Api: dive must resolve to String; got ${getFormName(dive)}`);
-    
-    if (!seenHttpKeeps.has(dive)) {
-      seenHttpKeeps.set(dive, HttpKeep( uri({ path: 'asset', query: { dive } }) ));
-    }
-    return seenHttpKeeps.get(dive);
-    
+    let key = `/${dive.join('/')}`;
+    let keep = seenHttpKeeps.get(key);
+    if (!keep) seenHttpKeeps.set(key, keep = HttpKeep(uri({ path: 'asset', query: { dive: key } })));
+    return keep;
   };
-  global.conf = (...chain) => {
+  global.conf = diveToken => {
     
     // Resolve nested Arrays and period-delimited Strings
-    chain = chain.map(v => isForm(v, String) ? v.split('.').sift() : v).flat(Infinity);
-    
+    let dive = token.dive(diveToken);
     let ptr = global.rawConf;
-    for (let pc of chain) {
-      if (!isForm(ptr, Object) || !ptr.has(pc)) throw Error('Api: invalid Conf chain').mod({ chain });
+    for (let pc of dive) {
+      /// {DEBUG=
+      if (!isForm(ptr, Object) || !ptr.has(pc)) throw Error('Api: invalid dive token').mod({ diveToken });
+      /// =DEBUG}
       ptr = ptr[pc];
     }
     return ptr;

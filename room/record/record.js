@@ -969,17 +969,21 @@ global.rooms['record'] = async () => {
       let { type, term, offset=0, limit=Infinity, fixed=null, opts={} } = this.resolveTypeAndTerm(args);
       
       if (fixed === null) fixed = opts.empty();
-      if (fixed && !opts.empty()) throw Error(`Pretty sure if fixed, opts must be empty!`);
       
-      // If `fixed === false`, `key` is a value that definitely isn't
-      // yet set in `this.relHandlers`. Note that we need to hold a
-      // reference even to "unfixed"/"dynamic" RelHandlers, as in order
-      // to correctly propagate newly created Records to their Members
-      // we must iterate all RelHandlers of all Members in memory.
+      /// {DEBUG=
+      if (fixed && !opts.empty()) throw Error(`Pretty sure if fixed, opts must be empty!`);
+      /// =DEBUG}
+      
+      // If `fixed === false`, `key` must be a value that isn't already
+      // set in `this.relHandlers`. Note we must maintain a reference
+      // even to "unfixed"/"dynamic" RelHandlers, as in order to
+      // correctly propagate newly created Records to their Members we
+      // must iterate all RelHandlers of all Members in memory.
       // 
       // Note that both Type and Term need to be included in the unique
       // key. If only Term were provided, the following:
       // 
+      //    | // Note `loftRec.type.name === 'eg.loft'`
       //    | loftRec.relHandler({ type: 'eg.type1' });
       //    | loftRec.relHandler({ type: 'eg.type2' });
       // 
@@ -996,13 +1000,12 @@ global.rooms['record'] = async () => {
       //    | myA1.relHandler({ type: 'eg.b', term: 'a1' }); // Expected hrecs: [ myB1 ]
       //    | myA1.relHandler({ type: 'eg.b', term: 'a2' }); // Expected hrecs: [ myB2 ]
       // 
-      // would create the same key: "eg.b/0:Infinity" (the
-      // RelHandlers are more specific than just the Type: it must be
-      // the type linked to via a specific Term. This information needs
-      // to be captured in the `key`, or else a pre-existing RelHandler
-      // for a separate, expectedly unrelated Term (but coincidentally
-      // same Type) could be returned when we want a RelHandler for the
-      // same Type, but distinct Term)
+      // would create the same key: "eg.b/0:Infinity" (the RelHandlers
+      // are more specific than just the Type: it must be the Type PLUS
+      // its link via a specific Term. Need to capture this information
+      // in the `key`, or else a pre-existing RelHandler for a separate,
+      // unrelated Term (but coincidentally same Type) could be returned
+      // when we want a RelHandler for the same Type, but distinct Term)
       let key = fixed
         ? `${type.name}/${term}/${offset}:${limit}`
         : `${type.name}/${term}/u:${Math.random().toString(16).slice(2)}`;

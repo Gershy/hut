@@ -41,10 +41,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       'record.bank.WeakBank',
       'Hinterland',
       'habitat.HtmlBrowserHabitat',
-      'logic.Scope',
-      'internal.real.generic.Real',
-      'internal.real.generic.Layout',
-      'internal.real.htmlBrowser.Real'
+      'logic.Scope'
     ]);
     
     // Omit "trn" to have it default to "anon" (cacheable)
@@ -131,7 +128,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       `));
       
     });
-    
+    cmd(`${this.prefix}.icon`, msg => msg.reply(keep('/file:repo/room/setup/asset/hut.ico')));
     cmd(`${this.prefix}.room`, async ({ src, reply, msg }) => {
       
       // TODO: Watch out for traversal with room name??
@@ -186,12 +183,6 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       //   overall cmp->src line mappings in order to restore the real
       //   line number for a specific file
       throw Error('Not implemented from here on...');
-      
-    });
-    
-    cmd(`${this.prefix}.icon`, async ({ src, reply, msg }) => {
-      
-      reply(keep(`[file:repo]->room->setup->asset->hut.ico`));
       
     });
     cmd(`${this.prefix}.css`, async ({ src, reply, msg }) => {
