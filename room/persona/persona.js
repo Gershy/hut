@@ -17,7 +17,7 @@ global.rooms['persona'] = async foundation => {
     
     init({ hut, rec, ...opts }) {
       
-      let { pfx=rec.type.getPfx(), personaName=`${pfx}.persona`, accountName=`${pfx}.account` } = opts;
+      let { pfx=rec.type.getPrefix(), personaName=`${pfx}.persona`, accountName=`${pfx}.account` } = opts;
       let { credentialName=`${pfx}.credential` } = opts;
       let { loginActName=`${pfx}.login` } = opts;
       

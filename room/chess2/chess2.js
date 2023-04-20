@@ -289,8 +289,6 @@ global.rooms['chess2'] = async chess2Keep => {
       
       /// {ABOVE=
       
-      gsc('CHESS2 TYPE:', chess2.type);
-      
       hut.addKnownRoomDependencies([
         'record.bank.WeakBank',
         'Hinterland',
@@ -441,15 +439,15 @@ global.rooms['chess2'] = async chess2Keep => {
       // Record-End events (maybe via RelHandler(...).getAuditSrc()??)
       // to apply decrements
       chess2.setValue({ numPlayers: 0, numQueued: 0, numMatches: 0 });
-      dep.scp(chess2, 'c2.player', (player, dep) => {
+      dep.scp(chess2, 'player', (player, dep) => {
         chess2.setValue(val => void val.numPlayers++);
         dep(() => chess2.setValue(val => void val.numPlayers--));
       });
-      dep.scp(chess2, 'c2.queue', (queue, dep) => {
+      dep.scp(chess2, 'queue', (queue, dep) => {
         chess2.setValue(val => void val.numQueued++);
         dep(() => chess2.setValue(val => void val.numQueued--));
       });
-      dep.scp(chess2, 'c2.match', (match, dep) => {
+      dep.scp(chess2, 'match', (match, dep) => {
         chess2.setValue(val => void val.numMatches++);
         dep(() => chess2.setValue(val => void val.numMatches--));
       });
@@ -465,7 +463,7 @@ global.rooms['chess2'] = async chess2Keep => {
         timerSrc.route(() => c2Subcon(`${desc} FAILED to make player!`), 'prm');
         timerSrc.route(() => (/*kidHut.strike(0.075, 'Failed timely chess2 player creation'), * /kidHut.end()), 'prm');
         
-        dep.scp(kidHut, 'c2.player', (player, dep) => {
+        dep.scp(kidHut, `player`, (player, dep) => {
           
           c2Subcon(`${desc} OPEN player! (${player.getValue('term')})`)
           dep(() => c2Subcon(`${desc} SHUT player! (${player.getValue('term')})`));
@@ -477,7 +475,7 @@ global.rooms['chess2'] = async chess2Keep => {
       });
       
       // Handle Match Rounds (perform Player moves simultaneously)
-      dep.scp(chess2, 'c2.match', (match, dep) => dep.scp(match, 'c2.round', (round, dep) => {
+      dep.scp(chess2, 'match', (match, dep) => dep.scp(match, 'round', (round, dep) => {
         
         let resolveRound = async moves => {
           
@@ -487,7 +485,7 @@ global.rooms['chess2'] = async chess2Keep => {
           let bAlive = false;
           if (significantMoves.count()) {
             
-            let pieces = await match.withRh('c2.piece', 'all');
+            let pieces = await match.withRh('piece', 'all');
             applyMoves(match, pieces, significantMoves);
             
             let aliveKings = pieces.map(pc => (pc.onn() && pc.getValue('type') === 'king') ? pc : skip);
@@ -495,23 +493,23 @@ global.rooms['chess2'] = async chess2Keep => {
             let bAlive = aliveKings.find(king => king.getValue('colour') === 'black').found;
             
             round.end();
-            
-            if ( wAlive && !bAlive) hut.addRecord('c2.outcome', [ match ], { winner: 'white', reason: 'checkmate' });
-            if (!wAlive &&  bAlive) hut.addRecord('c2.outcome', [ match ], { winner: 'black', reason: 'checkmate' });
-            if (!wAlive && !bAlive) hut.addRecord('c2.outcome', [ match ], { winner: null, reason: 'stalemate' });
-            if ( wAlive &&  bAlive) hut.addRecord('c2.round', [ match ], { ms: Date.now() }); // Game continues!
+             
+            if ( wAlive && !bAlive) hut.addRecord(`outcome`, [ match ], { winner: 'white', reason: 'checkmate' });
+            if (!wAlive &&  bAlive) hut.addRecord(`outcome`, [ match ], { winner: 'black', reason: 'checkmate' });
+            if (!wAlive && !bAlive) hut.addRecord(`outcome`, [ match ], { winner: null, reason: 'stalemate' });
+            if ( wAlive &&  bAlive) hut.addRecord(`round`, [ match ], { ms: Date.now() }); // Game continues!
             
           } else {
             
             round.end();
-            hut.addRecord('c2.outcome', [ match ], { winner: null, reason: 'lethargy' });
+            hut.addRecord(`outcome`, [ match ], { winner: null, reason: 'lethargy' });
             
           }
           
         };
         
         // If both players have submitted moves, perform those moves
-        let roundMoveRh = dep(round.rh('c2.roundMove'));
+        let roundMoveRh = dep(round.rh('roundMove'));
         let roundMoveSrc = dep(roundMoveRh.map(hrec => hrec.rec));
         let moveSetSrc = dep(SetSrc(roundMoveSrc));
         dep(moveSetSrc.route( playerMoves => (playerMoves.count() === 2) && resolveRound(playerMoves) ));
@@ -527,7 +525,7 @@ global.rooms['chess2'] = async chess2Keep => {
         
         let ms = Date.now();
         
-        let queues = await chess2.withRh('c2.queue', 'all');
+        let queues = await chess2.withRh('queue', 'all');
         let queuedStatusesByTerm = queues.categorize(q => q.getValue('term'));
         for (let [ term, queuedStatuses ] of queuedStatusesByTerm) {
           
@@ -541,13 +539,13 @@ global.rooms['chess2'] = async chess2Keep => {
             // Create Match for this Pair
             
             // Indicate Players are in Match (updates "status" prop!)
-            let pw = qw.m('c2.playerStatus').m('c2.player');
-            let pb = qb.m('c2.playerStatus').m('c2.player');
+            let pw = qw.m('playerStatus').m('player');
+            let pb = qb.m('playerStatus').m('player');
             for (let p of [ pw, pb ]) p.setValue({ status: 'match' });
             
             // Get Players from PlayerStatus({ type: 'queue' }) Records
             
-            let match = hut.addRecord('c2.match', [ chess2 ], { ms, desc: `white:${pw.getValue('term')} vs black:${pb.getValue('term')}` });
+            let match = hut.addRecord('match', [ chess2 ], { ms, desc: `white:${pw.getValue('term')} vs black:${pb.getValue('term')}` });
             
             if (c2Subcon.enabled) {
               
@@ -555,7 +553,7 @@ global.rooms['chess2'] = async chess2Keep => {
               match.endWith(() => { c2Subcon(`MATCH SHUT (${match.getValue('desc')})`); });
               
               // RelHandle Dep Ends when Match Ends
-              match.rh('c2.outcome').route(({ rec: outcome }) => c2Subcon(`MATCH OTCM (${match.getValue('desc')})`, outcome.getValue()));
+              match.rh('outcome').route(({ rec: outcome }) => c2Subcon(`MATCH OTCM (${match.getValue('desc')})`, outcome.getValue()));
               
             }
             
@@ -563,25 +561,28 @@ global.rooms['chess2'] = async chess2Keep => {
             match.endWith(() => mmm('chess2Match', -1));
             
             // Initial Round of Match
-            hut.addRecord('c2.round', [ match ], { ms: Date.now() });
+            hut.addRecord('round', [ match ], { ms: Date.now() });
             
             // Add Pieces to Match
             for (let [ colour, pieces ] of activePieceDef)
               for (let [ type, col, row ] of pieces)
-                hut.addRecord('c2.piece', [ match ], { colour, type, col, row, wait: 0, moves: 0 });
+                hut.addRecord('piece', [ match ], { colour, type, col, row, wait: 0, moves: 0 });
             
             // Add Players to Match
-            let mpw = hut.addRecord('c2.matchPlayer', [ match, pw.status ], { colour: 'white' });
-            let mpb = hut.addRecord('c2.matchPlayer', [ match, pb.status ], { colour: 'black' });
+            let mpw = hut.addRecord('matchPlayer', [ match, pw.status ], { colour: 'white' });
+            let mpb = hut.addRecord('matchPlayer', [ match, pb.status ], { colour: 'black' });
             mpw.endWith(async () => {
               c2Subcon(`WHITE ENDED (${pw.getValue('term')})`);
-              let round = await match.withRh('c2.round', 'one');
-              if (round) { round.end(); hut.addRecord('c2.outcome', [ match ], { winner: 'black', reason: 'cowardice' }); }
+              let round = await match.withRh('round', 'one');
+              if (round) {
+                round.end();
+                hut.addRecord('outcome', [ match ], { winner: 'black', reason: 'cowardice' });
+              }
             });
             mpb.endWith(async () => {
               c2Subcon(`BLACK ENDED (${pb.getValue('term')})`);
-              let round = await match.withRh('c2.round', 'one');
-              if (round) { round.end(); hut.addRecord('c2.outcome', [ match ], { winner: 'white', reason: 'cowardice' }); }
+              let round = await match.withRh('round', 'one');
+              if (round) { round.end(); hut.addRecord('outcome', [ match ], { winner: 'white', reason: 'cowardice' }); }
             });
             
             // Keep the Match alive so long as any Player is alive
@@ -606,22 +607,22 @@ global.rooms['chess2'] = async chess2Keep => {
       dep(real.addLayout('Axis1d', { axis: 'x', dir: '+', mode: 'compactCenter' }));
       dep(real.addLayout('Decal', { colour: '#646496', text: { colour: '#ffffff' } }));
       
-      let mainReal = real.addReal('c2.main', { Geom: { w: '100vmin', h: '100vmin' } });
+      let mainReal = real.addReal('main', { Geom: { w: '100vmin', h: '100vmin' } });
       
       let nodePlayerless = (dep, real) => {
         
-        let makePlayerAct = dep(hut.enableAction('c2.makePlayer', () => {
+        let makePlayerAct = dep(hut.enableAction('makePlayer', () => {
           
           /// {ABOVE=
           let termTmp = termBank.checkout();
-          let player = hut.addRecord('c2.player', [ chess2, hut ], { term: termTmp.term, status: 'chill' });
+          let player = hut.addRecord('player', [ chess2, hut ], { term: termTmp.term, status: 'chill' });
           
           mmm('chess2Player', +1);
           player.endWith(() => mmm('chess2Player', -1));
           player.endWith(termTmp);
           
           // Add a "status" property to the Player
-          player.status = hut.addRecord('c2.playerStatus', [ player ], { type: 'chill', ms: Date.now() });
+          player.status = hut.addRecord('playerStatus', [ player ], { type: 'chill', ms: Date.now() });
           
           // Update the single PlayerStatus based on changes to "status"
           let statusSrc = player.getValuePropSrc('status');
@@ -631,7 +632,7 @@ global.rooms['chess2'] = async chess2Keep => {
             if (status === player.status.getValue('type')) return;
             
             player.status.end();
-            player.status = hut.addRecord('c2.playerStatus', [ player ], { type: status, ms: Date.now() });
+            player.status = hut.addRecord('playerStatus', [ player ], { type: status, ms: Date.now() });
             
           }, 'prm');
           /// =ABOVE}
@@ -645,8 +646,8 @@ global.rooms['chess2'] = async chess2Keep => {
           Axis1d: { axis: 'y', mode: 'compactCenter' }
         }));
         
-        playerlessReal.addReal('c2.title', lay.text('Entering Chess2...', tsP1));
-        playerlessReal.addReal('c2.title', lay.link('(Stuck? Try clicking here...)', '/?hid=reset', { mode: 'replace', size: tsM2 }));
+        playerlessReal.addReal('title', lay.text('Entering Chess2...', tsP1));
+        playerlessReal.addReal('title', lay.link('(Stuck? Try clicking here...)', '/?hid=reset', { mode: 'replace', size: tsM2 }));
         /// =BELOW}
         
       };
@@ -727,14 +728,14 @@ global.rooms['chess2'] = async chess2Keep => {
 
         queueReal.addReal('gap', lay.gap());
         
-        let queueRh = dep(status.rh('c2.queue'));
+        let queueRh = dep(status.rh('queue'));
         let queueChooser = dep(Chooser(queueRh));
         dep.scp(queueChooser.srcs.off, (noQueue, dep) => {
           
-          let queueAct = dep(hut.enableAction('c2.enterQueue', ({ term }) => {
+          let queueAct = dep(hut.enableAction('enterQueue', ({ term }) => {
             if (!isForm(term, String)) throw Error('Term must be String');
             if (term.length > 50) throw Error('Term max length: 50');
-            hut.addRecord('c2.queue', [ chess2, status ], { term, ms: Date.now() });
+            hut.addRecord('queue', [ chess2, status ], { term, ms: Date.now() });
           }));
           
           /// {BELOW=
@@ -756,7 +757,7 @@ global.rooms['chess2'] = async chess2Keep => {
         });
         dep.scp(queueChooser.srcs.onn, (queue, dep) => {
           
-          let leaveQueueAct = dep(hut.enableAction('c2.leaveQueue', () => queue.end()));
+          let leaveQueueAct = dep(hut.enableAction('leaveQueue', () => queue.end()));
           
           /// {BELOW=
           let term = queue.getValue('term');
@@ -781,22 +782,22 @@ global.rooms['chess2'] = async chess2Keep => {
       };
       let nodeMatch = (dep, real, { matchPlayer, changeStatusAct }) => {
         
-        let match = matchPlayer.m('c2.match');
+        let match = matchPlayer.m('match');
         let myColour = matchPlayer.getValue('colour');
         let moveColour = (myColour === 'white') ? '#e4e4f0' : '#191944';
         
-        let matchReal = dep(real.addReal('c2.match', {
+        let matchReal = dep(real.addReal('match', {
           Geom: { w: '100%', h: '100%' },
           Axis1d: { axis: 'y', dir: '+', window: 'clip' },
           Decal: { colour: '#646496' },
           Transform: { rotate: (myColour === 'white') ? 0 : -0.5 }
         }));
-        let boardReal = matchReal.addReal('c2.board', { Geom: { w: '80%', h: '80%' } });
-        let blackPlayerHolderReal = matchReal.addReal('c2.playerHolder', {
+        let boardReal = matchReal.addReal('board', { Geom: { w: '80%', h: '80%' } });
+        let blackPlayerHolderReal = matchReal.addReal('playerHolder', {
           Geom: { w: '100%', h: '10%' },
           Transform: { rotate: (myColour === 'white') ? 0 : -0.5 }
         });
-        let whitePlayerHolderReal = matchReal.addReal('c2.playerHolder', {
+        let whitePlayerHolderReal = matchReal.addReal('playerHolder', {
           Geom: { w: '100%', h: '10%' },
           Transform: { rotate: (myColour === 'white') ? 0 : -0.5 }
         });
@@ -809,18 +810,18 @@ global.rooms['chess2'] = async chess2Keep => {
         let myPlayerHolderReal = (myColour === 'white') ? whitePlayerHolderReal : blackPlayerHolderReal;
         
         // Get a Chooser for our MatchPlayer's Moves! (We'll need it...)
-        let roundMoveRh = dep(matchPlayer.rh('c2.roundMove'));
+        let roundMoveRh = dep(matchPlayer.rh('roundMove'));
         let roundMoveChooser = dep(Chooser(roundMoveRh));
         
-        dep.scp(match, 'c2.matchPlayer', (mp, dep) => {
+        dep.scp(match, 'matchPlayer', (mp, dep) => {
           
           let term = mp.getValue('term');
           
           let colour = mp.getValue('colour');
           let holderReal = (colour === 'white') ? whitePlayerHolderReal : blackPlayerHolderReal;
-          let playerReal = dep(holderReal.addReal('c2.player', { text: term }, {
+          let playerReal = dep(holderReal.addReal('player', {
             Geom: { z: 1, w: '100%', h: '100%' },
-            Text: { align: 'mid', size: ts00 }
+            Text: { align: 'mid', size: ts00, text: term },
           }));
           
           // Show when we're waiting for our Opponent to move
@@ -842,7 +843,7 @@ global.rooms['chess2'] = async chess2Keep => {
         
         for (let col of 8) for (let row of 8) {
           let colour = ((col % 2) !== (row % 2)) ? 'white' : 'black';
-          boardReal.addReal('c2.tile', {
+          boardReal.addReal('tile', {
             Geom: { anchor: 'tl', w: tileVal(1), h: tileVal(1), ...tileCoord(col, row) },
             Decal: { ...tileDecals[colour] }
           });
@@ -852,13 +853,13 @@ global.rooms['chess2'] = async chess2Keep => {
         
         // Render pieces
         let pieceControls = dep(MemSrc.TmpM());
-        dep.scp(match, 'c2.piece', (piece, dep) => {
+        dep.scp(match, 'piece', (piece, dep) => {
           
           /// {BELOW=
           
           let dbg = (Math.random() < 0.1) ? gsc : ()=>{};
           
-          let pieceReal = dep(boardReal.addReal('c2.piece', {
+          let pieceReal = dep(boardReal.addReal('piece', {
             
             Geom: { anchor: 'tl', shape: 'oval', w: tileVal(1), h: tileVal(1) },
             Image: {},
@@ -900,18 +901,18 @@ global.rooms['chess2'] = async chess2Keep => {
         });
         
         // Render based on the current Outcome
-        let outcomeRh = dep(match.rh('c2.outcome'));
+        let outcomeRh = dep(match.rh('outcome'));
         let outcomeChooser = dep(Chooser(outcomeRh));
         dep.scp(outcomeChooser.srcs.onn, (outcome, dep) => {
           
-          let outcomeReal = dep(boardReal.addReal('c2.outcome', {
+          let outcomeReal = dep(boardReal.addReal('outcome', {
             Geom: { w: '100%', h: '100%' },
             Axis1d: { axis: 'y', dir: '+', mode: 'compactCenter' },
             Decal: { colour: 'rgba(0, 0, 0, 0.4)' },
             Press: { pressFn: () => changeStatusAct.act({ status: 'queue' }) },
             Transform: { rotate: (myColour === 'white') ? 0 : 0.5 }
           }));
-          let contentReal = outcomeReal.addReal('c2.content', {
+          let contentReal = outcomeReal.addReal('content', {
             Geom: { w: '70%', h: '70%' },
             Axis1d: { axis: 'y', dir: '+', mode: 'compactCenter' },
             Decal: { colour: 'rgba(40, 40, 100, 0.5)' }
@@ -942,38 +943,38 @@ global.rooms['chess2'] = async chess2Keep => {
             
           }
           
-          contentReal.addReal('c2.text', lay.text(text, tsP1));
-          contentReal.addReal('c2.text', lay.text('Click anywhere to play again\u2026'));
+          contentReal.addReal('text', lay.text(text, tsP1));
+          contentReal.addReal('text', lay.text('Click anywhere to play again\u2026'));
           
         });
         dep.scp(outcomeChooser.srcs.off, (nop, dep) => {
           
-          let resignAct = dep(hut.enableAction('c2.resign', async () => {
+          let resignAct = dep(hut.enableAction('resign', async () => {
             
             /// {ABOVE=
-            let round = await match.withRh('c2.round', 'one');
+            let round = await match.withRh('round', 'one');
             if (round) round.end();
-            hut.addRecord('c2.outcome', [ match ], { winner: (myColour === 'white') ? 'black' : 'white', reason: 'resign' });
+            hut.addRecord('outcome', [ match ], { winner: (myColour === 'white') ? 'black' : 'white', reason: 'resign' });
             /// =ABOVE}
             
           }));
           
-          dep.scp(match, 'c2.round', (round, dep) => {
+          dep.scp(match, 'round', (round, dep) => {
             
             /// {BELOW=
-            let timeBarReal = dep(myPlayerHolderReal.addReal('c2.timer', {
+            let timeBarReal = dep(myPlayerHolderReal.addReal('timer', {
               Geom: { anchor: 'mid', z: 0, w: '0', h: '100%' },
               Decal: { colour: 'rgba(40, 40, 100, 0.35)', transition: {
                 x: { ms: 800, curve: 'linear' },
                 w: { ms: 800, curve: 'linear' }
               }}
             }));
-            let passReal = dep(myPlayerHolderReal.addReal('c2.pass', {
+            let passReal = dep(myPlayerHolderReal.addReal('pass', {
               Geom: { shape: 'oval', anchor: 'br', z: 1, w: '10vmin', h: '10vmin' },
               Text: { size: ts00, text: 'Pass' },
               Decal: { colour: '#ffffff20' }
             }));
-            let resignReal = dep(myPlayerHolderReal.addReal('c2.resign', {
+            let resignReal = dep(myPlayerHolderReal.addReal('resign', {
               Geom: { shape: 'oval', anchor: 'br', z: 1, w: '10vmin', h: '10vmin', y: '10vmin' },
               Text: { size: ts00, text: 'Resign' },
               Decal: { colour: '#ff808020', windowing: false }
@@ -991,19 +992,19 @@ global.rooms['chess2'] = async chess2Keep => {
             
             dep.scp(roundMoveChooser.srcs.off, (noRoundMove, dep) => {
               
-              let submitMoveAct = dep(hut.enableAction('c2.submitMove', async move => {
+              let submitMoveAct = dep(hut.enableAction('submitMove', async move => {
                 
                 /// {ABOVE=
                 
                 let { type='play' } = move;
                 if (type === 'pass')
-                  return void hut.addRecord('c2.roundMove', { 0: round, 1: matchPlayer, 'piece?': null });
+                  return void hut.addRecord('roundMove', { 0: round, 1: matchPlayer, 'piece?': null });
                 
                 let { trg } = move;
                 if (!trg) throw Error(`Missing "trg"`);
                 
                 let { piece: pieceUid } = move;
-                let pieces = await match.withRh('c2.piece', 'all');
+                let pieces = await match.withRh('piece', 'all');
                 let piece = pieces.find(piece => piece.uid === pieceUid).val;
                 if (!piece) throw Error(`Invalid piece uid: ${pieceUid}`).mod({ move });
                 if (piece.getValue('wait') > 0) throw Error(`Selected piece needs to wait`);
@@ -1017,7 +1018,7 @@ global.rooms['chess2'] = async chess2Keep => {
                 
                 let { col, row, cap } = vm;
                 
-                hut.addRecord('c2.roundMove', { 0: round, 1: matchPlayer, 'piece?': piece }, { col, row, cap: !!cap });
+                hut.addRecord('roundMove', { 0: round, 1: matchPlayer, 'piece?': piece }, { col, row, cap: !!cap });
                 
                 /// =ABOVE}
                 
@@ -1030,7 +1031,7 @@ global.rooms['chess2'] = async chess2Keep => {
               dep(resignReal.addLayout('Feel', { feelSrc }));
               dep.scp(feelSrc, (feel, dep) => {
                 
-                let holdReal = dep(resignReal.addReal('c2.hold', {
+                let holdReal = dep(resignReal.addReal('hold', {
                   
                   Geom: { shape: 'oval', anchor: 'mid', z: -1 },
                   Decal: { transition: {
@@ -1073,16 +1074,16 @@ global.rooms['chess2'] = async chess2Keep => {
                 
                 dep(pieceReal.addLayout('Decal', { border: { ext: '5px', colour: moveColour } }));
                 
-                let pieces = await match.withRh('c2.piece', 'all');
+                let pieces = await match.withRh('piece', 'all');
                 
                 for (let { col, row, cap } of getValidMoves(pieces, matchPlayer, piece)) {
                   
-                  let optionReal = dep(boardReal.addReal('c2.option', {
+                  let optionReal = dep(boardReal.addReal('option', {
                     Geom: { anchor: 'tl', w: tileVal(1), h: tileVal(1), ...tileCoord(col, row) },
                     Press: { pressFn: () => submitMoveAct.act({ piece: piece.uid, trg: { col, row } }) }
                   }));
                   
-                  optionReal.addReal('c2.indicator', {
+                  optionReal.addReal('indicator', {
                     Geom: { shape: 'oval', anchor: 'mid', w: cap ? '80%' : '40%', h: cap ? '80%' : '40%' },
                     Decal: { border: cap ? { ext: '5px', colour: moveColour } : null, colour: cap ? null : moveColour }
                   });
@@ -1098,12 +1099,12 @@ global.rooms['chess2'] = async chess2Keep => {
             });
             dep.scp(roundMoveChooser.srcs.onn, (roundMove, dep) => {
               
-              let retractMoveAct = dep(hut.enableAction('c2.retractMove', async () => {
+              let retractMoveAct = dep(hut.enableAction('retractMove', async () => {
                 
                 /// {ABOVE=
                 // Really this is just sanity; a move must exist due to
                 // the scoping!
-                let curMove = await matchPlayer.withRh('c2.roundMove', 'one'); // OR { type: 'c2.roundMove', fn: 'all' } OR { type: 'c2.roundMove', fn: rh => rh.getRecs() }
+                let curMove = await matchPlayer.withRh('roundMove', 'one'); // OR { type: 'roundMove', fn: 'all' } OR { type: 'roundMove', fn: rh => rh.getRecs() }
                 if (curMove) curMove.end();
                 /// =ABOVE}
                 
@@ -1129,28 +1130,28 @@ global.rooms['chess2'] = async chess2Keep => {
               
               dep(pieceReal.addLayout('Decal', { border: { ext: '5px', colour: moveColour } }));
               
-              let moveReal = dep(boardReal.addReal('c2.move', {
+              let moveReal = dep(boardReal.addReal('move', {
                 Geom: { anchor: 'tl', w: tileVal(1), h: tileVal(1), ...tileCoord(col, row) }
               }));
               
               if (cap) {
                 
-                moveReal.addReal('c2.indicator1', {
+                moveReal.addReal('indicator1', {
                   Geom: { shape: 'oval', anchor: 'mid', w: '95%', h: '95%' },
                   Decal: { border: { ext: '2px', colour: moveColour } }
                 });
-                moveReal.addReal('c2.indicator2', {
+                moveReal.addReal('indicator2', {
                   Geom: { shape: 'oval', anchor: 'mid', w: '80%', h: '80%' },
                   Decal: { border: { ext: '4px', colour: moveColour } }
                 });
                 
               } else {
                 
-                moveReal.addReal('c2.indicator1', {
+                moveReal.addReal('indicator1', {
                   Geom: { shape: 'oval', anchor: 'mid', w: '50%', h: '50%' },
                   Decal: { border: { ext: '2px', colour: moveColour } }
                 });
-                moveReal.addReal('c2.indicator2', {
+                moveReal.addReal('indicator2', {
                   Geom: { shape: 'oval', anchor: 'mid', w: '35%', h: '35%' },
                   Decal: { colour: moveColour }
                 });
@@ -1171,12 +1172,12 @@ global.rooms['chess2'] = async chess2Keep => {
         Geom: { w: '80%', h: '80%', anchor: 'mid' },
         Decal: { colour: 'rgba(120, 120, 170, 1)' }
       }));
-      let playerRh = dep(hut.rh('c2.player'));
+      let playerRh = dep(hut.rh('c2.player')); // Note the prefix is essential here!!
       let playerExistsChooser = dep(Chooser(playerRh, null));
       dep.scp(playerExistsChooser.srcs.off, (noPlayer, dep) => nodePlayerless(dep, paneReal, chess2));
       dep.scp(playerExistsChooser.srcs.onn, (player, dep) => {
         
-        let changeStatusAct = dep(hut.enableAction('c2.changeStatus', async msg => {
+        let changeStatusAct = dep(hut.enableAction('changeStatus', async msg => {
           
           /// {ABOVE=
           let { status=null } = msg ?? {};
@@ -1190,13 +1191,13 @@ global.rooms['chess2'] = async chess2Keep => {
           
         }));
         
-        dep.scp(player, 'c2.playerStatus', (status, dep) => {
+        dep.scp(player, 'playerStatus', (status, dep) => {
           
           let type = status.getValue('type');
           if (type === 'chill') nodeChill(dep, paneReal, { player, changeStatusAct });
           if (type === 'learn') nodeLearn(dep, paneReal, { player, status, changeStatusAct });
           if (type === 'queue') nodeQueue(dep, paneReal, { player, status, changeStatusAct });
-          if (type === 'match') dep.scp(status, 'c2.matchPlayer', (matchPlayer, dep) => {
+          if (type === 'match') dep.scp(status, 'matchPlayer', (matchPlayer, dep) => {
             
             paneReal.mod({ w: '100%', h: '100%' });
             dep(() => paneReal.mod({ w: skip, h: skip }));

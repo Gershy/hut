@@ -492,7 +492,26 @@ global.rooms['setup.hut'] = async () => {
     },
     /// =ABOVE}
     
-    addRecord(...args) { return this.type.manager.addRecord(...args); },
+    addRecord(...args /* type, group, value, uid, volatile | { type, group, value, uid, volatile } */) {
+      // We want to make sure any Type provided as a String defaults to
+      // having `this.prefix`! The cases where we can act are:
+      // 1. args[0] is a String (this is the Type provided as a String)
+      // 2. args[0] is an Object and args[0].type is a String
+      
+      if (args[0]?.constructor === String) {
+        if (!args[0].has('.')) args = [
+          `${this.prefix}.${args[0]}`,
+          ...args.slice(1)
+        ];
+      } else if (args[0]?.constructor === Object && args[0].type?.constructor === String) {
+        if (!args[0].type.has('.')) args = [
+          { ...args[0], type: `${this.prefix}.${args[0].type}` },
+          ...args.slice(1)
+        ];
+      }
+      return this.type.manager.addRecord(...args);
+      
+    },
     
   })});
   let BelowHut = form({ name: 'BelowHut', has: { Hut }, props: (forms, Form) => ({

@@ -76,7 +76,7 @@ global.rooms['record'] = async () => {
         
         if (isForm(type, String)) {
           if (!type.has('.')) {
-            let pfxs = Set(group.mems.toArr(mem => mem.type.getPfx()));
+            let pfxs = Set(group.mems.toArr(mem => mem.type.getPrefix()));
             if (pfxs.size !== 1) throw Error(`Group prefixes are [${pfxs.toArr(v => v).join(',')}]; no default available`);
             type = `${[ ...pfxs ][0]}.${type}`;
           }
@@ -294,14 +294,11 @@ global.rooms['record'] = async () => {
       if (manager.types[name]) throw Error(`Instantiated Type with duplicate name: "${name}"`);
       
       // Doen't hurt to have the Type mapped immediately!
-      manager.types[name] = Object.defineProperties(this, {
-        name: { value: name, enumerable: true },
-        manager: { value: manager, enumerable: false },
-        termTypes: { value: {} /* Term => Type */ }
-      });
+      manager.types[name] = Object.assign(this, { name, manager, termTypes: {} });
+      denumerate(this, 'manager');
       
     },
-    getPfx() { return this.name.cut('.')[0] },
+    getPrefix() { return this.name.cut('.')[0] },
     
     updateTypeTerms(typeTerms /* { term1: type1, term2: type2 ... } */) {
       
@@ -914,7 +911,7 @@ global.rooms['record'] = async () => {
       if (isForm(type, String)) {
         
         // Apply default prefix if none provided
-        if (!type.has('.')) type = `${this.type.getPfx()}.${type}`;
+        if (!type.has('.')) type = `${this.type.getPrefix()}.${type}`;
         
         // If `type` includes "/" then it embeds `term` too (in which
         // case it's illegal to also supply `term` directly).
@@ -1078,7 +1075,7 @@ global.rooms['record'] = async () => {
       // Perhaps `term` is a Type's name, without the shortname prefix?
       // Add the shortname prefix and check for a matching member...
       if (!term.has('.')) {
-        let pfxTerm = `${this.type.getPfx()}.${term}`;
+        let pfxTerm = `${this.type.getPrefix()}.${term}`;
         if (this.group.mems.has(pfxTerm)) return this.group.mems[pfxTerm];
         if (this.group.terms.has(term)) return null;
       }

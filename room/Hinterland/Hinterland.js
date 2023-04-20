@@ -24,6 +24,12 @@ global.rooms['Hinterland'] = async foundation => {
       // If that *doesn't* make sense, maybe all Hinterlands logic needs
       // to move to `foundation` + `HtmlBrowserHabitat/init/init.js`
       
+      // Note that `hut` and `rec` probably have Types with the Prefix
+      // of "hut". We want the LoftRec initiated here to have the prefix
+      // specified by `prefix`, which refers to the deploy config for
+      // this Loft! (This allows logic within the Loft to default to
+      // using the correct prefix)
+      
       let tmp = Tmp();
       tmp.endWith(netIden.runOnNetwork());
       
@@ -39,10 +45,10 @@ global.rooms['Hinterland'] = async foundation => {
         
       }
       
-      let hinterlandReal = global.real.addReal('loft');
+      let hinterlandReal = global.real.addReal(`${prefix}.loft`);
       tmp.endWith(hinterlandReal);
       
-      let loftRh = rec.relHandler({ type: 'loft', term: 'hut', offset: 0, limit: 1, fixed: true });
+      let loftRh = rec.relHandler({ type: `${prefix}.loft`, term: 'hut', offset: 0, limit: 1, fixed: true });
       tmp.endWith(loftRh);
       
       /// {DEBUG=
@@ -91,7 +97,7 @@ global.rooms['Hinterland'] = async foundation => {
         return [ rh, ...args.slice(2) ];
         
       };
-      let resolveHrecs = (tmp, dep) => hasForm(tmp.rec, Record) ? tmp.rec : tmp;
+      let resolveHrecs = (tmp, dep) => tmp.rec?.Form?.['~forms']?.has(Record) ? tmp.rec : tmp;
       
       /// {ABOVE=
       
@@ -101,15 +107,10 @@ global.rooms['Hinterland'] = async foundation => {
         else if (tmp.rec?.Form?.['~forms']?.has(Record)) { follower.followRec(tmp.rec); return tmp.rec; }
         return tmp;
         
-        
-        //if      (hasForm(tmp, Record))     { follower.followRec(tmp);     return tmp; }
-        //else if (hasForm(tmp.rec, Record)) { follower.followRec(tmp.rec); return tmp.rec; }
-        //return tmp;
-        
       };
       
       // Create the AppRecord identified by `<prefix>.loft`
-      let mainRec = rec.addRecord({ type: 'loft', group: { hut }, value: null, uid: `!loft@${rec.type.getPfx()}` });
+      let mainRec = rec.addRecord({ type: `${prefix}.loft`, group: { hut }, value: null, uid: `!loft@${prefix}` });
       
       // Wait for the Loft to register as a HolderRec on `hut`
       let mainScope = Scope(loftRh, { processArgs: rhFromRecWithRhArgs, frameFn: resolveHrecs }, (loftRec, dep) => {
