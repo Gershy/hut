@@ -376,11 +376,11 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   // Note that for sensitive keys the given Keep should be removable
   // media (like a USB key) for physical isolation
   
-  init({ name, details={}, keep=null, secureBits=2048, crtType='selfSigned', servers, getSessionKey, ...more }={}) {
+  init({ name, details={}, keep=null, secureBits=2048, certificateType='selfSigned', servers, getSessionKey, ...more }={}) {
     
     // Details that must be consistent across initializations:
     // - name
-    // - crtType
+    // - certificateType
     // - secureBits
     // - requirePhysicalSafety
     // - org
@@ -409,7 +409,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       keep,
       
       // Security
-      crtType,
+      certificateType,
       secureBits,
       requirePhysicalSafety, // TODO: Consume this value!
       redirectHttp80,
@@ -420,6 +420,8 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       servers: []
       
     });
+    
+    gsc('HI', this.desc(), this);
     
     this.readyPrm = Promise.all([
       
@@ -829,12 +831,12 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       //    |   }
       //    | }
       
-      Form.subcon.sign('GET CERT', this.crtType);
+      Form.subcon.sign('GET CERT', this.certificateType);
       
       let sgn = null; // Will look like `{ prv, csr, crt, invalidate }`
-      if      (this.crtType === 'selfSigned') sgn = await this.getSgnSelfSigned();
-      else if (this.crtType.hasHead('acme/')) sgn = await this.getSgnAcme();
-      else                                    throw Error(`Unknown crt acquisition method: "${this.crtType}"`);
+      if      (this.certificateType === 'selfSigned') sgn = await this.getSgnSelfSigned();
+      else if (this.certificateType.hasHead('acme/')) sgn = await this.getSgnAcme();
+      else                                    throw Error(`Unknown crt acquisition method: "${this.certificateType}"`);
       
       let deets = await this.getOsslDetails({ crt: sgn.crt });
       Form.subcon.sign('DEETS', deets);
@@ -916,8 +918,8 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
     let sc = Form.subcon.acme;
     
-    let [ acquireMethod, type ] = this.crtType.split('/');
-    if (acquireMethod !== 'acme') throw Error(`Not an acme method: "${this.crtType}"`);
+    let [ acquireMethod, type ] = this.certificateType.split('/');
+    if (acquireMethod !== 'acme') throw Error(`Not an acme method: "${this.certificateType}"`);
     
     await this.readyPrm;
     

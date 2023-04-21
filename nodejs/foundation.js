@@ -371,7 +371,6 @@ let makeSchema = () => {
   idenScm.at('certificateType').fn = (val, schema, chain) => {
     
     if (val === null) return null;
-    
     return validate(chain, val, { form: String });
     
   };
