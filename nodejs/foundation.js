@@ -307,11 +307,8 @@ let makeSchema = () => {
     
   };
   idenScm.at('name').fn = (val, schema, chain, name) => {
-    
     validate(chain, val, { regex: /^[a-z][a-zA-Z]*$/, desc: 'only alphabetic characters and beginning with a lowercase character' });
-    
     return val;
-    
   };
   idenScm.at('keep').fn = (val, schema, chain) => {
     
@@ -332,7 +329,28 @@ let makeSchema = () => {
     return val;
     
   };
-  idenScm.at('geo').fn = (val, schema, chain) => {
+  idenScm.at('details').fn = (val, schema, chain) => {
+    
+    if (val === null) val = {};
+    validate(chain, val, { form: Object });
+    
+    val = {
+      geo: 'earth.continent.country.city.part',
+      org: 'company.division.division.division',
+      email: 'unknownOwner@hut.com',
+      ...val
+    };
+    
+    return schema.inner(val, chain);
+    
+  };
+  idenScm.at('details.*').fn = (val, schema, chain) => {
+    
+    validate(chain, val, { form: String });
+    return val;
+    
+  };
+  idenScm.at('details.geo').fn = (val, schema, chain) => {
     
     validate(chain, val, { form: String });
     
@@ -341,7 +359,7 @@ let makeSchema = () => {
     return pcs.slice(0, 6).join('.');
     
   };
-  idenScm.at('org').fn = (val, schema, chain) => {
+  idenScm.at('details.org').fn = (val, schema, chain) => {
     
     validate(chain, val, { form: String });
     
@@ -1388,7 +1406,11 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     
     // Get a NetworkIdentity to handle the hosting
     let NetworkIdentity = require('./NetworkIdentity.js');
-    let netIden = NetworkIdentity(hosting.netIden);
+    gsc('CONFIG:', hosting.netIden);
+    let netIden = NetworkIdentity({
+      ...hosting.netIden,
+      //details: hosting.netIden.slice([ 'geo', 'org' ])
+    });
     
     // Server management
     let getSessionKey = (payload) => {

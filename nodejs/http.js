@@ -1,11 +1,10 @@
 'use strict';
 
-require('../clearing.js');
+require('../room/setup/clearing/clearing.js');
 
 module.exports = {
   
   defaultPorts: { http: 80, https: 443 },
-  
   resolveAddr: (args={}) => {
     
     let { addr=null, proto=null, host=null, port=null, path=null }={} = args;
@@ -39,7 +38,6 @@ module.exports = {
     return [ addr, proto, host, port, path ];
     
   },
-  
   query: async ({ addr, proto, host, port, path, method='get', headers={}, body=null, plainBody=null, ...more }={}) => {
     
     [ addr, proto, host, port, path ] = module.exports.resolveAddr({ addr, proto, host, port, path });

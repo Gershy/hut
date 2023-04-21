@@ -1,12 +1,5 @@
 'use strict';
 
-// TODO: I want to rename NetworkIdentity(...).details.networkAddresses
-// to "ownedNetworkAddresses" to imply that they are fully administrated
-// by the NetworkIdentity
-
-// TODO: Https servers should always be accompanied to an Http server
-// that redirects to https!!
-
 require('../room/setup/clearing/clearing.js');
 
 let dbg = (...args) => gsc(...args);
@@ -228,9 +221,9 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   
   $subcon: Object.plain({
     
-    server: Function.stub,
-    sign: Function.stub,
-    acme: Function.stub
+    server: subcon('netIden.server'),
+    sign: subcon('netIden.sign'),
+    acme: subcon('netIden.acme')
     
   }),
   
@@ -376,17 +369,14 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   // Note that for sensitive keys the given Keep should be removable
   // media (like a USB key) for physical isolation
   
-  init({ name, details={}, keep=null, secureBits=2048, certificateType='selfSigned', servers, getSessionKey, ...more }={}) {
+  init({ name, details={}, keep=null, secureBits=2048, certificateType='selfSign', servers, getSessionKey, ...more }={}) {
     
-    // Details that must be consistent across initializations:
-    // - name
-    // - certificateType
-    // - secureBits
-    // - requirePhysicalSafety
-    // - org
-    // - geo
-    // - email
-    // - password
+    // TODO: For the same Keep, certain details are expected to remain
+    // consistent across runs; it's probably worth storing the initial
+    // details used in a Keep, and then checking those details on every
+    // other run to make sure they're the same!
+    
+    if ([ String, Array ].any(C => isForm(keep, C))) keep = global.keep(keep);
     
     if (secureBits && secureBits < 512) throw Error(`Use at least 512 secure bits`);
     if (!isForm(name, String) || !name) throw Error(`Must provide "name"`);
@@ -420,8 +410,6 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       servers: []
       
     });
-    
-    gsc('HI', this.desc(), this);
     
     this.readyPrm = Promise.all([
       
@@ -462,19 +450,19 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   },
   desc() {
     
-    let desc = getFormName(this);
+    let networkAddresses = this.getNetworkAddresses();
     
-    let props = {};
-    if (this.keep) props.keep = this.keep.desc();
-    let networkAddresses = this.servers.map(server => server.netAddr);
-    if (networkAddresses.length) props.addrs = '[' + networkAddresses.join(', ') + ']';
+    let pcs = [];
+    pcs.push(`"${this.name}"`);
+    pcs.push(this.secureBits ? `secure(${this.secureBits})` : 'UNSAFE');
+    if (this.keep) pcs.push(this.keep.desc());
+    if (networkAddresses.length) pcs.push(`[ ${networkAddresses.join(', ')} ]`);
     
-    return props.empty()
-      ? `${getFormName(this)}( ${this.name} (${this.secureBits}) )`
-      : `${getFormName(this)}( ${this.name} (${this.secureBits}) ${props.toArr((v, k) => k + ': ' + v).join('; ')} )`;
+    return `${getFormName(this)}(${pcs.join('; ')})`;
     
   },
   
+  getNetworkAddresses() { return Set(this.servers.map(server => server.netAddr)).toArr(v => v); },
   runInShell(args, opts={}) {
     
     if (hasForm(opts, Function)) opts = { onInput: opts };
@@ -602,12 +590,14 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     return Object.assign(prm, { proc, rawShellStr });
     
   },
-  getOsslConfigFileContent(networkAddresses=this.details.networkAddresses) {
+  getOsslConfigFileContent(networkAddresses=this.getNetworkAddresses()) {
     
     // TODO: Where does `this.details.password` go??
     
     let [ commonName, ...altNames ] = networkAddresses;
     if (!commonName) throw Error(`Supply at least 1 NetworkAddress`)
+    
+    gsc('DETAILS', this.details);
     
     return String.baseline(`
       | #.pragma [=] abspath:true
@@ -695,9 +685,10 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     if (!prv)                                     throw Error(`Must supply "prv" to get csr!`);
     if (![ String, Buffer ].has(prv.constructor)) throw Error(`"prv" must be String or Buffer (got ${getFormName(prv)})`);
     
+    let config = this.getOsslConfigFileContent();
     let [ prvFp, cfgFp ] = await Promise.all([
       Form.setFp(prv),
-      Form.setFp(this.getOsslConfigFileContent())
+      Form.setFp(config)
     ]);
     
     try {
@@ -785,13 +776,11 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
   },
   
-  async retrieveOrCompute(chain, encoding, fn) {
+  async retrieveOrCompute(diveToken, encoding, fn) {
     
     if (!this.keep) return fn();
     
-    if (isForm(chain, String)) chain = chain.split('.');
-    if (!isForm(chain, Array)) throw Error(`Couldn't resolve "chain" to Array (got ${getFormName(chain)})`);
-    let keep = this.keep.seek(...chain);
+    let keep = this.keep.seek(token.dive(diveToken));
     
     let ser = encoding === 'ser';
     let val = await keep.getContent(ser ? null : encoding);
@@ -834,7 +823,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       Form.subcon.sign('GET CERT', this.certificateType);
       
       let sgn = null; // Will look like `{ prv, csr, crt, invalidate }`
-      if      (this.certificateType === 'selfSigned') sgn = await this.getSgnSelfSigned();
+      if      (this.certificateType === 'selfSign')   sgn = await this.getSgnSelfSigned();
       else if (this.certificateType.hasHead('acme/')) sgn = await this.getSgnAcme();
       else                                    throw Error(`Unknown crt acquisition method: "${this.certificateType}"`);
       
@@ -944,6 +933,8 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       
       let client = AcmeHttpClient({ rootAddr: provider.directory, prv: await this.getPrv() });
       
+      let networkAddresses = this.getNetworkAddresses();
+      
       sc('Retrieving account...');
       let accountRes = await this.retrieveOrCompute(`acme.${type}.account`, 'ser', async () => {
         
@@ -963,23 +954,27 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       sc('Creating a new Order...');
       let orderRes = await account.query({
         addr: '!newOrder',
-        body: { identifiers: this.details.networkAddresses.map(value => ({ type: 'dns', value })) }
+        body: { identifiers: networkAddresses.map(value => ({ type: 'dns', value })) }
       });
       if (orderRes.code !== 201) throw Error(`Couldn't create ${type} order`).mod({ res: orderRes });
       
-      sc(`Initiated order for [ ${this.details.networkAddresses.join(', ')} ], with status "${orderRes.body.status}"`);
+      sc(`Initiated order for [ ${networkAddresses.join(', ')} ], with status "${orderRes.body.status}"`);
       if (orderRes.body.status !== 'valid') {
         
         sc(`Order needs to go from "${orderRes.body.status}" -> "valid"; we'll complete all Authorizations (one for each NetworkAddress)`);
         
         let orderUrl = orderRes.headers.location;
-        let orderAuths = orderRes.body.authorizations; // Note `orderRes.body.authorizations.length === this.details.networkAddresses.length` (unless some addresses have already been certified!)
+        let orderAuths = orderRes.body.authorizations; // Note `orderRes.body.authorizations.length === this.getNetworkAddresses().length` (unless some addresses have already been certified!)
         let auths = await Promise.all(orderAuths.map(async authUrl => {
           let res = await account.query({ addr: authUrl });
           if (res.code !== 200) throw Error(`Couldn't initialize ${type} authorization @ ${authUrl}`).mod({ res });
           return { ...res, url: authUrl };
         }));
-        sc('Authorizations for our order:', this.details.networkAddresses, auths.map(auth => auth.url));
+        sc('Authorizations for our order:\n' + auths.map(auth => {
+          let { body: { identifier: { type, value } } } = auth;
+          return `${type} / ${value} (${auth.url})`;
+        }).join('\n').indent(2));
+        //   networkAddresses.join('\n').indent(2), auths);
         
         let getValidAuthResByPolling = async (auth, retryWaitMs=1500, maxAttempts=10) => {
           
@@ -1035,8 +1030,6 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
             // verify, corresponding exactly to the NetworkAddress used
             // when initiating the Order
             let addr = auth.body.identifier.value;
-            
-            sc('DOING HTTP-01', { addr, challenge });
             
             let hash = require('crypto').createHash('sha256').update(JSON.stringify(client.jwk));
             let keyAuth = `${challenge.token}.${hash.digest('base64url')}`;
@@ -1101,7 +1094,8 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
                 
               } else {
                 
-                sc('Using a one-off http port 80 server!', { port: 80, addr });
+                sc('Using a one-off http port 80 server!');
+                let err = Error('');
                 let server = require('http').createServer((req, res) => {
                   if (tryAcmeHttp01ChallengeReply(req, res)) return challengePrm.resolve();
                   res.writeHead(400);
@@ -1109,7 +1103,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
                 });
                 await Promise((rsv, rjc) => {
                   server.on('listening', rsv);
-                  server.on('error', rjc);
+                  server.on('error', cause => err.propagate({ cause, msg: 'Failed to start one-off server for acme http challenge' }));
                   server.listen(80, addr); // TODO: Listen on 0.0.0.0? Or on `addr`? (Can we get more specific about where the acme server will get in touch with us?)
                 });
                 tmp.endWith(() => {
@@ -1170,7 +1164,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
           
           let challenge = auth.body.challenges.find(chall => chall.type === challType).val;
           
-          sc('DO CHALLENGE', { challenge });
+          sc(`DO CHALLENGE ${challenge.type} FOR ${auth.body.identifier.value}`);
           let authRes = await challOptions[challType](auth, challenge);
           sc(`CRIKEY - the "${challType}" challenge function is complete!!`, authRes);
           
@@ -1339,9 +1333,12 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     }
     /// =DEBUG}
     
-    sc(`NetworkIdentity hosting Open! (${this.secureBits ? 'secure' : 'unsafe'})`, {
-      portServers: portServers.map(servers => servers.map(s => s.desc()))
-    });
+    sc(''
+      + `NetworkIdentity hosting Open! (${this.secureBits ? 'secure' : 'unsafe'})\n`
+      + portServers.toArr((servers, port) => {
+          return `- port ${port}:\n` + servers.map((s, n) => `  ${n + 1}: ${s.protocol}://${s.netAddr}`).join('\n')
+        })
+    );
     
     if (!this.secureBits) {
       

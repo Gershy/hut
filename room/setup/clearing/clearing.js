@@ -821,7 +821,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   // Room loading
   getRooms: (names, { shorten=true, ...opts }={}) => { throw Error('Not implemented'); },
   getRoom: (name, opts={}) => then(getRooms([ name ], { ...opts, shorten: false }), batch => batch[name]),
-  mapCmpToSrc: (file, row, col) => gsc('yikes') ?? ({ file, row, col, context: null }),
+  mapCmpToSrc: (file, row, col) => ({ file, row, col, context: null }),
   
   // Subcon debug
   subcon: (term, opts={}) => {

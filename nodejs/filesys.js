@@ -43,6 +43,7 @@ let Filepath = form({ name: 'Filepath', props: (forms, Form) => ({
       cmps: path.resolve('/', ...vals).split(/[/\\]+/).map(v => v || skip),
       fspVal: null
     });
+    denumerate(this, 'path');
     
   },
   desc() { return [ '[file]', ...this.cmps ].join('\u0010'); },
@@ -89,6 +90,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
       fp: isForm(fp, Filepath) ? fp : Filepath(fp),
       locks: Set()
     });
+    denumerate(this, 'locks');
     
   },
   desc() { return `getFormName(this) @ ${this.fp.desc()}`; },
