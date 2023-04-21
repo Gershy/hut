@@ -1028,10 +1028,7 @@ module.exports = async () => {
     
     async m => { // Comment removal
       
-      let { RoomLoader } = require('./foundation.js');
-      
-      let regL = RoomLoader.captureLineCommentRegex;
-      let regB = RoomLoader.captureInlineBlockCommentRegex;
+      let { captureLineCommentRegex: regL, captureInlineBlockCommentRegex: regB } = require('./foundation.js');
       
       let tests = [
         

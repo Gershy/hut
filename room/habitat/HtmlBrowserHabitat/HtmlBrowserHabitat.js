@@ -134,55 +134,15 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       // TODO: Watch out for traversal with room name??
       // TODO: Parameterize debug??
       
-      if (!isForm(msg?.room, String)) throw Error(`Api: "room" must be String; got ${getFormName(msg?.room)}`);
-      if (!/^[a-zA-Z0-9]([a-zA-Z0-9.])*$/.test(msg.room)) throw Error(`Api: illegal room name: "${msg.room}"`);
+      let room;
+      try         { room = token.dive(msg?.room); }
+      catch (err) { throw Error(`Api: invalid room name`).mod({ room: msg.room }); }
       
       try {
-        reply(await hut.getCompiledKeep('below', msg.room));
+        reply(await getCompiledKeep('below', room));
       } catch (err) {
         reply(`'use strict';global.rooms['${msg.room}']=()=>{throw Error('Api: no room named "${msg.room}"');}`);
       }
-      
-    });
-    cmd(`${this.prefix}.rooms`, async ({ src, reply, msg }) => {
-      
-      // Unlike "<prefix>.room" (singular), type must always be "room"
-      // and therefore the "type" param shouldn't be provided.
-      
-      let roomNames = msg.rooms.split(',').map(r => {
-        let pcs = r.split('.');
-        return [ 'room', ...pcs, `${pcs.slice(-1)[0]}.js` ];
-      });
-      
-      // TODO: Ideally could stream every desired room in order. The
-      // offsets from those rooms reflect the line information in that
-      // single room's file. As each file is being streamed, need to
-      // count number of lines in that file and after all files are
-      // streamed can stream additional json representing the offset of
-      // each room relative to the batch.
-      
-      let compiledRoomsData = await Promise.all(
-        roomNames.map(r => foundation.getCompiledKeep('below', r).then(keep => keep.getContent('utf8')))
-      );
-      
-      // TODO: Need to modify `offsets` before doing something like:
-      //    |   reply(compiledRoomsData.map(d => d.lines.join('\n')).join('\n'))
-      // `offsets` needs to consider that a particular room's offsets
-      // have been shifted ahead by the number of lines of all files
-      // preceding it combined, and also that the name of the file
-      // changes every time the threshold between two files is passed.
-      // Both these considerations are nearly facilitated by the
-      // "context" feature of cmp->src line mapping. Overall:
-      // - The "at" property of every line needs to be shifted ahead
-      //   by the combined number of lines of all preceding files
-      // - Need to include `{ name: 'name.of.file' }` in context for
-      //   first offset of every file
-      // - Need to include
-      //   `{ totalOffset: numberOfPreceedingLinesFromOtherFiles }` to
-      //   provide the number of lines that need to be subtracted from
-      //   overall cmp->src line mappings in order to restore the real
-      //   line number for a specific file
-      throw Error('Not implemented from here on...');
       
     });
     cmd(`${this.prefix}.css`, async ({ src, reply, msg }) => {

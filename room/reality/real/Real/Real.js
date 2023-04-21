@@ -18,7 +18,6 @@ global.rooms['reality.real.Real'] = () => form({ name: 'Real', has: { Tmp }, pro
       /// =DEBUG}
       node
     });
-    
     if (!node) tech.makeNode(this);
     
     for (let layout of layouts) this.addLayout(layout);

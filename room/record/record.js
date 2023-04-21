@@ -649,7 +649,7 @@ global.rooms['record'] = async () => {
       let hrec = Tmp({ rec, desc: () => `HandledRecord(${rec.desc()})` });
       
       mmm('hrecs', +1);
-      this.hrecs.set(rec.uid, hrec);
+      this.hrecs.add(rec.uid, hrec);
       let recEndHrecRoute = rec.route(() => hrec.end());
       
       hrec.endWith(() => {

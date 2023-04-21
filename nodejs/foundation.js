@@ -18,7 +18,7 @@ Error.prepareStackTrace = (err, callSites) => {
     };
     
   });
-  return `{HUTTRACE=${valToJson(trace)}=HUTTRACE}`;
+  return `>>>HUTTRACE>>>${valToJson(trace)}<<<HUTTRACE<<<`;
   
 };
 
@@ -63,6 +63,8 @@ let { rootTransaction: rootTrn, Filepath, FsKeep } = require('./filesys.js');
 
 let niceRegex = (...args) => {
   
+  // Allows writing self-documenting regular expressions
+  
   let [ flags, str ] = (args.length === 2) ? args : [ '', args[0] ];
   
   let lns = str.split('\n').map(line => line.trimTail());
@@ -76,153 +78,24 @@ let niceRegex = (...args) => {
   return RegExp(cols.map(col => [ ...col ][0]).join(''), flags);
   
 };
-let RoomLoader = form({ name: 'RoomLoader', props: (forms, Form) => ({
-  
-  // Note that "#", a totally irrelevant character, is replaced with "`"
-  // making it simpler to indicate literal backtick chars
-  // Note that items under `RoomLoader(...).`
-  
-  // Avoid "//" inside String by processing non-String-open characters,
-  // or fully enclosed Strings (note: may fail to realize that a String
-  // remains open if it has escaped quotes e.g. 'i criii :\')'; note the
-  // lookbehind ("?<=") excludes any content from the actual match
-  $captureLineCommentRegex: niceRegex(String.baseline(`
-    | (?<=                                  )
-    |     ^(      |       |       |       )* [ ]*
-    |       [^'"#] '[^']*' "[^"]*" #[^#]*#       [/][/].*
-  `).replace(/#/g, '`')),
-  
-  // Avoid "/*" inside Strings; capture the ending "*/" on the same line
-  $captureInlineBlockCommentRegex: niceRegex('g', String.baseline(`
-    | (?<=                                           )
-    |     ^(?:     |           |           |       )* [ ]*         [^*]|[*][^/]
-    |         [^'"] ['][^']*['] ["][^"]*["] #[^#]*#       [/][*](?:            )*[*][/]
-  `).replace(/#/g, '`')),
-  
-  init({ srcKeep, cmpKeep }) { Object.assign(this, { srcKeep, cmpKeep, loaded: Object.plain() }); },
-  batch(names, opts={}) {
-    
-    let err = Error('trace');
-    return thenAll(names.toObj(name => {
-      
-      if (!this.loaded[name]) {
-        
-        this.loaded[name] = safe(
-          () => this.evaluate(name, opts), // `Object.assign(() => { ... }, { offsets: [ ... ] })`
-          cause => err.propagate({ cause, msg: `Failed to load Room from term "${name}"` })
-        );
-        then(this.loaded[name], v => this.loaded[name] = v);
-        
-      }
-      
-      return [ name, this.loaded[name] ];
-      
-    }));
-    
-  },
-  
-  compileContent(bearing, content, { debug=true, assert=true, ...opts }={}) {
-    
-    // `global.compileContent` requires a `variantDef`; this function
-    // only requires a simple `bearing` (which it uses to generate the
-    // variantDef); also scrubs single-line comments!
-    
-    let variantDef = {
-      above: bearing === 'above',
-      below: bearing === 'below',
-      debug,
-      assert
-    };
-    return global.compileContent(variantDef, content, {
-      ...opts,
-      lineFn: line => line
-        .replace(Form.captureLineCommentRegex, '')
-        .replace(Form.captureInlineBlockCommentRegex, '')
-    });
-    
-  },
-  async evaluate(name, { bearing='above', debug=true, assert=true, ...opts }={}) {
-    
-    // Avoid calling `evaluate` on the same name more than once (this
-    // also means that the initial `bearing` provided is also the only
-    // one that can ever be evaluated)
-    
-    let namePcs = name.split('.');
-    let srcKeep = this.srcKeep.access([ ...namePcs, `${namePcs.slice(-1)[0]}.js` ]);
-    let content = await srcKeep.getContent('utf8');
-    if (!content) throw Error(`Invalid room: "${name}"`);
-    
-    let { lines, offsets } = this.compileContent(bearing, content, { debug, assert, sourceName: srcKeep.desc() });
-    
-    let cmpKeep = this.cmpKeep.seek([ bearing, name, 'cmp' ]);
-    await cmpKeep.setContent(lines.join('\n'));
-    
-    let dbgKeep = this.cmpKeep.seek([ bearing, name, 'debug' ]);
-    await dbgKeep.setContent(valToSer({ offsets }));
-    
-    global.rooms[name] = { offsets }; // Make debug info available before `require` to help map SyntaxErrors
-    
-    require(cmpKeep.fp.fsp());
-    if (!global.rooms[name]) throw Error(`Room "${name}" didn't set global.rooms['${name}']`);
-    if (!hasForm(global.rooms[name], Function)) throw Error(`Room "${name}" set non-function at global.rooms['${name}']`).mod({ value: global.rooms[name] });
-    
-    // The file executed and defined `global.room[name]` to be a
-    // function; return a call to that function!
-    return Object.assign(global.rooms[name], { offsets })(this.srcKeep.access(namePcs));
-    
-  },
-  async getCompiledKeep(name, { bearing='above', debug=true, ...opts }) {
-    
-    // Note that for every first unique (name, bearing) pair all further
-    // requests for that pair will result in the initial result (using
-    // `{ debug, ...opts }` from the first result)
-    
-  },
-  mapSrcToCmp(file, row, col) {
-    
-    // Note `file` is a String with sequential slashes (bwds and fwds)
-    // replaced with a single forward slash
-    // Returns `{ file, col, row, context }`
-    
-    let givenKeep = global.keep(file);
-    
-    // Only map compiled files
-    if (!this.cmpKeep.contains(givenKeep)) return { file: givenKeep.desc(), row, col, context: null };
-    
-    let pcs = givenKeep.fp.cmps.slice(this.cmpKeep.fp.cmps.length);
-    let [ bearing, name, cmp ] = pcs;
-    
-    let { offsets } = global.rooms[name];
-    
-    let context = {};   // Store metadata from final relevant offset
-    let srcRow = 0;     // The line of code in the source which maps to the line of compiled code
-    let srcCol = 0;     // Corresponding column
-    let nextOffset = 0; // The index of the next offset chunk which may take effect (lookahead)
-    for (let i = 0; i < row; i++) {
-      
-      // Find all the offsets which exist for the source line
-      // For each offset increment the line in the source file
-      while (offsets[nextOffset] && offsets[nextOffset].at === srcRow) {
-        Object.assign(context, offsets[nextOffset]);
-        srcRow += offsets[nextOffset].offset;
-        nextOffset++;
-      }
-      srcRow++;
-      
-    }
-    
-    let roomPcs = name.split('.');
-    let roomPcLast = roomPcs.slice(-1)[0];
-    return {
-      file: this.srcKeep.fp.kid([ roomPcs, roomPcLast + '.js' ]).desc(),
-      row: srcRow,
-      col: srcCol,
-      context
-    };
-    
-  }
-  
-})});
+
+// Avoid "//" within String by processing non-String-open characters, or
+// fully enclosed Strings (note: may fail to realize that a String stays
+// open if it has escaped quotes e.g. 'i criii :\')'; note lookbehind
+// ("?<=") excludes its contents from the actual match
+let captureLineCommentRegex = niceRegex(String.baseline(`
+  | (?<=                                  )
+  |     ^(      |       |       |       )* [ ]*
+  |       [^'"#] '[^']*' "[^"]*" #[^#]*#       [/][/].*
+`).replace(/#/g, '`')); // Simple way to include literal "`" in regex
+
+// Avoid "/*" within Strings; capture terminating "*/" on the same line
+let captureInlineBlockCommentRegex = niceRegex('g', String.baseline(`
+  | (?<=                                           )
+  |     ^(?:     |           |           |       )* [ ]*         [^*]|[*][^/]
+  |         [^'"] ['][^']*['] ["][^"]*["] #[^#]*#       [/][*](?:            )*[*][/]
+`).replace(/#/g, '`')); // Simple way to include literal "`" in regex
+
 let Schema = form({ name: 'Schema', props: (forms, Form) => ({
   
   // Note that Schemas return Conf (pure json). Any translation to typed
@@ -616,7 +489,7 @@ let makeSchema = () => {
   let loftDefsScm = scm.at('loftDefs.*')
   loftDefsScm.fn = (val, schema, chain) => {
     
-    // 'c2.chess2 [file:mill]->bank->cw0'
+    // 'c2.chess2 /[file:mill]/bank/cw0'
     // 'c2.chess2'
     // { prefix: 'c2', room: 'chess2', bank: '[file:mill]->bank->cw0' }
     
@@ -663,9 +536,14 @@ let makeSchema = () => {
   deployScm.at('maturity').fn = (val, schema, chain) => {
     
     if (val === null) val = 'alpha';
-    
     validate(chain, val, { options: [ 'dev', 'beta', 'alpha' ] });
+    return val;
     
+  };
+  deployScm.at('bearing').fn = (val, schema, chain) => {
+    
+    if (val === null) val = 'above';
+    validate(chain, val, { options: [ 'above', 'below', 'between' ] });
     return val;
     
   };
@@ -1034,40 +912,49 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     
   })();
   
-  // Enable global.compileContent
+  // Enable:
+  // - `global.getCompiledKeep`
+  // - `global.mapCmpToSrc`
+  // - `global.getRooms`
   // Depends on `global.conf`
   await (async () => {
     
-    global.compileContent = (variantDef, srcLines, { sourceName='<unknown file>', lineFn=Function.stub }) => {
+    let srcKeep = hutKeep.seek([ 'room' ]);
+    let cmpKeep = hutKeep.seek([ 'mill', 'cmp' ]);
+    let loadedRooms = Map();
+    
+    // Note these "default features" should only define features which
+    // are always synced up regardless of the bearing; Hut by default
+    // expects to run at multiple bearings, so there are no "default"
+    // values for bearing-specific features! (They should always be
+    // passed when calling `getCompiledCode` from a particular context!)
+    let defaultFeatures = {
+      debug:  conf('deploy.maturity') === 'dev',
+      assert: conf('deploy.maturity') === 'dev'
+    };
+    let getCompiledCode = async (keep, features=Object.stub) => {
       
-      // Takes a block of source code and returns { lines, offsets }
-      // where lines is an Array of single-line Strings of compiled code
-      // and `offsets` contains all the data needed to map from an index
-      // in the compiled code to an index in the source code
-      
-      // Note that a "variant" is not exactly the same as a "bearing";
-      // "bearing" simply refers to Hut altitude. "Variants" can be
-      // used for logical decisions based on altitude, but also other
-      // factors (e.g. maturity)!
-      
-      // Note `variantDef` looks like:
-      //    | {
-      //    |   above: true,
-      //    |   below: false,
-      //    |   debug: true
-      //    | }
+      // Take a Keep containing source code and return compiled code and
+      // all data necessary to map compiled codepoints; note we DON'T
+      // write any data to any other Keep! (that's `getCompiledKeep`!!)
       
       let t = getMs();
       
-      // Compile file content; filter based on variant tags
-      if (isForm(srcLines, String)) srcLines = srcLines.split('\n');
-      if (!isForm(srcLines, Array)) throw Error(`Param "srcLines" is invalid type: ${getFormName(srcLines)}`);
+      features = Set({ ...defaultFeatures, ...features }.toArr((v, k) => v ? k.lower() : skip));
       
-      for (let [ key ] of variantDef) if (!/^[a-z]+$/.test(key)) throw Error(`Invalid variant name: "${key}"`);
+      /// {DEBUG=
+      if (!isForm(features, Set)) throw Error(`Api: "features" must resolve to Set; got ${getFormName(features)}`);
+      let invalidFeature = features.find(f => !/^[a-z]+$/.test(f)).val;
+      if (invalidFeature) throw Error(`Invalid feature: "${invalidFeature}"`);
+      /// =DEBUG}
       
-      // Looks like `/[{](above|below|debug|assert)[=]/`
-      let variantHeadReg = RegExp(`[{](${variantDef.toArr((v, k) => k).join('|')})[=]`, 'i');
-      let variantTailRegs = variantDef.map((v, type) => RegExp(`[=]${type}[}]`, 'i'));
+      let content = await keep.getContent('utf8');
+      if (!content) throw Error(`Api: provided Keep has no sourcecode`).mod({ keep });
+      
+      let srcLines = content.split('\n'); // TODO: What about \r??
+      
+      // Matches, e.g., '{BEL/OW=', '{ABO/VE=', etc.
+      let featureHeadReg = /[{]([a-zA-Z]+)[=]/i;
       
       let blocks = [];
       let curBlock = null;
@@ -1077,7 +964,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         let line = srcLines[i].trim();
         
         // In a block, check for the block end
-        if (curBlock && variantTailRegs[curBlock.type].test(line)) {
+        if (curBlock && line.includes(curBlock.tailMatch)) {
           curBlock.tail = i;
           blocks.push(curBlock);
           curBlock = null;
@@ -1085,12 +972,13 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         
         // Outside a block, check for start of any block
         if (!curBlock) {
-          let [ , type=null ] = line.match(variantHeadReg) ?? [];
-          
-          // TODO: Watch out with the casing of `type` - `curBlock.type`
-          // is used to index into `variantTailRegs`! What if a variant
-          // has a camelcase name?? Should that be disallowed?
-          if (type) curBlock = { type: type.lower(), head: i, tail: -1 };
+          // Note that features are case-insensitive when they appear in
+          // sourcecode, but the matching feature tag must use the exact
+          // same casing
+          let [ , type=null ] = line.match(featureHeadReg) ?? [];
+          if (type) {
+            curBlock = { type: type.lower(), tailMatch: `=${type}}`, head: i, tail: -1 };
+          }
         }
         
       }
@@ -1107,20 +995,24 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         
         let line = rawLine.trim();
         
-        if (!curBlock && nextBlockInd < blocks.length && blocks[nextBlockInd].head === i)
-          curBlock = blocks[nextBlockInd++];
+        // Reference the block which applies to the current line
+        if (!curBlock && blocks[nextBlockInd]?.head === i) curBlock = blocks[nextBlockInd++];
         
+        // `curBlock.type` and all values in `features` are lowercase
         let keepLine = true;
-        if (!line) keepLine = false;                                  // Remove blank lines
-        //if (line.hasHead('//')) keepLine = false;                     // Remove comments
-        if (curBlock && i === curBlock.head) keepLine = false;        // Remove block start line
-        if (curBlock && i === curBlock.tail) keepLine = false;        // Remove block end line
-        if (curBlock && !variantDef[curBlock.type]) keepLine = false; // Remove blocks based on variant def
+        if (!line) keepLine = false;                                    // Remove blank lines
+        if (curBlock && i === curBlock.head) keepLine = false;          // Remove block start line
+        if (curBlock && i === curBlock.tail) keepLine = false;          // Remove block end line
+        if (curBlock && !features.has(curBlock.type)) keepLine = false; // Remove blocks based on feature config
         
         // Additional processing may result in negating `keepLine`
         if (keepLine) {
           
-          line = lineFn(line)?.trim();
+          line = line
+            .replace(captureLineCommentRegex, '')
+            .replace(captureInlineBlockCommentRegex, '')
+            .trim();
+          
           if (!line) keepLine = false;
           
         }
@@ -1196,43 +1088,194 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       subcon('compile.result')(() => {
         let srcCnt = srcLines.count();
         let trgCnt = filteredLines.count();
-        return `Compiled ${sourceName}: ${srcCnt} -> ${trgCnt} (-${srcCnt - trgCnt}) lines (${ (getMs() - t).toFixed(2) }ms)`;
+        return `Compiled ${keep.desc()}: ${srcCnt} -> ${trgCnt} (-${srcCnt - trgCnt}) lines (${ (getMs() - t).toFixed(2) }ms)`;
       });
       /// =DEBUG}
       
       return { lines: filteredLines, offsets };
       
     };
-    
-  })();
-  
-  // Enable `global.getRooms` (via RoomLoader)
-  await (async () => {
-    
-    let loader = RoomLoader({
-      srcKeep: hutKeep.seek([ 'room' ]),
-      cmpKeep: hutKeep.seek([ 'mill', 'cmp' ])
-    });
-    global.roomLoader = loader;
-    global.getRooms = (names, { shorten=true, ...opts }={}) => {
+    global.getCompiledKeep = async (bearing, roomDive) => {
       
-      return then(loader.batch(names, opts), batch => {
-        
-        if (shorten) return batch.mapk((v, k) => [ k.split('.').slice(-1)[0], v ]);
-        return batch;
-        
+      // Returns a Keep representing the compiled code associated with
+      // some Room. Note an optimal function signature here would simply
+      // be `bearing, srcKeep` - but it's easier to accept a PARTIAL
+      // DiveToken. Note it should be partial to reference both the src
+      // and cmp Keeps. Accepting a full DiveToken or Keep would make it
+      // awkward to reference the corresponding compiled Keep! Should
+      // probably just write something like `async srcKeepToCmpKeep`...
+      
+      roomDive = token.dive(roomDive);
+      
+      let cmpKeep = keep([ 'file:code:cmp', bearing, ...roomDive, `${roomDive.slice(-1)[0]}.js` ]);
+      if (await cmpKeep.exists()) return cmpKeep;
+      
+      let srcKeep = keep([ 'file:code:src', ...roomDive, `${roomDive.slice(-1)[0]}.js` ]);
+      let { lines, offsets } = await getCompiledCode(srcKeep, {
+        above: bearing === 'above',
+        below: bearing === 'below',
       });
       
-    };
-    global.mapSrcToCmp = (file, row, col) => loader.mapSrcToCmp(file, row, col);
+      if (!lines.count()) {
+        await cmpKeep.setContent(`'use strict';`); // Write something to avoid recompiling later
+        return cmpKeep;
+      }
+      
+      // Embed `offsets` within `lines` for BELOW or setup
+      if (conf('deploy.maturity') === 'dev' && [ 'below', 'setup' ].has(bearing)) {
         
+        let headInd = 0;
+        let tailInd = lines.length - 1;
+        let lastLine = lines[tailInd];
+        
+        // We always expect the last line to end with "};"
+        if (!lastLine.hasTail('};')) throw Error(`Last character of ${roomDive.join('.')} is "${lastLine.slice(-2)}"; not "};"`);
+        
+        // Lines should look like:
+        //    | 'use strict';global.rooms['example'] = async () => {
+        //    |   .
+        //    |   .
+        //    |   .
+        //    | };Object.assign(global.rooms['example'],{"offsets":[...]});
+        //    |
+        /// {DEBUG=
+        lines[tailInd] += `if(!global.rooms['${roomDive.join('.')}'])throw Error('No definition for global.rooms[\\'${roomDive.join('.')}\\']');`
+        /// =DEBUG}
+        lines[tailInd] += `Object.assign(global.rooms['${roomDive.join('.')}'],${valToJson({ offsets })});`;
+        
+      }
+      
+      if (conf('deploy.wrapBelowCode')) {
+        
+        // SyntaxError is uncatchable in FoundationBrowser and has no
+        // useful trace. We can circumvent this by sending code which
+        // cannot cause a SyntaxError directly; instead the code is
+        // represented as a foolproof String, and then it is eval'd.
+        // If the string represents syntactically incorrect js, `eval`
+        // will crash but the script will have loaded without issue;
+        // a much more descriptive trace can result! There's also an
+        // effort here to not change the line count in order to keep
+        // debuggability; for this reason all wrapping code is
+        // appended/prepended to the first/last lines.
+        let escQt = '\\' + `'`;
+        let escEsc = '\\' + '\\';
+        let headEvalStr = `eval([`;
+        let tailEvalStr = `].join('\\n'));`;
+        
+        lines = lines.map(ln => `'` + ln.replace(/\\/g, escEsc).replace(/'/g, escQt) + `',`); // Ugly trailing comma
+        let headInd = 0;
+        let tailInd = lines.length - 1;
+        lines[headInd] = headEvalStr + lines[headInd];
+        lines[tailInd] = lines[tailInd] + tailEvalStr;
+        
+      }
+      await cmpKeep.setContent(lines.join('\n'));
+      
+      return cmpKeep;
+      
+    };
+    global.mapCmpToSrc = (cmpDiveToken, row, col) => {
+      
+      // Note `file` is a String with sequential slashes (bwds and fwds)
+      // replaced with a single forward slash
+      // Returns `{ file, col, row, context }`
+      
+      let mapCmpKeep = global.keep(cmpDiveToken);
+      
+      // Only map compiled files
+      if (!cmpKeep.contains(mapCmpKeep)) return { file: mapCmpKeep.desc(), row, col, context: null };
+      
+      // Path looks like "..../path/to/compiled/<bearing>/<roomName>
+      let [ bearing, roomName, cmp ] = mapCmpKeep.fp.cmps.slice(cmpKeep.fp.cmps.length);
+      
+      let { offsets } = global.rooms[roomName];
+      
+      let context = {};   // Store metadata from final relevant offset
+      let srcRow = 0;     // The line of code in the source which maps to the line of compiled code
+      let srcCol = 0;     // Corresponding column
+      let nextOffset = 0; // The index of the next offset chunk which may take effect (lookahead)
+      for (let i = 0; i < row; i++) {
+        
+        // Find all the offsets which exist for the source line
+        // For each offset increment the line in the source file
+        while (offsets[nextOffset] && offsets[nextOffset].at === srcRow) {
+          Object.assign(context, offsets[nextOffset]);
+          srcRow += offsets[nextOffset].offset;
+          nextOffset++;
+        }
+        srcRow++;
+        
+      }
+      
+      let roomPcs = roomName.split('.');
+      let roomPcLast = roomPcs.slice(-1)[0];
+      return {
+        file: srcKeep.fp.kid([ roomPcs, roomPcLast + '.js' ]).desc(),
+        row: srcRow,
+        col: srcCol,
+        context
+      };
+      
+    };
+    global.getRooms = (names, { shorten=true }={}) => {
+      
+      let bearing = conf('deploy.bearing');
+      let err = Error('trace');
+      return thenAll(names.toObj(name => {
+        
+        let room = loadedRooms.get(name);
+        if (!room) loadedRooms.add(name, room = (async () => {
+          
+          try {
+            
+            let namePcs = name.split('.');
+            let roomSrcKeep = srcKeep.access([ ...namePcs, `${namePcs.slice(-1)[0]}.js` ]);
+            
+            let { lines, offsets } = await getCompiledCode(roomSrcKeep, {
+              above: [ 'above', 'between' ].has(bearing),
+              below: [ 'below', 'between' ].has(bearing)
+            });
+            
+            let roomCmpKeep = cmpKeep.seek([ bearing, name, 'cmp' ]);
+            await roomCmpKeep.setContent(lines.join('\n'));
+            
+            let roomDbgKeep = cmpKeep.seek([ bearing, name, 'debug' ]);
+            await roomDbgKeep.setContent(valToSer({ offsets }));
+            
+            global.rooms[name] = { offsets }; // Make debug info available before `require` to help map SyntaxErrors
+            
+            require(roomCmpKeep.fp.fsp()); // Need to stop pretending like `cmpKeep` is a generic Keep (although maybe could `eval` it??)
+            if (!global.rooms[name]) throw Error(`Room "${name}" didn't set global.rooms['${name}']`);
+            if (!hasForm(global.rooms[name], Function)) throw Error(`Room "${name}" set non-function at global.rooms['${name}']`).mod({ value: global.rooms[name] });
+            
+            // The file executed and defined `global.room[name]` to be a
+            // function; return a call to that function; pass the Keep
+            // representing the sourcecode's parent!
+            let result = await Object.assign(global.rooms[name], { offsets })(srcKeep.access(namePcs));
+            loadedRooms.add(name, result);
+            return result;
+            
+          } catch (cause) {
+            
+            err.propagate({ cause, msg: `Failed to load Room from term "${name}"` });
+            
+          }
+          
+        })());
+        
+        return [ shorten ? name.split('.').slice(-1)[0] : name, room ];
+        
+      }));
+      
+    };
+    
   })();
   
   // Run tests (requires `global.getRoom`)
   await (async () => {
     let t = getMs();
     await require('./test.js')();
-    setupSc(`Tests completed after ${(getMs() - t).toFixed(2)}ms`);
+    subcon('setup.test')(`Tests completed after ${(getMs() - t).toFixed(2)}ms`);
   })();
   
   // Enable `global.real`
@@ -1438,7 +1481,6 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       
       netIden.addServer(server);
       aboveHut.addServerInfo({ ...server }.slice([ 'secure', 'protocol', 'netAddr', 'port' ]));
-      
       server.src.route((session) => {
         
         // TODO: Does this `session` have a reputation??
@@ -1510,4 +1552,4 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
   
 };
 
-Object.assign(module.exports, { niceRegex, Schema, RoomLoader });
+Object.assign(module.exports, { niceRegex, Schema, captureLineCommentRegex, captureInlineBlockCommentRegex });

@@ -55,7 +55,7 @@ global.rooms['hasten'] = async foundation => {
       
       foundation.getRoom('hasten.gameplay');
       
-      /// {DEBUG= // TODO: Nested directives not supported yet
+      /// {DEBUG= // TODO: Nested CompileFeatures not supported yet
       let wait = (ms=100) => Promise(r => setTimeout(r, ms));
       let dbgPrm = wait();
       

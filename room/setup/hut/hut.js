@@ -394,77 +394,6 @@ global.rooms['setup.hut'] = async () => {
     },
     addKnownRoomDependencies(deps) { for (let dep of deps) this.knownRoomDependencies.add(dep); },
     addKnownRealDependencies(deps) { for (let dep of deps) this.knownRealDependencies.add(dep); },
-    async getCompiledKeep(bearing, roomPcs, { uniqKey=null, wrapJs=false }={}) {
-      
-      if (isForm(roomPcs, String)) roomPcs = roomPcs.split('.');
-      if (!isForm(roomPcs, Array)) throw Error(`Invalid "roomPcs" (${getFormName(roomPcs)})`);
-      
-      let cmpKeep = keep([ 'file:code:cmp', bearing, ...roomPcs, `${roomPcs.slice(-1)[0]}.js` ]);
-      if (await cmpKeep.exists()) return cmpKeep;
-      
-      let srcKeep = keep([ 'file:code:src', ...roomPcs, `${roomPcs.slice(-1)[0]}.js` ]);
-      if (!await srcKeep.exists()) throw Error(`Room ${roomPcs.join('.')} (${srcKeep.desc()}) doesn't exist`);
-      
-      let srcContent = await srcKeep.getContent('utf8');
-      let { lines, offsets } = global.roomLoader.compileContent(bearing, srcContent, { sourceName: roomPcs.join('.') });
-      if (!lines.count()) {
-        await cmpKeep.setContent(`'use strict';`); // Write something to avoid recompiling later
-        return cmpKeep;
-      }
-      
-      // Embed `offsets` within `lines` for BELOW or setup
-      if (conf('deploy.maturity') === 'dev' && [ 'below', 'setup' ].has(bearing)) {
-        
-        let headInd = 0;
-        let tailInd = lines.length - 1;
-        let lastLine = lines[tailInd];
-        
-        // We always expect the last line to end with "};"
-        if (!lastLine.hasTail('};')) throw Error(`Last character of ${roomPcs.join('.')} is "${lastLine.slice(-2)}"; not "};"`);
-        
-        // Lines should look like:
-        //    | 'use strict';global.rooms['example'] = async () => {
-        //    |   .
-        //    |   .
-        //    |   .
-        //    | };Object.assign(global.rooms['example'],{"offsets":[...]});
-        //    |
-        /// {DEBUG=
-        lines[tailInd] += `if(!global.rooms['${roomPcs.join('.')}'])throw Error('No definition for global.rooms[\\'${roomPcs.join('.')}\\']');`
-        /// =DEBUG}
-        lines[tailInd] += `Object.assign(global.rooms['${roomPcs.join('.')}'],${valToJson({ offsets })});`;
-        
-      }
-      
-      if (conf('deploy.wrapBelowCode')) {
-        
-        // SyntaxError is uncatchable in FoundationBrowser and has no
-        // useful trace. We can circumvent this by sending code which
-        // cannot cause a SyntaxError directly; instead the code is
-        // represented as a foolproof String, and then it is eval'd.
-        // If the string represents syntactically incorrect js, `eval`
-        // will crash but the script will have loaded without issue;
-        // a much more descriptive trace can result! There's also an
-        // effort here to not change the line count in order to keep
-        // debuggability; for this reason all wrapping code is
-        // appended/prepended to the first/last lines.
-        let escQt = '\\' + `'`;
-        let escEsc = '\\' + '\\';
-        let headEvalStr = `eval([`;
-        let tailEvalStr = `].join('\\n'));`;
-        
-        lines = lines.map(ln => `'` + ln.replace(/\\/g, escEsc).replace(/'/g, escQt) + `',`); // Ugly trailing comma
-        let headInd = 0;
-        let tailInd = lines.length - 1;
-        lines[headInd] = headEvalStr + lines[headInd];
-        lines[tailInd] = lines[tailInd] + tailEvalStr;
-        
-      }
-      await cmpKeep.setContent(lines.join('\n'));
-      
-      return cmpKeep;
-      
-    },
     enableKeep(...args /* term, keep | keep */) {
       
       // Adds a Keep to `this.enabledKeeps`; this makes it available as
@@ -585,7 +514,7 @@ global.rooms['setup.hut'] = async () => {
           if (version < this.syncHearVersion) throw Error(`Duplicated sync (version: ${version}; current version: ${this.syncHearVersion})`);
           
           // Add this newly arrived sync to the buffer
-          this.bufferedSyncs.set(version, content); mmm('bufferSync', +1);
+          this.bufferedSyncs.add(version, content); mmm('bufferSync', +1);
           
           // Now perform as many pending syncs as possible; these must
           // be sequential, and beginning with the very next expected
@@ -619,7 +548,7 @@ global.rooms['setup.hut'] = async () => {
       if (!this.roads.has(server)) {
         
         // Add the Road; if all Roads end the Hut ends too
-        this.roads.set(server, road);
+        this.roads.add(server, road);
         road.endWith(() => {
           this.roads.rem(server);
           if (this.roads.empty()) this.end();
@@ -976,11 +905,11 @@ global.rooms['setup.hut'] = async () => {
         // the advantage is that Belows won't see the logic that causes
         // Above to terminate dead BelowHuts. But should we remove the
         // logic for sending heartbeats from Above? Need to consider:
-        // {BELOW= =BELOW} GETS COMPILED IN, BUT `this.isAfar === true`
+        // {BEL/OW= =BEL/OW} GETS COMPILED IN, BUT `!!this.isAfar`
         // - This means in a Below environment (e.g. browser) we have
         //   representations of remote Huts (interesting, may never even
         //   happen ever???)
-        // {ABOVE= =ABOVE} GETS COMPILED OUT, BUT `this.isHere === true`
+        // {ABO/VE= =ABO/VE} GETS COMPILED OUT, BUT `!!this.isHere`
         // - This means in an Above environment (e.g. nodejs) there are
         //   BelowHuts representing local actors (end-to-end testing?)
         

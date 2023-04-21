@@ -167,6 +167,7 @@ Object.assign(global, {
       return Object.fromEntries(ret);
     },
     find(f) { // Iterator: (val, ind) => bool; returns { found=false, val=null, ind=null }
+      // TODO: Maybe not good to overwrite `Array.prototype.find`??
       let n = this.length;
       for (let i = 0; i < n; i++) if (f(this[i], i)) return { found: true, val: this[i], ind: i };
       return { found: false, val: null, ind: null };
@@ -370,13 +371,13 @@ Object.assign(global, {
       seen.add(this);
       
       let { message: msg, stack, cause, ...props } = this;
-      let traceHeadInd = stack.indexOf('{HUTTRACE=');
-      let traceTailInd = stack.indexOf('=HUTTRACE}');
+      let traceHeadInd = stack.indexOf('>>>HUTTRACE>>>');
+      let traceTailInd = stack.indexOf('<<<HUTTRACE<<<');
       
       if (traceHeadInd < 0 || traceTailInd < 0) return `Unprocessed Error:\n${stack}`;
       
       let preamble = stack.slice(0, traceHeadInd);
-      let trace = JSON.parse(stack.slice(traceHeadInd + '{HUTTRACE='.length, traceTailInd));
+      let trace = JSON.parse(stack.slice(traceHeadInd + '>>>HUTTRACE>>>'.length, traceTailInd));
       
       // We want to show the Message and Preamble; depending how the
       // Error is generated one may contain the other - if so we show
@@ -395,8 +396,8 @@ Object.assign(global, {
         
         if (!match) return line;
         let [ , file, row, col=null ] = match;
-        let mapped = mapSrcToCmp(file, row, col ?? 0);
-        return `${mapped.file.replace(/[\\]+/g, '/')} [${mapped.row}:${mapped.col}]`;
+        let src = mapCmpToSrc(file, row, col ?? 0);
+        return `${src.file.replace(/[\\]+/g, '/')} [${src.row}:${src.col}]`;
         
       }).join('\n');
       
@@ -405,7 +406,7 @@ Object.assign(global, {
         else if (val.type === 'line') {
           
           let { keepTerm, row, col } = val;
-          let mapped = mapSrcToCmp(keepTerm, row, col);
+          let mapped = mapCmpToSrc(keepTerm, row, col);
           
           // Stringify "row" and "col"
           return { ...val, ...mapped, row: mapped.row.toString(10), col: mapped.col.toString(10) };
@@ -556,7 +557,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   // - global.subconOutput
   // - global.getMs
   // - global.getRooms
-  // - global.mapSrcToCmp
+  // - global.mapCmpToSrc
   // - global.keep
   // - global.conf
   
@@ -820,7 +821,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   // Room loading
   getRooms: (names, { shorten=true, ...opts }={}) => { throw Error('Not implemented'); },
   getRoom: (name, opts={}) => then(getRooms([ name ], { ...opts, shorten: false }), batch => batch[name]),
-  mapSrcToCmp: (file, row, col) => gsc('yikes') ?? ({ file, row, col, context: null }),
+  mapCmpToSrc: (file, row, col) => gsc('yikes') ?? ({ file, row, col, context: null }),
   
   // Subcon debug
   subcon: (term, opts={}) => {
@@ -898,9 +899,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
           : token.split('.')
         ).sift();
       
-      /// {DEBUG=
       if (token?.constructor !== Array) throw Error(`Api: token must resolve to Array; got ${getFormName(token)}`).mod({ token });
-      /// =DEBUG}
       
       return token;
       

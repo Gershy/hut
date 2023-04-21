@@ -46,7 +46,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
         : { type: 'info', info: cs.toString() };
       
     });
-    return `${err.message}{HUTTRACE=${valToJson(trace)}=HUTTRACE}`;
+    return `${err.message}>>>HUTTRACE>>>${valToJson(trace)}<<<HUTTRACE<<<`;
     
   };
   
@@ -84,7 +84,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     let dive = token.dive(diveToken);
     let key = `/${dive.join('/')}`;
     let keep = seenHttpKeeps.get(key);
-    if (!keep) seenHttpKeeps.set(key, keep = HttpKeep(uri({ path: 'asset', query: { dive: key } })));
+    if (!keep) seenHttpKeeps.add(key, keep = HttpKeep(uri({ path: 'asset', query: { dive: key } })));
     return keep;
   };
   global.conf = diveToken => {
@@ -168,7 +168,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   gsc('Configuration:', global.rawConf);
   
   /// {DEBUG=
-  global.mapSrcToCmp = (file, row, col) => {
+  global.mapCmpToSrc = (file, row, col) => {
     
     // Note `file` is a String with sequential slashes (bwds and fwds)
     // replaced with a single forward slash
