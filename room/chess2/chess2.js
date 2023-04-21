@@ -604,6 +604,9 @@ global.rooms['chess2'] = async chess2Keep => {
       // We can initiate loading these rooms immediately, and hope they
       // load in time to affect any elements in need of uprighting!
       
+      /// {LOADTEST=
+      /// =LOADTEST}
+      
       dep(real.addLayout('Axis1d', { axis: 'x', dir: '+', mode: 'compactCenter' }));
       dep(real.addLayout('Decal', { colour: '#646496', text: { colour: '#ffffff' } }));
       

@@ -115,6 +115,8 @@ let makeSchema = () => {
     init({ name='??', par=null, kids=Object.plain(), all=null, fn=null }={}) {
       
       Object.assign(this, { name, par, fn, kids, all });
+      denumerate(this, 'par');
+      denumerate(this, 'kids');
       
     },
     desc() { return `${getFormName(this)}( ${this.chain()} )`; },
@@ -239,7 +241,6 @@ let makeSchema = () => {
       }
     };
     defaults.merge(val);
-    
     return schema.inner(defaults, chain);
     
   };
@@ -547,9 +548,25 @@ let makeSchema = () => {
     return val;
     
   };
+  deployScm.at('features').fn = (val, schema, chain) => {
+    
+    if (val === null) val = {};
+    if (isForm(val, Array)) val = Set(val);
+    if (isForm(val, Set)) val = val.toObj(prop => [ prop, true ]);
+    validate(chain, val, { form: Object });
+    return {
+      debug: true,
+      assert: true,
+      wrapBelowCode: false,
+      loadTest: false,
+      ...val
+    };
+    
+  };
   deployScm.at('features.*').fn = (val, schema, chain) => {
     
-    gsc({ val, schema });
+    gsc({ val, chain, schema: schema.desc() });
+    validate(chain, chain.split('->').slice(-1)[0], { regex: /^[a-zA-Z]+$/, desc: 'a valid feature key' });
     validate(chain, val, { form: Boolean });
     return val;
     
@@ -561,9 +578,7 @@ let makeSchema = () => {
   deployScm.at('subconKeep').fn = (val, schema, chain) => {
     
     if (val === null) return null;
-    
     validate(chain, val, 'keep');
-    
     return val;
     
   };
@@ -937,8 +952,10 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     // passed when calling `getCompiledCode` from a particular context!)
     let defaultFeatures = {
       debug:  conf('deploy.maturity') === 'dev',
-      assert: conf('deploy.maturity') === 'dev'
+      assert: conf('deploy.maturity') === 'dev',
+      ...conf('deploy.features')
     };
+    
     let getCompiledCode = async (keep, features=Object.stub) => {
       
       // Take a Keep containing source code and return compiled code and
@@ -1152,7 +1169,11 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         
       }
       
-      if (conf('deploy.wrapBelowCode')) {
+      if (conf('deploy.features.wrapBelowCode') ?? false) {
+        
+        // TODO: This feature should be implemented via compilation
+        // (i.e. no `if (...) { ... }` but rather {WRAP/BELOWCODE=
+        // =WRAP/BELOWCODE}), but `foundation.js` isn't compiled rn!
         
         // SyntaxError is uncatchable in FoundationBrowser and has no
         // useful trace. We can circumvent this by sending code which
@@ -1176,6 +1197,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         lines[tailInd] = lines[tailInd] + tailEvalStr;
         
       }
+      
       await cmpKeep.setContent(lines.join('\n'));
       
       return cmpKeep;
@@ -1553,6 +1575,11 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     process.on('exit', () => {
       aboveHut.end();
       for (let server of servers) server.serverShut();
+    });
+    
+    if (conf('deploy.features.loadTest') ?? false) require('./loadTest/main.js')({
+      aboveHut,
+      netIden
     });
     
   })();
