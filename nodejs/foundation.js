@@ -55,7 +55,7 @@ Error.prepareStackTrace = (err, callSites) => {
   };
   process.on('uncaughtException', onErr);
   process.on('unhandledRejection', onErr);
-  //process.on('exit', code => gsc(`Process exit event (code: ${code})`));
+  process.on('exit', code => gsc(`Hut terminated (code: ${code})`));
   
 })();
 
@@ -96,69 +96,69 @@ let captureInlineBlockCommentRegex = niceRegex('g', String.baseline(`
   |         [^'"] ['][^']*['] ["][^"]*["] #[^#]*#       [/][*](?:            )*[*][/]
 `).replace(/#/g, '`')); // Simple way to include literal "`" in regex
 
-let Schema = form({ name: 'Schema', props: (forms, Form) => ({
-  
-  // Note that Schemas return Conf (pure json). Any translation to typed
-  // data (e.g. NetworkIdentity, Keep, etc) happens externally!
-  // Ok I am revising the above. A Schema can deal with non-json, even
-  // non-serializable values, but it isn't recommended in most cases
-  // (TODO: May be nice to have explicit serializability controls to
-  // prevent attempts to transfer non-serializable (or sensitive) data
-  // over the wire)
-  // Note that for the purposes of running Hut Above we simply use this
-  // Schema Form to process the configuration (potentially producing
-  // useful error output), and then simply do away with the Schema
-  // instances and work directly with the data parsed by them!
-  
-  init({ name='??', par=null, kids=Object.plain(), all=null, fn=null }={}) {
-    
-    Object.assign(this, { name, par, fn, kids, all });
-    
-  },
-  desc() { return `${getFormName(this)}( ${this.chain()} )`; },
-  chain() {
-    
-    let chain = [];
-    let ptr = this;
-    while (ptr) { chain.push(ptr.name); ptr = ptr.par; }
-    return '->' + chain.reverse().slice(1).join('->');
-    
-  },
-  at(chain) {
-    
-    if (isForm(chain, String)) chain = chain.split('.');
-    let ptr = this;
-    for (let name of chain) {
-      if (name === '*') {
-        if (!ptr.all) ptr.all = Schema({ name: '(all)', par: ptr });
-        ptr = ptr.all;
-      } else {
-        if (!ptr.kids[name]) ptr.kids[name] = Schema({ name, par: ptr });
-        ptr = ptr.kids[name];
-      }
-    }
-    return ptr;
-    
-  },
-  inner(obj, chain='') {
-    
-    let kidsAndObj = { ...{}.map.call(this.kids, v => null), ...obj };
-    
-    if (kidsAndObj.empty()) return null;
-    return kidsAndObj.map((v, k) => {
-      
-      if (this.kids[k]) return this.kids[k].getConf(v, `${chain}->${k}`);
-      if (this.all) return this.all.getConf(v, `${chain}->${k}`);
-      throw Error(`Unexpected: ${chain}->${k}`);
-      
-    });
-    
-  },
-  getConf(obj, chain='') { return this.fn ? this.fn(obj, this, chain) : this.inner(obj, chain); }
-  
-})});
-
 let makeSchema = () => {
+  
+  let Schema = form({ name: 'Schema', props: (forms, Form) => ({
+    
+    // Note that Schemas return Conf (pure json). Any translation to typed
+    // data (e.g. NetworkIdentity, Keep, etc) happens externally!
+    // Ok I am revising the above. A Schema can deal with non-json, even
+    // non-serializable values, but it isn't recommended in most cases
+    // (TODO: May be nice to have explicit serializability controls to
+    // prevent attempts to transfer non-serializable (or sensitive) data
+    // over the wire)
+    // Note that for the purposes of running Hut Above we simply use this
+    // Schema Form to process the configuration (potentially producing
+    // useful error output), and then simply do away with the Schema
+    // instances and work directly with the data parsed by them!
+    
+    init({ name='??', par=null, kids=Object.plain(), all=null, fn=null }={}) {
+      
+      Object.assign(this, { name, par, fn, kids, all });
+      
+    },
+    desc() { return `${getFormName(this)}( ${this.chain()} )`; },
+    chain() {
+      
+      let chain = [];
+      let ptr = this;
+      while (ptr) { chain.push(ptr.name); ptr = ptr.par; }
+      return '->' + chain.reverse().slice(1).join('->');
+      
+    },
+    at(chain) {
+      
+      if (isForm(chain, String)) chain = chain.split('.');
+      let ptr = this;
+      for (let name of chain) {
+        if (name === '*') {
+          if (!ptr.all) ptr.all = Schema({ name: '(all)', par: ptr });
+          ptr = ptr.all;
+        } else {
+          if (!ptr.kids[name]) ptr.kids[name] = Schema({ name, par: ptr });
+          ptr = ptr.kids[name];
+        }
+      }
+      return ptr;
+      
+    },
+    inner(obj, chain='') {
+      
+      let kidsAndObj = { ...{}.map.call(this.kids, v => null), ...obj };
+      
+      if (kidsAndObj.empty()) return null;
+      return kidsAndObj.map((v, k) => {
+        
+        if (this.kids[k]) return this.kids[k].getConf(v, `${chain}->${k}`);
+        if (this.all) return this.all.getConf(v, `${chain}->${k}`);
+        throw Error(`Unexpected: ${chain}->${k}`);
+        
+      });
+      
+    },
+    getConf(obj, chain='') { return this.fn ? this.fn(obj, this, chain) : this.inner(obj, chain); }
+    
+  })});
   
   let resolveKeep = val => val;
   let error = (chain, val, msg, err=Error()) => err.propagate({ msg: `Api: config at "${chain}": ${msg}`, chain, val });
@@ -307,7 +307,7 @@ let makeSchema = () => {
   };
   idenScm.at('name').fn = (val, schema, chain, name) => {
     
-    validate(chain, val, { form: String, regex: /^[a-z][a-zA-Z]*$/, desc: 'only alphabetic characters and beginning with a lowercase character' });
+    validate(chain, val, { regex: /^[a-z][a-zA-Z]*$/, desc: 'only alphabetic characters and beginning with a lowercase character' });
     
     return val;
     
@@ -544,6 +544,13 @@ let makeSchema = () => {
     
     if (val === null) val = 'above';
     validate(chain, val, { options: [ 'above', 'below', 'between' ] });
+    return val;
+    
+  };
+  deployScm.at('features.*').fn = (val, schema, chain) => {
+    
+    gsc({ val, schema });
+    validate(chain, val, { form: Boolean });
     return val;
     
   };
@@ -1552,4 +1559,4 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
   
 };
 
-Object.assign(module.exports, { niceRegex, Schema, captureLineCommentRegex, captureInlineBlockCommentRegex });
+Object.assign(module.exports, { captureLineCommentRegex, captureInlineBlockCommentRegex });
