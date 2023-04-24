@@ -93,9 +93,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     let dive = token.dive(diveToken);
     let ptr = global.rawConf;
     for (let pc of dive) {
-      /// {DEBUG=
-      if (!isForm(ptr, Object) || !ptr.has(pc)) throw Error('Api: invalid dive token').mod({ diveToken });
-      /// =DEBUG}
+      if (!isForm(ptr, Object) || !ptr.has(pc)) return null;
       ptr = ptr[pc];
     }
     return ptr;
@@ -103,9 +101,19 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   };
   global.subconOutput = (sc, ...args) => {
     
-    let term = sc.term;
-    let { inline=false, therapist=false } = global.rawConf.subcons[term]?.output ?? {};
-    if (!inline) return;
+    let ptr = { kids: { root: conf('subcon') } };
+    let inheritedConf = {};
+    
+    for (let pc of [ 'root', ...token.dive(sc.term) ]) {
+      ptr = ptr.kids?.[pc];
+      if (!ptr) break;
+      
+      inheritedConf.merge(ptr);
+      delete inheritedConf.kids;
+    }
+    
+    let { output={ inline: false, therapist: false } } = inheritedConf;
+    if (!output.inline) return;
     
     args = args.map(arg => isForm(arg, Function) ? arg() : arg).sift();
     if (!args.length) return;

@@ -20,11 +20,11 @@ let Filepath = form({ name: 'Filepath', props: (forms, Form) => ({
   init(vals, path=require('path')) {
     
     if (!isForm(vals, Array)) vals = [ vals ];
+    vals = vals.flat(Infinity);
     
     // Flatten into a flat list of Strings
-    vals = vals.flat(Infinity);
-    let nonStrCmp = vals.find(val => val?.constructor !== String).val;
-    if (nonStrCmp) throw Error('Non-String file component provided').mod({ type: getFormName(nonStrCmp), nonStrCmp });
+    let nonStrCmp = vals.find(val => !isForm(val, String)).val;
+    if (nonStrCmp) throw Error(`Api: all components must be String; got ${getFormName(nonStrCmp)}`).mod({ vals });
     
     vals = vals
       .map(cmp => cmp.split(/[/\\]+/)) // Each String is broken into its components
@@ -46,7 +46,7 @@ let Filepath = form({ name: 'Filepath', props: (forms, Form) => ({
     denumerate(this, 'path');
     
   },
-  desc() { return [ '[file]', ...this.cmps ].join('\u0010'); },
+  desc() { return [ '', '[file]', ...this.cmps ].join('/'); },
   
   count() { return this.cmps.length; },
   kid(...fp) { return Filepath([ this.cmps, fp ]); },
@@ -605,7 +605,7 @@ let FsKeep = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => ({
       if (this.forbid && this.forbid.has(fp.cmps[this.fp.count()])) throw Error('Forbidden').mod({ fp: this.fp.desc(), cmp: fp.cmps[this.fp.count()] });
       
       let FsKeepForm = (0, this.Form);
-      return FsKeepForm(this.trn, this.fp.kid(names), null);
+      return FsKeepForm(this.trn, fp, null);
       
     } catch (err) {
       

@@ -1098,7 +1098,7 @@ global.rooms['record'] = async () => {
       // depth-wise iteration order that would occur otherwise).
       for (let mem of this.iterateBreadthFirst()) {
         let val = mem.valueSrc.val;
-        if (val?.constructor === Object && val.has(key)) return val[key];
+        if (isForm(val, Object) && val.has(key)) return val[key];
       }
       
       return null;
@@ -1153,13 +1153,13 @@ global.rooms['record'] = async () => {
     setValue(value) {
       
       let curVal = this.valueSrc.val;
-      let curIsObj = curVal?.constructor === Object;
+      let curIsObj = isForm(curVal, Object);
       
       // Functions resolve to a transformation on the current value; if
       // the current value is an Object a snapshot of it is passed; this
       // allows the passed param to be modified and returned in-place,
       // which can shorten the code required in some use-cases
-      if (value?.constructor === Function) {
+      if (isForm(value, Function)) {
         let passVal = curIsObj ? { ...curVal } : curVal; // TODO: Deep copy required? (Yes!)
         value = value(passVal);
         if (value === skip) value = passVal;

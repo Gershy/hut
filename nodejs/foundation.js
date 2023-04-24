@@ -1,6 +1,7 @@
 'use strict';
 
 require('../room/setup/clearing/clearing.js');
+let Schema = require('./Schema.js');
 
 // Make Errors better! (https://v8.dev/docs/stack-trace-api)
 Error.prepareStackTrace = (err, callSites) => {
@@ -27,10 +28,9 @@ Error.prepareStackTrace = (err, callSites) => {
   
   // https://nodejs.org/api/process.html#signal-events
   let origExit = process.exit;
+  process.exitHard = () => origExit(1);
   let revealBufferedLogs = () => {
-    if (!global.bufferedLogs?.length) return;
-    console.log('Error before logs displayable; outputting raw logged data:');
-    for (let args of global.bufferedLogs) console.log(...args);
+    
   };
   process.exit = (...args) => {
     gsc(Error('Process explicitly exited').desc());
@@ -50,7 +50,14 @@ Error.prepareStackTrace = (err, callSites) => {
   let onErr = err => {
     if (err['~suppressed']) return; // Ignore suppressed errors
     gsc(`Uncaught ${getFormName(err)}:`, err.desc());
-    revealBufferedLogs();
+    
+    if (global.bufferedLogs?.length) {
+      console.log('Error before logs displayable; outputting raw logged data:');
+      let logs = global.bufferedLogs;
+      global.bufferedLogs = null;
+      for (let args of logs) console.log(...args.map(a => a?.constructor?.name));
+    }
+    
     origExit(1);
   };
   process.on('uncaughtException', onErr);
@@ -98,72 +105,8 @@ let captureInlineBlockCommentRegex = niceRegex('g', String.baseline(`
 
 let makeSchema = () => {
   
-  let Schema = form({ name: 'Schema', props: (forms, Form) => ({
-    
-    // Note that Schemas return Conf (pure json). Any translation to typed
-    // data (e.g. NetworkIdentity, Keep, etc) happens externally!
-    // Ok I am revising the above. A Schema can deal with non-json, even
-    // non-serializable values, but it isn't recommended in most cases
-    // (TODO: May be nice to have explicit serializability controls to
-    // prevent attempts to transfer non-serializable (or sensitive) data
-    // over the wire)
-    // Note that for the purposes of running Hut Above we simply use this
-    // Schema Form to process the configuration (potentially producing
-    // useful error output), and then simply do away with the Schema
-    // instances and work directly with the data parsed by them!
-    
-    init({ name='??', par=null, kids=Object.plain(), all=null, fn=null }={}) {
-      
-      Object.assign(this, { name, par, fn, kids, all });
-      denumerate(this, 'par');
-      denumerate(this, 'kids');
-      
-    },
-    desc() { return `${getFormName(this)}( ${this.chain()} )`; },
-    chain() {
-      
-      let chain = [];
-      let ptr = this;
-      while (ptr) { chain.push(ptr.name); ptr = ptr.par; }
-      return '->' + chain.reverse().slice(1).join('->');
-      
-    },
-    at(chain) {
-      
-      if (isForm(chain, String)) chain = chain.split('.');
-      let ptr = this;
-      for (let name of chain) {
-        if (name === '*') {
-          if (!ptr.all) ptr.all = Schema({ name: '(all)', par: ptr });
-          ptr = ptr.all;
-        } else {
-          if (!ptr.kids[name]) ptr.kids[name] = Schema({ name, par: ptr });
-          ptr = ptr.kids[name];
-        }
-      }
-      return ptr;
-      
-    },
-    inner(obj, chain='') {
-      
-      let kidsAndObj = { ...{}.map.call(this.kids, v => null), ...obj };
-      
-      if (kidsAndObj.empty()) return null;
-      return kidsAndObj.map((v, k) => {
-        
-        if (this.kids[k]) return this.kids[k].getConf(v, `${chain}->${k}`);
-        if (this.all) return this.all.getConf(v, `${chain}->${k}`);
-        throw Error(`Unexpected: ${chain}->${k}`);
-        
-      });
-      
-    },
-    getConf(obj, chain='') { return this.fn ? this.fn(obj, this, chain) : this.inner(obj, chain); }
-    
-  })});
-  
   let resolveKeep = val => val;
-  let error = (chain, val, msg, err=Error()) => err.propagate({ msg: `Api: config at "${chain}": ${msg}`, chain, val });
+  let error = (chain, val, msg, err=Error()) => err.propagate({ msg: `Api: config at "${chain.join('.')}": ${msg}`, chain, val });
   let validate = (chain, val, v=null) => {
     
     if (v === null) throw Error('Supply 3rd param');
@@ -219,105 +162,113 @@ let makeSchema = () => {
   };
   
   let scm = Schema({ name: '(root)' });
-  scm.at('confs').fn = (val, schema, chain) => {
+  
+  scm.seek('confKeeps').fn = (val, schema, chain) => {
     
-    if (val === null) return [ '/file:mill/conf/def.js' ];
     if (val === String) val = val.split(',').map(v => v.trim());
     
-    validate(chain, val, { form: Array });
+    if (isForm(val, Array)) val = val.map(diveToken => {
+      let dive = token.dive(diveToken);
+      return [ dive.slice(-1)[0], diveToken.replace(/[./]/g, '') ];
+    });
     
+    validate(chain, val, { form: Object });
+    
+    return schema.inner(val, chain);
+    
+  };
+  scm.seek('confKeeps.*').fn = (val, schema, chain) => {
+    validate(chain, val, token.dive);
     return val;
-    
   };
   
-  scm.at('subcons').fn = (val, schema, chain) => {
-    
+  let subconScm = scm.seek('subcon');
+  subconScm.fn = (val, schema, chain) => {
     if (val === null) val = {};
-    
-    let defaults = {
-      gsc: {
-        description: 'Global Subcon - primary dev output',
-        output: { inline: true, therapist: false }
-      }
+    validate(chain, val, { form: Object });
+    val = {
+      description: '<default>',
+      output: '<default>',
+      ...val
     };
-    defaults.merge(val);
-    return schema.inner(defaults, chain);
-    
+    return schema.inner(val, chain);
   };
-  let subconsScm = scm.at('subcons.*');
-  subconsScm.at('description').fn = (val, schema, chain) => {
+  subconScm.seek('description').fn = (val, schema, chain) => {
     
     if (val === null) val = '(No description)';
     return validate(chain, val, { form: String });
     
   };
-  subconsScm.at('output').fn = (val, schema, chain) => {
+  subconScm.seek('output').fn = (val, schema, chain) => {
     
-    if (val === null) val = { inline: true, therapist: false };
-    return validate(chain, val, { form: Object });
+    if (val === null) val = {};
+    validate(chain, val, { form: Object });
+    val = { inline: '<default>', therapist: '<default>', ...val };
+    
+    return schema.inner(val, chain);
     
   };
-  subconsScm.at('output.inline').fn = (val, schema, chain) => {
+  subconScm.seek('output.inline').fn = (val, schema, chain) => {
     
     if (val === null) val = 0;
-    if ([ 0, 1 ].has(val)) val = !!val;
-    return validate(chain, val, { form: Boolean });
+    if ([ 0, 1 ].has(val)) val = val === 1;
+    validate(chain, val, { form: Boolean });
+    return val;
     
   };
-  subconsScm.at('output.therapist').fn = (val, schema, chain) => {
+  subconScm.seek('output.therapist').fn = (val, schema, chain) => {
     
     if (val === null) val = 0;
-    
-    if ([ 0, 1 ].has(val)) val = !!val;
-    return validate(chain, val, { form: Boolean });
+    if ([ 0, 1 ].has(val)) val = val === 1;
+    validate(chain, val, { form: Boolean });
+    return val;
     
   };
-  subconsScm.at('format').fn = (val, schema, chain) => {
+  subconScm.seek('format').fn = (val, schema, chain) => {
     
     // TODO: Functions can't be synced?
-    return val
-      ? validate(chain, val, { form: Function })
-      : null;
+    return val ? validate(chain, val, { form: Function }) : null;
     
   };
-  subconsScm.at('*').fn = (val, schema, chain) => val; // Allow arbitrary properties
+  subconScm.seek('kids').all = subconScm;
+  subconScm.seek('*').fn = (val, schema, chain) => val; // Allow arbitrary properties
   
-  let shellScm = scm.at('shell');
-  shellScm.at('openssl').fn = (val, schema, chain) => {
+  let shellScm = scm.seek('shell');
+  shellScm.seek('openssl').fn = (val, schema, chain) => {
     
     if (val === null) val = 'openssl';
     return validate(chain, val, { form: String });
     
   };
   
-  scm.at('netIdens').fn = (val, schema, chain) => {
+  scm.seek('netIdens').fn = (val, schema, chain) => {
     
     if (val === null) val = {};
     return val;
     
   };
-  let idenScm = scm.at('netIdens.*');
+  let idenScm = scm.seek('netIdens.*');
   idenScm.fn = (val, schema, chain) => {
     
     validate(chain, val, { form: Object });
     
-    if (!val.has('name')) val = { name: chain.split('->').slice(-2)[0], ...val };
+    if (!val.has('name')) val = { name: chain.slice(-2)[0], ...val };
     
     return schema.inner(val, chain);
     
   };
-  idenScm.at('name').fn = (val, schema, chain, name) => {
+  idenScm.seek('name').fn = (val, schema, chain, name) => {
     validate(chain, val, { regex: /^[a-z][a-zA-Z]*$/, desc: 'only alphabetic characters and beginning with a lowercase character' });
     return val;
   };
-  idenScm.at('keep').fn = (val, schema, chain) => {
+  idenScm.seek('keep').fn = (val, schema, chain) => {
     
     if (val === null) return null;
     validate(chain, val, 'keep');
     return val;
     
   };
-  idenScm.at('secureBits').fn = (val, schema, chain) => {
+  idenScm.seek('secureBits').fn = (val, schema, chain) => {
     
     if (val === null) val = 0;
     
@@ -329,7 +280,7 @@ let makeSchema = () => {
     return val;
     
   };
-  idenScm.at('details').fn = (val, schema, chain) => {
+  idenScm.seek('details').fn = (val, schema, chain) => {
     
     if (val === null) val = {};
     validate(chain, val, { form: Object });
@@ -344,13 +295,13 @@ let makeSchema = () => {
     return schema.inner(val, chain);
     
   };
-  idenScm.at('details.*').fn = (val, schema, chain) => {
+  idenScm.seek('details.*').fn = (val, schema, chain) => {
     
     validate(chain, val, { form: String });
     return val;
     
   };
-  idenScm.at('details.geo').fn = (val, schema, chain) => {
+  idenScm.seek('details.geo').fn = (val, schema, chain) => {
     
     validate(chain, val, { form: String });
     
@@ -359,7 +310,7 @@ let makeSchema = () => {
     return pcs.slice(0, 6).join('.');
     
   };
-  idenScm.at('details.org').fn = (val, schema, chain) => {
+  idenScm.seek('details.org').fn = (val, schema, chain) => {
     
     validate(chain, val, { form: String });
     
@@ -368,7 +319,7 @@ let makeSchema = () => {
     return pcs.slice(0, 6).join('.');
     
   };
-  idenScm.at('email').fn = (val, schema, chain) => {
+  idenScm.seek('email').fn = (val, schema, chain) => {
     
     if (val === null) return null;
     
@@ -377,7 +328,7 @@ let makeSchema = () => {
     return val;
     
   };
-  idenScm.at('password').fn = (val, schema, chain) => {
+  idenScm.seek('password').fn = (val, schema, chain) => {
     
     if (val === null) return null;
     
@@ -386,15 +337,15 @@ let makeSchema = () => {
     return val;
     
   };
-  idenScm.at('certificateType').fn = (val, schema, chain) => {
+  idenScm.seek('certificateType').fn = (val, schema, chain) => {
     
     if (val === null) return null;
     return validate(chain, val, { form: String });
     
   };
   
-  let hostsScm = scm.at('hosts.*');
-  hostsScm.at('netIden').fn = (val, schema, chain) => {
+  let hostsScm = scm.seek('hosts.*');
+  hostsScm.seek('netIden').fn = (val, schema, chain) => {
     
     // @netIdens.tester
     // @netIdens.main
@@ -406,7 +357,7 @@ let makeSchema = () => {
     return idenScm.getConf(val, chain);
     
   };
-  hostsScm.at('netAddr').fn = (val, schema, chain) => {
+  hostsScm.seek('netAddr').fn = (val, schema, chain) => {
     
     // 'localhost'
     // '127.0.0.1'
@@ -418,20 +369,20 @@ let makeSchema = () => {
     return val;
     
   };
-  hostsScm.at('dns').fn = val => {
+  hostsScm.seek('dns').fn = val => {
     if (val === null) val = '1.1.1.1+1.0.0.1'; // TODO: Cloudflare?
     if (isForm(val, String)) val = val.split('+').map(v => v.trim());
     if (!isForm(val, Array)) throw Error('Api: "dns" must be Array');
     return val;
   };
-  hostsScm.at('heartbeatMs').fn = val => {
+  hostsScm.seek('heartbeatMs').fn = val => {
     if (val === null) val = 20 * 1000;
     if (!isForm(val, Number)) throw Error('Api: "hearbeatMs" must be a Number');
     if (!val.isInteger()) throw Error('Api: "heartbeatMs" must be an integer');
     if (val < 1000) throw Error('Api: heartbeat must be <= 1hz');
     return val;
   };
-  hostsScm.at('protocols').fn = (val, schema, chain) => {
+  hostsScm.seek('protocols').fn = (val, schema, chain) => {
     
     if (isForm(val, String)) {
       
@@ -451,11 +402,10 @@ let makeSchema = () => {
     if (isForm(val, Array)) val = val.toObj((v, i) => [ i, v ]);
     
     validate(chain, val, { form: Object });
-    
     return schema.inner(val, chain);
     
   };
-  hostsScm.at('protocols.*').fn = (val, schema, chain) => {
+  hostsScm.seek('protocols.*').fn = (val, schema, chain) => {
     
     // 'http'
     // 'http:80<gzip+deflate>'
@@ -474,28 +424,26 @@ let makeSchema = () => {
       
       validate(chain, val, { regex, desc: 'e.g. "http:80<gzip+deflate>", "http<deflate>", "http:80", "http"' });
       
-      let [ , protocol, port=null, compression=null ] = val.match(regex);
-      
+      let [ , protocol, port='<default>', compression=null ] = val.match(regex);
       val = { protocol, port, compression };
       
     }
-    if (!isForm(val, Object))    throw Error('Api: "protocols[...]" must be an Object');
     
-    return schema.inner(val, chain);
+    validate(chain, val, { form: Object });
+    return schema.inner({ port: '<default>', ...val }, chain);
     
   };
-  hostsScm.at('protocols.*.protocol').fn = (val, schema, chain) => validate(chain, val, { form: String });
-  hostsScm.at('protocols.*.port').fn = (val, schema, chain) => {
+  hostsScm.seek('protocols.*.protocol').fn = (val, schema, chain) => validate(chain, val, { form: String });
+  hostsScm.seek('protocols.*.port').fn = (val, schema, chain) => {
     
     if (val === null) return null;
     
     if (isForm(val, String)) val = parseInt(val, 10);
     validate(chain, val, { numberBound: { min: 0 } });
-    
     return val;
     
   };
-  hostsScm.at('protocols.*.compression').fn = (val, schema, chain) => {
+  hostsScm.seek('protocols.*.compression').fn = (val, schema, chain) => {
     
     if (val === null) val = 'gzip+deflate';
     if (isForm(val, String)) val = val.split('+');
@@ -504,12 +452,12 @@ let makeSchema = () => {
     
   };
   
-  let loftDefsScm = scm.at('loftDefs.*')
+  let loftDefsScm = scm.seek('loftDefs.*')
   loftDefsScm.fn = (val, schema, chain) => {
     
     // 'c2.chess2 /[file:mill]/bank/cw0'
     // 'c2.chess2'
-    // { prefix: 'c2', room: 'chess2', bank: '[file:mill]->bank->cw0' }
+    // { prefix: 'c2', room: 'chess2', bank: '[file:mill].bank.cw0' }
     
     //if (val === null) return skip;
     
@@ -527,20 +475,20 @@ let makeSchema = () => {
     return schema.inner(val, chain);
     
   };
-  loftDefsScm.at('prefix').fn = (val, schema, chain) => {
+  loftDefsScm.seek('prefix').fn = (val, schema, chain) => {
     
     validate(chain, val, { stringBound: { min: 1, max: 5 } });
     return val;
     
   };
-  loftDefsScm.at('room').fn = (val, schema, chain) => {
+  loftDefsScm.seek('room').fn = (val, schema, chain) => {
     
     validate(chain, val, { form: String });
     
     return val;
     
   };
-  loftDefsScm.at('keep').fn = (val, schema, chain) => {
+  loftDefsScm.seek('keep').fn = (val, schema, chain) => {
     
     if (val === null) return null;
     
@@ -550,22 +498,22 @@ let makeSchema = () => {
     
   };
   
-  let deployScm = scm.at('deploy');
-  deployScm.at('maturity').fn = (val, schema, chain) => {
+  let deployScm = scm.seek('deploy');
+  deployScm.seek('maturity').fn = (val, schema, chain) => {
     
     if (val === null) val = 'alpha';
     validate(chain, val, { options: [ 'dev', 'beta', 'alpha' ] });
     return val;
     
   };
-  deployScm.at('bearing').fn = (val, schema, chain) => {
+  deployScm.seek('bearing').fn = (val, schema, chain) => {
     
     if (val === null) val = 'above';
     validate(chain, val, { options: [ 'above', 'below', 'between' ] });
     return val;
     
   };
-  deployScm.at('features').fn = (val, schema, chain) => {
+  deployScm.seek('features').fn = (val, schema, chain) => {
     
     if (val === null) val = {};
     if (isForm(val, Array)) val = Set(val);
@@ -580,19 +528,18 @@ let makeSchema = () => {
     };
     
   };
-  deployScm.at('features.*').fn = (val, schema, chain) => {
+  deployScm.seek('features.*').fn = (val, schema, chain) => {
     
-    gsc({ val, chain, schema: schema.desc() });
-    validate(chain, chain.split('->').slice(-1)[0], { regex: /^[a-zA-Z]+$/, desc: 'a valid feature key' });
+    validate(chain, chain.slice(-1)[0], { regex: /^[a-zA-Z]+$/, desc: 'a valid feature key' });
     validate(chain, val, { form: Boolean });
     return val;
     
   };
-  deployScm.at('wrapBelowCode').fn = (val, schema, chain) => {
+  deployScm.seek('wrapBelowCode').fn = (val, schema, chain) => {
     if (val === null) val = false;
     return validate(chain, val, { form: Boolean });
   };
-  deployScm.at('subconKeep').fn = (val, schema, chain) => {
+  deployScm.seek('subconKeep').fn = (val, schema, chain) => {
     
     if (val === null) return null;
     validate(chain, val, 'keep');
@@ -600,26 +547,26 @@ let makeSchema = () => {
     
   };
   
-  let loftScm = deployScm.at('loft');
+  let loftScm = deployScm.seek('loft');
   loftScm.fn = (val, schema, chain) => {
     
     if (val === null) return null;
-    
     validate(chain, val, { form: Object })
-    
+    val = {
+      uid: '<default>',
+      ...val
+    };
     return schema.inner(val, chain);
     
   };
-  loftScm.at('uid').fn = (val, schema, chain) => {
+  loftScm.seek('uid').fn = (val, schema, chain) => {
     
-    if (val === null) return null;
-    
+    if (val === null) val = Math.random().toString(36).slice(2, 8);
     validate(chain, val, { form: String });
-    
     return val;
     
   };
-  loftScm.at('def').fn = (val, schema, chain) => {
+  loftScm.seek('def').fn = (val, schema, chain) => {
     
     if (isForm(val, String))
       return validate(chain, val, { regex: /^@loftDefs[.]/, desc: 'begins with "@loftDefs.", e.g. "@loftDefs.testLoft"' });
@@ -627,7 +574,7 @@ let makeSchema = () => {
     return loftDefsScm.getConf(val, chain);
     
   };
-  loftScm.at('hosting').fn = (val, schema, chain) => {
+  loftScm.seek('hosting').fn = (val, schema, chain) => {
     
     // TODO: What if we wanted to expose a single Loft via multiple
     // hosts?? Should this return an Array? (Or is such architecture an
@@ -645,37 +592,10 @@ let makeSchema = () => {
   return scm;
   
 };
-let resolveDeepObj = obj => {
+let cloneResolveLinks = (root, errs=true, chain=[], val=root) => {
   
-  if (obj?.constructor !== Object) return obj;
-  if (obj.empty()) return obj;
-  
-  let { main={}, deep={} } = obj.categorize((v, k) => k.has('.') ? 'deep' : 'main');
-  obj = main;
-  
-  for (let [ deepKey, v ] of deep) {
-    
-    let props = deepKey.split('.');
-    let last = props[props.length - 1];
-    
-    let ptr = obj;
-    for (let prop of props.slice(0, -1)) {
-      if (!ptr[prop])                      ptr[prop] = {};
-      else if (!isForm(ptr[prop], Object)) throw Error(`Deep property "${deepKey}" encountered a non-Object (${getFormName(ptr[prop])}) in its path`).mod({ obj });
-      ptr = ptr[prop];
-    }
-    
-    ptr[last] = v;
-    
-  };
-  
-  return obj.map(resolveDeepObj);
-  
-};
-let cloneResolveLinks = (root, errs=true, chain='', val=root) => {
-  
-  if (isForm(val, Array)) return val.map((v, i) => cloneResolveLinks(root, errs, `${chain}->${i}`, v));
-  if (isForm(val, Object)) return val.map((v, k) => cloneResolveLinks(root, errs, `${chain}->${k}`, v));
+  if (isForm(val, Array)) return val.map((v, i) => cloneResolveLinks(root, errs, [ ...chain, i ], v));
+  if (isForm(val, Object)) return val.map((v, k) => cloneResolveLinks(root, errs, [ ...chain, k ], v));
   if (isForm(val, String) && val[0] === '@') {
     
     let linkChain = val.slice(1).split('.');
@@ -687,7 +607,7 @@ let cloneResolveLinks = (root, errs=true, chain='', val=root) => {
       if (!ptr && !errs) return val; // Return the link without resolving it
     }
     
-    val = cloneResolveLinks(root, errs, `->${linkChain.join('->')}`, ptr);
+    val = cloneResolveLinks(root, errs, linkChain, ptr);
     
   }
   
@@ -803,45 +723,68 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     let junction = () => junctionChars[Math.floor(Math.random() * junctionChars.length)];
     
     let resolveFnArgs = (sc, args) => args.map(arg => isForm(arg, Function) ? arg(sc) : arg);
-    setSubconOutput((sc, ...args) => thenAll(resolveFnArgs(sc, args), args => {
+    setSubconOutput((sc, ...args) => {
       
-      // Prevent stdout output if "output.format" is false
-      let allScConf = conf('subcons') ?? {};
-      let scConf = allScConf.has(sc.term) ? allScConf[sc.term] : null;
-      let { output, format } = scConf ?? {
-        output: { inline: true },
-        format: null
-      };
-      if (!output.inline) return;
+      /// {DEBUG=
+      let trace = Error('trace').getInfo().trace;
+      /// =DEBUG}
+      thenAll(resolveFnArgs(sc, args), args => {
+        
+        // Prevent stdout output if "output.format" is false
+        // DO NOT PERFORM DEBUGGING SUBCON OUTPUT IN THIS FUNCTION
+        
+        let ptr = { kids: { root: conf('subcon') } };
+        let inheritedConf = {};
+        
+        for (let pc of [ 'root', ...token.dive(sc.term) ]) {
+          ptr = ptr.kids?.[pc];
+          if (!ptr) break;
+          
+          inheritedConf.merge(ptr);
+          delete inheritedConf.kids;
+        }
+        
+        let { output={ inline: true }, format=null } = inheritedConf;
+        if (!output.inline) return;
+        
+        // Format args if formatter is available
+        if (format) args = args.map(arg => format(arg, sc));
+        
+        let leftColW = 28;
+        let depth = 10;
+        if (isForm(args[0], String) && /^[!][!][0-9]+$/.test(args[0])) {
+          depth = parseInt(args[0].slice(2), 10);
+          args = args.slice(1);
+        }
+        
+        let now = getDate();
+        
+        let leftLns = [ `[${sc.term.slice(-leftColW)}]`, now ];
+        let rightLns = args.map(v => {
+          if (!isForm(v, String)) v = formatAnyValue(v, { depth });
+          return v.split(/\r?\n/);
+        }).flat();
+        
+        let call = trace[2];
+        call = call?.file && `${token.dive(call.file).slice(-1)[0]} ${call.row}:${call.col}`;
+        if (call) {
+          let extraChars = call.length - leftColW;
+          if (extraChars > 0) call = call.slice(extraChars + 1) + '\u2026';
+          leftLns.push(call);
+        }
+        
+        let logStr = Math.max(leftLns.length, rightLns.length).toArr(n => {
+          let l = (leftLns[n] || '').padTail(leftColW);
+          let r = rightLns[n] || '';
+          return l + vertDash() + ' ' + r;
+        }).join('\n');
+        
+        let topLine = (28).toArr(horzDash).join('') + junction() + (50).toArr(horzDash).join('');
+        console.log(topLine + '\n' + logStr);
+        
+      });
       
-      // Format args if formatter is available
-      if (format) args = args.map(arg => format(arg, sc));
-      
-      let leftColW = 28;
-      let depth = 10;
-      if (isForm(args[0], String) && /^[!][!][0-9]+$/.test(args[0])) {
-        depth = parseInt(args[0].slice(2), 10);
-        args = args.slice(1);
-      }
-      
-      let now = getDate();
-      
-      let leftLns = [ `> ${sc.term.slice(-leftColW)}`, now ];
-      let rightLns = args.map(v => {
-        if (!isForm(v, String)) v = formatAnyValue(v, { depth });
-        return v.split(/\r?\n/);
-      }).flat();
-      
-      let logStr = Math.max(leftLns.length, rightLns.length).toArr(n => {
-        let l = (leftLns[n] || '').padTail(leftColW);
-        let r = rightLns[n] || '';
-        return l + vertDash() + ' ' + r;
-      }).join('\n');
-      
-      let topLine = (28).toArr(horzDash).join('') + junction() + (50).toArr(horzDash).join('');
-      console.log(topLine + '\n' + logStr);
-      
-    }));
+    });
     
   })();
   
@@ -852,27 +795,40 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     
     let t = getMs();
     
-    rawConf = resolveDeepObj(rawConf);
+    rawConf = rawConf.diveKeysResolved();
     let schema = makeSchema();
     
     let conf = {
       
-      confs: [],
+      confKeeps: {
+        defInMill: '/[file:mill]/conf/def.js'
+      },
       
-      // Note this controls which subcons get to output by default
-      subcons: {
-        ...'gsc,setup,compile->result,bank,warning'.split(',').toObj(v => [ v, {
-          output: { inline: true, therapist: false }
-        }]),
-        'record->sample': {
-          output: { inline: false, therapist: false },
-          ms: 5000
+      subcon: {
+        description: 'Root subcon',
+        output: { inline: false, therapist: false },
+        kids: {
+          gsc: {
+            description: 'Global Subcon - primary dev output',
+            output: { inline: true, therapist: false }
+          },
+          setup:   { output: { inline: true, therapist: false } },
+          compile: { output: { inline: true, therapist: false } },
+          bank:    { output: { inline: true, therapist: false } },
+          warning: { output: { inline: true, therapist: false } },
+          record:  { kids: {
+            sample: {
+              output: { inline: false, therapist: false },
+              ms: 5000
+            }
+          }}
         }
       },
       
       hosts: {},
       deploy: {
-        subconKeep: '[file:mill]->sc',
+        uid: null,
+        subconKeep: '[file:mill].sc',
         maturity: 'alpha'
       }
       
@@ -883,9 +839,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       let dive = token.dive(diveToken);
       let ptr = conf;
       for (let pc of dive) {
-        /// {DEBUG= TODO: how to compile out these markers??
-        if (!isForm(ptr, Object) || !ptr.has(pc)) throw Error('Api: invalid dive token').mod({ diveToken });
-        /// =DEBUG}
+        if (!isForm(ptr, Object) || !ptr.has(pc)) return null;
         ptr = ptr[pc];
       }
       return ptr;
@@ -893,35 +847,35 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     };
     
     conf.merge(await schema.getConf(cloneResolveLinks(rawConf, false)));
-  
+    
     // Apply any Keep-based Conf
-    if (conf.confs && !conf.confs.empty()) {
+    if (!conf.confKeeps.empty()) {
       
-      let moreConfs = await Promise.all(conf.confs.map(async keepConf => {
+      let moreConfs = await Promise.all(conf.confKeeps.map(async (confKeepDiveToken, term) => {
         
-        let keep = global.keep(keepConf);
+        let confKeep = global.keep(confKeepDiveToken);
         
         let content = null;
         try {
-          content = await keep.getContent('utf8');
+          content = await confKeep.getContent('utf8');
           content = content.replace(/[;\s]+$/, ''); // Remove tailing whitespace and semicolons
           content = await eval(`(${content})`);
         } catch (err) {
-          err.propagate({ keepConf, keep: keep.fp.desc(), content });
+          err.propagate({ term, confKeep: confKeep.desc(), content });
         }
         return content;
         
       }));
       
-      for (let c of moreConfs) conf.merge(resolveDeepObj(c));
-      conf.merge(rawConf); // Merge back the raw configuration; it should always have precedence!
+      for (let [ term, keepConf ] of moreConfs) conf.merge(keepConf.diveKeysResolved());
       
+      conf.merge(rawConf); // Merge back the raw configuration; it should always have precedence!
       conf = await schema.getConf(cloneResolveLinks(conf));
       
     }
     
     // Resolve any @-links
-    conf = cloneResolveLinks(conf, '', conf);
+    conf = cloneResolveLinks(conf);
     
     // Additional Conf value sanitization and defaulting:
     
@@ -1129,7 +1083,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       subcon('compile.result')(() => {
         let srcCnt = srcLines.count();
         let trgCnt = filteredLines.count();
-        return `Compiled ${keep.desc()}: ${srcCnt} -> ${trgCnt} (-${srcCnt - trgCnt}) lines (${ (getMs() - t).toFixed(2) }ms)`;
+        return `Compiled ${keep.desc()}\nLine difference: ${srcCnt} -> ${trgCnt} (-${srcCnt - trgCnt})\nTook ${ (getMs() - t).toFixed(2) }ms`;
       });
       /// =DEBUG}
       
@@ -1324,6 +1278,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     subcon('setup.test')(`Tests completed after ${(getMs() - t).toFixed(2)}ms`);
   })();
   
+  
   // Enable `global.real`
   await (async () => {
     
@@ -1369,13 +1324,13 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
   // Again enhance Subcon output to use Records + KeepBank
   await (async () => {
     
-    gsc('Pls implement therapy');
-    
-    let subconWriteStdout = global.subconOutput;
-    global.subconOutput = (sc, ...args) => {
-      let term = sc.term;
-      subconWriteStdout(sc, ...args);
-    };
+    // Watch out for callsite depth when implementing!! (Effects mapping
+    // subcon calls to the meaningful callsite which invoked the call!)
+    // let subconWriteStdout = global.subconOutput;
+    // global.subconOutput = (sc, ...args) => {
+    //   let term = sc.term;
+    //   subconWriteStdout(sc, ...args);
+    // };
     
   })();
   
@@ -1406,11 +1361,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     
     // Get a NetworkIdentity to handle the hosting
     let NetworkIdentity = require('./NetworkIdentity.js');
-    gsc('CONFIG:', hosting.netIden);
-    let netIden = NetworkIdentity({
-      ...hosting.netIden,
-      //details: hosting.netIden.slice([ 'geo', 'org' ])
-    });
+    let netIden = NetworkIdentity(hosting.netIden);
     
     // Server management
     let getSessionKey = (payload) => {

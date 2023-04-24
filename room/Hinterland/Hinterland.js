@@ -52,8 +52,9 @@ global.rooms['Hinterland'] = async foundation => {
       tmp.endWith(loftRh);
       
       /// {DEBUG=
-      let recordSampleScConf = conf('subcons.record->sample')
-      if (recordSampleScConf?.output?.inline) (async () => {
+      let recordSampleScConf = subcon('subcon.record.sample');
+      let enabled = conf('subcon.kids.record.kids.sample.output.inline');
+      if (enabled) (async () => {
         
         let rank = rec => rec.uid.hasHead('!') ? -1 : 0;
         let rankType = (a, b) => a.type.name.localeCompare(b.type.name);

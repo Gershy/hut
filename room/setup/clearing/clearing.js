@@ -115,15 +115,26 @@ Object.assign(global, {
         if (v === skip) { delete this[k]; continue; }
         
         // Incoming non-Object properties are simple
-        if (v?.constructor !== Object) { this[k] = v; continue; }
+        if (!isForm(v, Object)) { this[k] = v; continue; }
         
         // Existing non-Object replaced with `{}`
-        if (this[k]?.constructor !== Object || !this.has(k)) this[k] = {};
+        if (!isForm(this[k], Object) || !this.has(k)) this[k] = {};
         
         // And simply recurse!
         this[k].merge(v);
       }
       return this;
+    },
+    diveKeysResolved() {
+      let result = {};
+      for (let [ k, v ] of this) {
+        let dive = token.dive(k);
+        let last = dive.pop();
+        let ptr = result;
+        for (let cmp of dive) ptr = ptr.has(cmp) ? ptr[cmp] : (ptr[cmp] = {});
+        ptr[last] = isForm(v, Object) ? v.diveKeysResolved() : v;
+      }
+      return result;
     },
     count() { let c = 0; for (let k in this) c++; return c; },
     categorize(fn) { // Iterator: (val, key) => '<categoryTerm>'
@@ -357,33 +368,51 @@ Object.assign(global, {
       causes.each(err => err.suppress());
     },
     
-    desc(seen=Set()) {
+    getInfo() {
+      
       // Errors have a Message and a Stack
       // Stacks are a Preamble followed by a Trace
       // A Trace is a sequence of callsites
       
-      // Note that Error -> String conversion expects the Message and
-      // Stack to be formatted according to these principles:
-      // - Within the Stack, the Preamble is separated from the Trace
-      //   using the string "\n<trace begin>\n"
+      let { stack } = this;
+      let traceHeadInd = stack.indexOf('>>>HUTTRACE>>>');
+      let traceTailInd = stack.indexOf('<<<HUTTRACE<<<');
       
+      if (traceHeadInd < 0 || traceTailInd < 0) return { preamble: '<unknown>', stack: [] };
+      let preamble = stack.slice(0, traceHeadInd).trim();
+      let trace = JSON.parse(stack.slice(traceHeadInd + '>>>HUTTRACE>>>'.length, traceTailInd));
+      
+      return {
+        preamble,
+        trace: trace.map(val => {
+          if      (val.type === 'info') return val;
+          else if (val.type === 'line') {
+            
+            let { keepTerm, row, col } = val;
+            let mapped = mapCmpToSrc(keepTerm, row, col);
+            
+            // Stringify "row" and "col"
+            return { ...val, ...mapped };
+            
+          }
+        })
+      };
+      
+    },
+    desc(seen=Set()) {
       if (seen.has(this)) return '<circ>';
       seen.add(this);
       
       let { message: msg, stack, cause, ...props } = this;
-      let traceHeadInd = stack.indexOf('>>>HUTTRACE>>>');
-      let traceTailInd = stack.indexOf('<<<HUTTRACE<<<');
+      let { preamble, trace } = this.getInfo();
       
-      if (traceHeadInd < 0 || traceTailInd < 0) return `Unprocessed Error:\n${stack}`;
-      
-      let preamble = stack.slice(0, traceHeadInd);
-      let trace = JSON.parse(stack.slice(traceHeadInd + '>>>HUTTRACE>>>'.length, traceTailInd));
+      if (trace.empty()) return `Unprocessed Error:\n${stack}`;
       
       // We want to show the Message and Preamble; depending how the
       // Error is generated one may contain the other - if so we show
       // whichever is the superset, otherwise we concatenate them (we
       // always show *all* information)
-      [ msg, preamble ] = [ msg, preamble ].map(v => v.trim());
+      msg = msg.trim();
       let fullMsg = null;
       if (preamble.has(msg))      fullMsg = preamble;
       else if (msg.has(preamble)) fullMsg = msg;
@@ -401,17 +430,11 @@ Object.assign(global, {
         
       }).join('\n');
       
+      // Stringify "row" and "col"
       trace = trace.map(val => {
-        if      (val.type === 'info') return val;
-        else if (val.type === 'line') {
-          
-          let { keepTerm, row, col } = val;
-          let mapped = mapCmpToSrc(keepTerm, row, col);
-          
-          // Stringify "row" and "col"
-          return { ...val, ...mapped, row: mapped.row.toString(10), col: mapped.col.toString(10) };
-          
-        }
+        if (val.type !== 'line') return val;
+        let { row, col, ...props } = val;
+        return { ...props, row: row.toString(10), col: col.toString(10) };
       });
       
       let lineTrace = trace.filter(t => t.type === 'line');
@@ -766,13 +789,13 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     if (f === null) return 'Null';
     if (f === undefined) return 'Undefined';
     if (f !== f) return 'UndefinedNumber';
-    return f?.constructor?.name ?? 'Prototypeless'; // e.g. `getFormName(Object.plain()) === 'Prototypeless'`
+    return Object.getPrototypeOf(f)?.constructor.name ?? 'Prototypeless'; // e.g. `getFormName(Object.plain()) === 'Prototypeless'`
   },
   isForm: (fact, Form) => {
     
     // NaN only matches against the NaN primitive (not the Number Form)
     if (fact !== fact) return Form !== Form;
-    if (fact === null) return Form === null;
+    if (fact == null) return false;
     
     // Prefer to compare against `FormNative`. Some native Cls
     // references represent the hut-altered form (e.g. they have an
@@ -783,7 +806,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     // Cls which has been hut-modified will have a "Native" property
     // pointing to the original class, which serves as a good value to
     // compare against "constructor" properties
-    return fact?.constructor === (Form.Native ?? Form);
+    return Object.getPrototypeOf(fact).constructor === (Form.Native ?? Form);
     
   },
   hasForm: (fact, FormOrCls) => {
@@ -794,7 +817,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     // fact/instance was given, the "constructor" property points us to
     // the appropriate Form/Cls. We name this value "Form", although it
     // is ambiguously a Form/Cls.
-    let Form = (fact?.constructor === Function) ? fact : fact.constructor;
+    let Form = (Object.getPrototypeOf(fact)?.constructor === Function) ? fact : fact.constructor;
     if (Form === FormOrCls) return true;
     
     // If a "~forms" property exists `FormOrCls` is specifically a Form
@@ -824,14 +847,12 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   mapCmpToSrc: (file, row, col) => ({ file, row, col, context: null }),
   
   // Subcon debug
-  subcon: (term, opts={}) => {
-    term = term.replace(/[.]/g, '->');
+  subcon: (diveToken, opts={}) => {
+    //let dive = token.dive(diveToken);
     let sc = (...args) => subconOutput(sc, ...args);
-    return Object.assign(sc, { term, opts, kid: (kt, o={}) => subcon(`${term}->${kt}`, { ...opts, ...o }) });
+    return Object.assign(sc, { term: diveToken, opts });
   },
-  subconOutput: (sc, ...args) => {
-    console.log(`\nSubcon "${sc.term}": ${global.formatAnyValue(args)}`);
-  },
+  subconOutput: (sc, ...args) => console.log(`\nSubcon "${sc.term}": ${global.formatAnyValue(args)}`),
   
   // Urls
   uriRaw: ({ path='', cacheBust, query }) => {
@@ -877,7 +898,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     // values!
     
     resolve: (...args) => token.dive,
-    dive: token => {
+    dive: tok => {
       
       // Note this function says nothing about the items in the resolved
       // "indirection chain" (e.g. that they are all Strings). If the
@@ -886,22 +907,26 @@ Object.assign(global, global.rooms['setup.clearing'] = {
       // neither examines its children nor performs any flattening
       
       // Handle `null`, empty string
-      if (!token) token = [];
+      if (!tok) tok = [];
       
       // Strings beginning with a "funky" character are split by that
       // character, otherwise they are split by "."; any empty cmps are
       // filtered out; note these chars are typically "directionful" as
       // in they are typically rendered similarly to or reminiscent of a
       // right-pointing-arrow
-      if (token?.constructor === String)
-        token = ('./>\u0010\u001a'.has(token[0]) // \u0010 - arrowhead-right; \u001a - arrow-right
-          ? token.slice(1).split(token[0])
-          : token.split('.')
-        ).sift();
+      if (isForm(tok, String))
+        return ('./>\u0010\u001a'.has(tok[0]) // \u0010 - arrowhead-right; \u001a - arrow-right
+          ? tok.slice(1).split(tok[0])
+          : tok.split('.')
+        ).filter(Boolean);
       
-      if (token?.constructor !== Array) throw Error(`Api: token must resolve to Array; got ${getFormName(token)}`).mod({ token });
+      if (!isForm(tok, Array)) throw Error(`Api: token must resolve to Array; got ${getFormName(tok)}`).mod({ token: tok });
       
-      return token;
+      return tok.flat(Infinity);
+      
+      //return tok.map(v => token.dive(v)).flat(Infinity);
+      
+      //return token;
       
     }
     
@@ -1265,7 +1290,6 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
     }
     
   })});
-  
   let Keep = form({ name: 'Keep', has: { Slots }, props: (forms, Form) => ({
     
     init() {},

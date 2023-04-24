@@ -268,6 +268,7 @@ global.rooms['setup.hut'] = async () => {
         knownRealDependencies: Set(),
         serverInfos: [],
         enabledKeeps: Map(),
+        belowConf: null,
         /// =ABOVE}
         
         allFollows: Object.plain(/* uid -> { hutId -> FollowTmp } */)
@@ -275,9 +276,42 @@ global.rooms['setup.hut'] = async () => {
       });
       denumerate(this, 'allFollows');
       /// {ABOVE=
+      
+      let subconConf = conf => {
+        let { kids={}, output } = conf;
+        return { output, kids: kids.map(subconConf) };
+      };
+      
+      this.belowConf = {
+        
+        // TODO: Subcon values for Below??
+        // TODO: Maybe `global.getBelowConf` is a better place for this
+        // logic than `AboveHut.prototype`?
+        
+        aboveHid: this.hid,
+        subcon: subconConf(conf('subcon')),
+        deploy: {
+          maturity: conf('deploy.maturity'),
+          loft: {
+            uid: conf('deploy.loft.uid'),
+            def: {
+              prefix: this.prefix,
+              room: conf('deploy.loft.def.room')
+            },
+            hosting: {
+              netIden: { secureBits: conf('deploy.loft.hosting.netIden.secureBits') },
+              netAddr: conf('deploy.loft.hosting.netAddr'),
+              heartbeatMs: conf('deploy.loft.hosting.heartbeatMs'),
+              protocols: conf('deploy.loft.hosting.protocols')
+            }
+          }
+        }
+      };
+      
       denumerate(this, 'ownedHutRh');
       denumerate(this, 'knownRoomDependencies');
       denumerate(this, 'knownRealDependencies');
+      
       /// =ABOVE}
       
       this.endWith(recMan.addRecordSearch(uid => {
@@ -355,32 +389,7 @@ global.rooms['setup.hut'] = async () => {
       // same conf data! Then for the following, we parse the AboveHut
       // instance's conf (shouldn't ever call `global.conf` here)
       
-      return {
-        
-        // TODO: Subcon values for Below??
-        // TODO: Maybe `global.getBelowConf` is a better place for this
-        // logic than `AboveHut.prototype`?
-        
-        aboveHid: this.hid,
-        subcons: conf('subcons').map(subcon => subcon.slice([ 'output' ])),
-        deploy: {
-          maturity: conf('deploy.maturity'),
-          loft: {
-            uid: conf('deploy.loft.uid'),
-            def: {
-              prefix: this.prefix,
-              room: conf('deploy.loft.def.room')
-            },
-            hosting: {
-              netIden: { secureBits: conf('deploy.loft.hosting.netIden.secureBits') },
-              netAddr: conf('deploy.loft.hosting.netAddr'),
-              heartbeatMs: conf('deploy.loft.hosting.heartbeatMs'),
-              protocols: conf('deploy.loft.hosting.protocols')
-            }
-          }
-        }
-        
-      };
+      return this.belowConf;
       
     },
     addServerInfo({ secure, protocol, netAddr, port }) {
@@ -409,7 +418,7 @@ global.rooms['setup.hut'] = async () => {
       else if (args.length === 2) [ term, keep ] = args;
       
       /// {DEBUG=
-      if (term?.constructor !== String) throw Error(`Api: term must resolve to String`).mod({ term });
+      if (!isForm(term, String)) throw Error(`Api: term must resolve to String`).mod({ term });
       /// =DEBUG}
       
       if (this.enabledKeeps.has(term)) throw Error(`Api: already enabled Keep termed "${term}"`);
@@ -427,12 +436,12 @@ global.rooms['setup.hut'] = async () => {
       // 1. args[0] is a String (this is the Type provided as a String)
       // 2. args[0] is an Object and args[0].type is a String
       
-      if (args[0]?.constructor === String) {
+      if (isForm(args[0], String)) {
         if (!args[0].has('.')) args = [
           `${this.prefix}.${args[0]}`,
           ...args.slice(1)
         ];
-      } else if (args[0]?.constructor === Object && args[0].type?.constructor === String) {
+      } else if (isForm(args[0], Object) && isForm(args[0].type, String)) {
         if (!args[0].type.has('.')) args = [
           { ...args[0], type: `${this.prefix}.${args[0].type}` },
           ...args.slice(1)
@@ -815,7 +824,7 @@ global.rooms['setup.hut'] = async () => {
       if (fromScratch) {
         
         /// {DEBUG=
-        subcon('belowHut.sync')(`${this.desc()} needs to sync from scratch`);
+        subcon('hut.below.sync')(`${this.desc()} is syncing from scratch`);
         /// =DEBUG}
         
         // Reset version and clear the current sync-delta, refreshing it

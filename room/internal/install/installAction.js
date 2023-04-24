@@ -17,7 +17,7 @@ async hosting => {
     let data = Buffer.concat(chunks);
     try {
       let children = serToVal(data);
-      if (!children || children.constructor !== Array) throw Error('Sad');
+      if (children?.constructor !== Array) throw Error('Sad');
       await fs.promises.mkdir(path.join(...local));
       for (let c of children) yield* copy([ ...local, c ], [ ...remote, c ]);
       yield remote;

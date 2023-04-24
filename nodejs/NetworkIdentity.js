@@ -220,11 +220,9 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   }),
   
   $subcon: Object.plain({
-    
-    server: subcon('netIden.server'),
+    server: subcon('netIden.serverManager'),
     sign: subcon('netIden.sign'),
     acme: subcon('netIden.acme')
-    
   }),
   
   $tmpFp: () => require('path').join(require('os').tmpdir(), Math.random().toString('16').slice(2)),
@@ -974,7 +972,6 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
           let { body: { identifier: { type, value } } } = auth;
           return `${type} / ${value} (${auth.url})`;
         }).join('\n').indent(2));
-        //   networkAddresses.join('\n').indent(2), auths);
         
         let getValidAuthResByPolling = async (auth, retryWaitMs=1500, maxAttempts=10) => {
           
