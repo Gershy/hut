@@ -64,7 +64,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       };
       
       let belowConf = hut.getBelowConf();
-      let protocolsDef = belowConf.deploy.loft.hosting.protocols;
+      let protocolsDef = belowConf.deploy.host.protocols;
       let protocolRooms = Set(protocolsDef.toArr(v => v.protocol))
         .toArr(v => `habitat.HtmlBrowserHabitat.hutify.protocol.${v}`);
       

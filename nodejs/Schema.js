@@ -16,9 +16,15 @@ let Schema = module.exports = form({ name: 'Schema', has: { Slots }, props: (for
   // useful error output), and then simply do away with the Schema
   // instances and work directly with the data parsed by them!
   
-  init({ name='??', par=null, kids=Object.plain(), all=null, fn=null }={}) {
+  init({ name='??', par=null }={}) {
     
-    Object.assign(this, { name, par, fn, kids, all });
+    Object.assign(this, {
+      name, par,
+      kids: Object.plain(),
+      all: null,
+      fn: null,
+      pending: Set()
+    });
     denumerate(this, 'par');
     denumerate(this, 'kids');
     
@@ -48,11 +54,18 @@ let Schema = module.exports = form({ name: 'Schema', has: { Slots }, props: (for
     if (kidsAndObj.empty()) return null;
     return kidsAndObj.map((v, k) => {
       
+      // Omit `null` and `skip`
       if (v == null) return skip;
+      
+      // Resolve "<default>" to `null` without omitting
       if (v === '<default>') v = null;
+      
+      // Return references unchanged
+      if (isForm(v, String) && v[0] === '@') return v;
+      
       if (this.kids[k]) return this.kids[k].getConf(v, [ ...chain, k ]);
       if (this.all) return this.all.getConf(v, [ ...chain, k ]);
-      throw Error(`Unexpected: ${chain.join('.')}`);
+      throw Error(`Api: unexpected chain "${chain.join('.')}"`).mod({ schema: this.desc(), key: k, val: v });
       
     });
     

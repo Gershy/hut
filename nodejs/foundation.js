@@ -345,6 +345,12 @@ let makeSchema = () => {
   };
   
   let hostsScm = scm.seek('hosts.*');
+  hostsScm.fn = (val, schema, chain) => {
+    
+    validate(chain, val, { form: Object });
+    return schema.inner(val, chain);
+    
+  };
   hostsScm.seek('netIden').fn = (val, schema, chain) => {
     
     // @netIdens.tester
@@ -423,7 +429,6 @@ let makeSchema = () => {
       let regex = /^([a-zA-Z]+)(?:[:]([0-9]+))?(?:[<]([^>]+)[>])?(?:$|[+])$/;
       
       validate(chain, val, { regex, desc: 'e.g. "http:80<gzip+deflate>", "http<deflate>", "http:80", "http"' });
-      
       let [ , protocol, port='<default>', compression=null ] = val.match(regex);
       val = { protocol, port, compression };
       
@@ -435,8 +440,6 @@ let makeSchema = () => {
   };
   hostsScm.seek('protocols.*.protocol').fn = (val, schema, chain) => validate(chain, val, { form: String });
   hostsScm.seek('protocols.*.port').fn = (val, schema, chain) => {
-    
-    if (val === null) return null;
     
     if (isForm(val, String)) val = parseInt(val, 10);
     validate(chain, val, { numberBound: { min: 0 } });
@@ -535,9 +538,25 @@ let makeSchema = () => {
     return val;
     
   };
-  deployScm.seek('wrapBelowCode').fn = (val, schema, chain) => {
-    if (val === null) val = false;
-    return validate(chain, val, { form: Boolean });
+  deployScm.kids.host = hostsScm;
+  deployScm.seek('uid').fn = (val, schema, chain) => {
+    
+    if (val === null) val = Math.random().toString(36).slice(2, 8);
+    validate(chain, val, { form: String });
+    return val;
+    
+  };
+  deployScm.seek('prefix').fn = (val, schema, chain) => {
+    
+    validate(chain, val, { stringBound: { min: 2, max: 4 } });
+    return val;
+    
+  };
+  deployScm.seek('loft').fn = (val, schema, chain) => {
+    
+    validate(chain, val, { form: String });
+    return val;
+    
   };
   deployScm.seek('subconKeep').fn = (val, schema, chain) => {
     
@@ -546,72 +565,15 @@ let makeSchema = () => {
     return val;
     
   };
-  
-  let loftScm = deployScm.seek('loft');
-  loftScm.fn = (val, schema, chain) => {
+  deployScm.seek('bankKeep').fn = (val, schema, chain) => {
     
     if (val === null) return null;
-    validate(chain, val, { form: Object })
-    val = {
-      uid: '<default>',
-      ...val
-    };
-    return schema.inner(val, chain);
-    
-  };
-  loftScm.seek('uid').fn = (val, schema, chain) => {
-    
-    if (val === null) val = Math.random().toString(36).slice(2, 8);
-    validate(chain, val, { form: String });
+    validate(chain, val, 'keep');
     return val;
-    
-  };
-  loftScm.seek('def').fn = (val, schema, chain) => {
-    
-    if (isForm(val, String))
-      return validate(chain, val, { regex: /^@loftDefs[.]/, desc: 'begins with "@loftDefs.", e.g. "@loftDefs.testLoft"' });
-    
-    return loftDefsScm.getConf(val, chain);
-    
-  };
-  loftScm.seek('hosting').fn = (val, schema, chain) => {
-    
-    // TODO: What if we wanted to expose a single Loft via multiple
-    // hosts?? Should this return an Array? (Or is such architecture an
-    // anti-pattern?)
-    
-    if (val === null) return null;
-    
-    if (isForm(val, String))
-      return validate(chain, val, { regex: /^@hosts./, desc: 'begins with "@hosts.", e.g. "@hosts.local", "@hosts.dev", etc.' });
-    
-    return hostsScm.getConf(val, chain);
     
   };
   
   return scm;
-  
-};
-let cloneResolveLinks = (root, errs=true, chain=[], val=root) => {
-  
-  if (isForm(val, Array)) return val.map((v, i) => cloneResolveLinks(root, errs, [ ...chain, i ], v));
-  if (isForm(val, Object)) return val.map((v, k) => cloneResolveLinks(root, errs, [ ...chain, k ], v));
-  if (isForm(val, String) && val[0] === '@') {
-    
-    let linkChain = val.slice(1).split('.');
-    
-    let ptr = root;
-    for (let term of linkChain) {
-      ptr = ptr[term];
-      if (!ptr &&  errs) throw Error(`Api: missing target for link "${val}" (found at "${chain}")`);
-      if (!ptr && !errs) return val; // Return the link without resolving it
-    }
-    
-    val = cloneResolveLinks(root, errs, linkChain, ptr);
-    
-  }
-  
-  return val;
   
 };
 
@@ -846,7 +808,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       
     };
     
-    conf.merge(await schema.getConf(cloneResolveLinks(rawConf, false)));
+    conf.merge(await schema.getConf(rawConf));
     
     // Apply any Keep-based Conf
     if (!conf.confKeeps.empty()) {
@@ -870,21 +832,49 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       for (let [ term, keepConf ] of moreConfs) conf.merge(keepConf.diveKeysResolved());
       
       conf.merge(rawConf); // Merge back the raw configuration; it should always have precedence!
-      conf = await schema.getConf(cloneResolveLinks(conf));
+      conf = await schema.getConf(conf);
       
     }
     
     // Resolve any @-links
-    conf = cloneResolveLinks(conf);
+    let resolveLinks = (val, chain=[], root=val) => {
+      
+      if (!isForm(val, Object)) return;
+      
+      for (let [ k, v ] of val) {
+        
+        let seen = Set();
+        while (isForm(v, String) && v[0] === '@') {
+          
+          if (seen.has(v)) throw Error(`Api: circular reference at "${chain.join('.')}"`);
+          seen.add(v);
+          
+          // If the dive finds something it is either another follow or
+          // non-follow; if the dive fails `val[k]` is set to `null`
+          v = val[k] = token.diveOn(v.slice(1), root).val ?? '<default>';
+          
+        }
+        
+        // Don't `resolveLinks` on a value obtained by following a link!
+        // Such values are naturally resolved elsewhere via reticulation
+        if (seen.empty()) resolveLinks(v, [ ...chain, k], root);
+        
+      }
+      
+    };
+    resolveLinks(conf);
+    
+    // One final `getConf` to ensure the resolved links are valid!
+    conf = await schema.getConf(conf);
     
     // Additional Conf value sanitization and defaulting:
     
     // Provide defaults for Ports
-    for (let [ , protocol ] of conf.deploy.loft.hosting.protocols) {
+    for (let [ , protocol ] of conf.deploy.host.protocols) {
       
       if (protocol.port !== null) continue;
       
-      let netIden = conf.deploy.loft.hosting.netIden;
+      let netIden = conf.deploy.host.netIden;
       
       if ([ 'http' ].includes(protocol.protocol))
         protocol.port = (netIden.secureBits > 0) ? 443 : 80;
@@ -893,13 +883,6 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         protocol.port = (netIden.secureBits > 0) ? 443 : 80;
       
     }
-    
-    // Default random loft uid
-    // TODO: Maybe it should *always* be random for low maturity?
-    // Would at least help with cache-busting - but maybe it should be
-    // the responsibility of the dev to make sure the uid is random
-    // for each run...
-    if (conf.deploy.loft.uid === null) conf.deploy.loft.uid = Math.random().toString(36).slice(2, 8);
     
     setupSc(`Configuration processed after ${(getMs() - t).toFixed(2)}ms`, conf);
     
@@ -1278,7 +1261,6 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     subcon('setup.test')(`Tests completed after ${(getMs() - t).toFixed(2)}ms`);
   })();
   
-  
   // Enable `global.real`
   await (async () => {
     
@@ -1340,10 +1322,8 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     // Wipe out code from previous run
     await keep([ 'file:code:cmp' ]).rem();
     
-    let { uid=null, def, hosting } = global.conf('deploy.loft');
+    let { uid=null, prefix, keep: keepTerm, host: hosting } = global.conf('deploy');
     let { heartbeatMs } = hosting;
-    
-    let { prefix, room: loftName, keep: keepTerm } = def;
     
     let { hut, record, WeakBank=null, KeepBank=null } = await global.getRooms([
       'setup.hut',
@@ -1541,8 +1521,8 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       
     }
     
-    let loft = await getRoom(loftName);
-    await loft.open({ prefix: aboveHut.prefix, hut: aboveHut, netIden });
+    let loft = await getRoom(global.conf('deploy.loft'));
+    await loft.open({ hut: aboveHut, netIden });
     
     process.on('exit', () => {
       aboveHut.end();

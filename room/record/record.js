@@ -736,8 +736,11 @@ global.rooms['record'] = async () => {
     init({ type, uid, group=Group(type.manager, {}), value=null, volatile=false }) {
       
       if (group.mems.find( mem => mem.off() ).found) throw Error('Record created with ended Member');
-      if (!type) throw Error('A type is required');
-      if (!uid) throw Error('A uid is required');
+      
+      /// {DEBUG=
+      if (!isForm(type, Type)) throw Error(`Api: "type" must be Type; got ${getFormName(type)}`).mod({ type });
+      if (!isForm(uid, String)) throw Error(`Api: "uid" must be String; got ${getFormName(uid)}`).mod({ uid });
+      /// =DEBUG}
       
       forms.Tmp.init.call(this);
       

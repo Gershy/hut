@@ -128,6 +128,10 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     
     let err = Error('trace');
     return thenAll(names.toObj(name => {
+
+      /// {DEBUG=
+      if (!name) throw err.mod({ msg: `A name was null` });
+      /// =DEBUG}
       
       // Deferred rooms embedded in initial html don't emit "load" event
       // Need to see if `global.rooms` is already populated
@@ -216,9 +220,8 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   };
   /// =DEBUG}
   
-  let { hid: belowHid } = global.conf();
-  let { uid=null, def, hosting } = global.conf('deploy.loft');
-  let { prefix, room: loftName, keep: keepTerm } = def;
+  let { hid: belowHid, aboveHid, deploy: { uid, prefix, host } } = global.conf();
+  let { netAddr, netIden: netIdenConf, protocols, heartbeatMs } = host;
   
   // Make sure that refreshes redirect to the same session
   document.cookie = 'hut=' + global.btoa(valToJson({ hid: belowHid }));
@@ -281,11 +284,9 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     // TODO: Maybe something like localstorage could allow BELOW to
     // work with KeepBank? (Would be blazing-fast client-side!!)
     'record.bank.WeakBank',
-    global.conf('deploy.loft.def.room')
+    global.conf('deploy.loft')
   ]);
   
-  let aboveHid = global.conf('aboveHid');
-  let heartbeatMs = global.conf('deploy.loft.hosting.heartbeatMs');
   let bank = WeakBank({ subcon: global.subcon('bank') });
   let recMan = record.Manager({ bank });
   
@@ -297,8 +298,6 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   // will never be ended, so we manually initialize all servers ("run on
   // network" functionality), and call `loft.open`, which will call
   // `Hinterland(...).open({ ..., netIden })` with the spoofed `netIden`
-  
-  let { netAddr, netIden: netIdenConf, protocols } = global.conf('deploy.loft.hosting');
   
   // TODO: This assumes Above never ends which may introduce annoyances
   // for development (e.g. Above restarting should refresh Below)
@@ -331,7 +330,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   if (initComm) belowHut.actOnComm({ src: aboveHut, msg: initComm });
   
   let loft = loftObj.toArr(v => v)[0];
-  await loft.open({ prefix, hut: belowHut, rec: aboveHut, netIden });
+  await loft.open({ hut: belowHut, rec: aboveHut, netIden });
   
   gsc(`Loft opened after ${(getMs() - performance.timeOrigin).toFixed(2)}ms`);
   

@@ -924,10 +924,17 @@ Object.assign(global, global.rooms['setup.clearing'] = {
       
       return tok.flat(Infinity);
       
-      //return tok.map(v => token.dive(v)).flat(Infinity);
-      
-      //return token;
-      
+    },
+    diveOn: (tok, ptr) => {
+      let dive = token.dive(tok);
+      let cnt = 0;
+      for (let pc of dive) {
+        if (!isForm(ptr, Object) || !ptr.has(pc))
+          return { found: false, val: null, deepest: ptr, remaining: dive.slice(cnt) };
+        ptr = ptr[pc];
+        cnt++;
+      }
+      return { found: true, val: ptr };
     }
     
   },

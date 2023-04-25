@@ -281,7 +281,6 @@ global.rooms['setup.hut'] = async () => {
         let { kids={}, output } = conf;
         return { output, kids: kids.map(subconConf) };
       };
-      
       this.belowConf = {
         
         // TODO: Subcon values for Below??
@@ -291,21 +290,21 @@ global.rooms['setup.hut'] = async () => {
         aboveHid: this.hid,
         subcon: subconConf(conf('subcon')),
         deploy: {
+          
           maturity: conf('deploy.maturity'),
-          loft: {
-            uid: conf('deploy.loft.uid'),
-            def: {
-              prefix: this.prefix,
-              room: conf('deploy.loft.def.room')
-            },
-            hosting: {
-              netIden: { secureBits: conf('deploy.loft.hosting.netIden.secureBits') },
-              netAddr: conf('deploy.loft.hosting.netAddr'),
-              heartbeatMs: conf('deploy.loft.hosting.heartbeatMs'),
-              protocols: conf('deploy.loft.hosting.protocols')
-            }
-          }
+          
+          host: {
+            netIden: { secureBits: conf('deploy.host.netIden.secureBits') },
+            netAddr: conf('deploy.host.netAddr'),
+            heartbeatMs: conf('deploy.host.heartbeatMs'),
+            protocols: conf('deploy.host.protocols')
+          },
+          
+          uid: conf('deploy.uid'),
+          loft: conf('deploy.loft')
+          
         }
+        
       };
       
       denumerate(this, 'ownedHutRh');
@@ -430,26 +429,7 @@ global.rooms['setup.hut'] = async () => {
     },
     /// =ABOVE}
     
-    addRecord(...args /* type, group, value, uid, volatile | { type, group, value, uid, volatile } */) {
-      // We want to make sure any Type provided as a String defaults to
-      // having `this.prefix`! The cases where we can act are:
-      // 1. args[0] is a String (this is the Type provided as a String)
-      // 2. args[0] is an Object and args[0].type is a String
-      
-      if (isForm(args[0], String)) {
-        if (!args[0].has('.')) args = [
-          `${this.prefix}.${args[0]}`,
-          ...args.slice(1)
-        ];
-      } else if (isForm(args[0], Object) && isForm(args[0].type, String)) {
-        if (!args[0].type.has('.')) args = [
-          { ...args[0], type: `${this.prefix}.${args[0].type}` },
-          ...args.slice(1)
-        ];
-      }
-      return this.type.manager.addRecord(...args);
-      
-    },
+    addRecord(...args) { return this.type.manager.addRecord(...args); }
     
   })});
   let BelowHut = form({ name: 'BelowHut', has: { Hut }, props: (forms, Form) => ({

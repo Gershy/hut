@@ -1316,7 +1316,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     // Group Servers by port, ensure all Servers on the same port share
     // the same NetworkAddress, ensure no two Servers on the same port
     // have the same protocol
-    let portServers = this.servers.categorize(server => server.port.toString('10'));
+    let portServers = this.servers.categorize(server => server.port.toString(10));
     let ports = portServers.toArr((v, k) => parseInt(k, 10));
     
     /// {DEBUG=
