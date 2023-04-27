@@ -1522,7 +1522,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     }
     
     let loft = await getRoom(global.conf('deploy.loft'));
-    await loft.open({ hut: aboveHut, netIden });
+    await loft.open({ hereHut: aboveHut, netIden });
     
     process.on('exit', () => {
       aboveHut.end();

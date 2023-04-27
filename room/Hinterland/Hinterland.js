@@ -6,49 +6,142 @@ global.rooms['Hinterland'] = async foundation => {
     // Hinterland is the space in which multiple Huts interact according
     // to the rules of the AboveHut
     
-    init({ habitats=[], recordForms={}, above=Function.stub, below=Function.stub }) {
-      
-      /// {DEBUG=
-      if (!habitats.count()) throw Error(`Api: provide at least 1 habitat`);
-      /// =DEBUG}
-      
-      Object.assign(this, { habitats, recordForms, above, below });
-      
-    },
-    async open({ prefix, hut, rec=hut, netIden }) {
+    $prefixer: (pfx, term) => term.has('.') ? term : `${pfx}.${term}`,
+    $makeUtils: (prefix, hut, recMan, pfx=Form.prefixer.bound(prefix)) => ({
       
       // TODO: Maybe here is the place to define the connection from
-      // `netIden` to `hut`? I.e. that network communications to the
+      // `netIden` to `hereHut`? I.e. that network communications to the
       // NetworkIdentity get translated to `hut`. This may be some good
       // candidate logic to define once and reference from ABOVE/BELOW.
       // If that *doesn't* make sense, maybe all Hinterlands logic needs
       // to move to `foundation` + `HtmlBrowserHabitat/init/init.js`
       
-      // Note that `hut` and `rec` probably have Types with the Prefix
-      // of "hut". We want the LoftRec initiated here to have the prefix
-      // specified by `prefix`, which refers to the deploy config for
-      // this Loft! (This allows logic within the Loft to default to
-      // using the correct prefix)
+      // The Loft defined by `this.above` and `this.below` should be
+      // able to omit prefixes for almost all operations. For many
+      // operations this is handled be the "root" Record and Real which
+      // get initiated by Hinterland with the Loft-specific prefix; then
+      // operations can be performed using this Record and Real. The
+      // tricky part is Hut-initiated actions (actions where the Object
+      // providing the method is a Hut); this is because Huts have no
+      // natural default-prefix; a single Hut is designed to facilitate
+      // multiple Lofts at once - such actions need to be implemented
+      // differently. Here is an exhaustive list of actions that can be
+      // performed without specifying a prefix, and implementation:
+      // +----------------------------+------------------------------------------------------------------
+      // |                            | 
+      // | ACTION                     | IMPLEMENTATION
+      // |                            | 
+      // +----------------------------+------------------------------------------------------------------
+      // | addReal                    | Use `loftReal.addReal`
+      // +----------------------------+------------------------------------------------------------------
+      // | hut.addRecord              | - `hut.addRecord`
+      // | rootRec.addRecord (?)      |   If `hut` is BelowHut, can automatically perform Follow
+      // |                            |   Prefix needs to default from Members
+      // |                            | - `rootRec.addRecord`
+      // |                            |   No way to automatically Follow
+      // |                            |   Manual Follow is UGLY: `hut.followRec(rootReal.addRecord(...))`
+      // |                            |   Prefix can default from `rootRec`
+      // |                            |   Parallels `real.addReal`, which is cute
+      // +----------------------------+------------------------------------------------------------------
+      // | hut.enableAction           | 2 Lofts may have an Action of the same name
+      // |                            | Would be cool if no term was required (e.g. every action is id'd
+      // |                            | simply by a uid) but this requires the uid to be negotiated by
+      // |                            | Above and Below to ensure they use the same value
+      // +----------------------------+------------------------------------------------------------------
+      // | hut.addFormFn              | 2 Lofts may not add FormFns for the same type name
+      // |                            | At the moment the idea is not to call `addFormFn` from inside the
+      // |                            | `above` / `below` function - just provide a map to Hinterland!
+      // +----------------------------+------------------------------------------------------------------
+      // | hut.enableKeep             | c2 defines "pieces"; could conflict with another Loft's Keep!
+      // | hut.getKeep                | 
+      // +----------------------------+------------------------------------------------------------------
+      // | rec.relHandler('term')     | Prefix defaulted from `rec.type`, so watch out for `hut.rh(...)`
+      // | rec.rh('term')             | and `dep.scp(hut, ...)` - in such cases prefix defaults to "hut"!
+      // +----------------------------+------------------------------------------------------------------
+      // | dep.scp(rec, 'term', ...)  | Defaults same as `rec.relHandler(...)`
+      // +----------------------------+------------------------------------------------------------------
+      // |                            | 
+      // +----------------------------+------------------------------------------------------------------
+      
+      // Note that none of these should conflict with properties that
+      // can be found on a Record!!
+      
+      enableAction: (term, ...args) => hut.enableAction(pfx(term), ...args),
+      addFormFn: (term, ...args) => recMan.addFormFn(pfx(term), ...args),
+      enableKeep: (term, keep) => hut.enableKeep(pfx(term), keep),
+      getKeep: (diveToken) => {
+        let pcs = token.dive(diveToken);
+        let pfxDiveToken = [ '', pfx(pcs[0]), ...pcs.slice(1) ].join('/');
+        return hut.getKeep(pfxDiveToken);
+      },
+      addRecord: (...args /* type, group, value, uid, volatile | { type, group, value, uid, volatile } */) => {
+        
+        // HEEERE need to test everything with Collabowrite!! I NEED TO
+        // KNOW if Persona can be simplified now that prefixes are
+        // removed everywhere (it could just be passed, e.g., the Loft,
+        // and all prefixes would automatically fall into place!). Need
+        // to see if using `recMan.addRecord` instead of
+        // `belowHut.addRecord` causes issues with Records getting
+        // followed!!!
+        
+        // Not applying any Follows here!! So Below can only follow
+        // stuff via `resolveHrecsAndFollowRecs`!!!!
+        // HEEERE if this works it means there's no need for
+        // `Hut(...).addRecord`!! The single "c2." in chess2 may be
+        // possible to remove if the Hinterlands automatically adds a
+        // Record binding a Hut to a "Lofter" - i.e. a user of a Hut,
+        // and this rec establishes a way of talking about a BelowHut
+        // but the prefix is automatically set!!
+        
+        // args ~= [ 'eg.type', [ memRec1, memRec2 ], 'val', ... ]
+        if (isForm(args[0], String))
+          return recMan.addRecord(pfx(args[0]), ...args.slice(1));
+        
+        // args ~= [{ type: 'eg.type', group: [ memRec1, memRec2 ], value: 'val', ... }, ...]
+        if (isForm(args[0], Object) && args[0].has('type') && isForm(args[0].type, String))
+          return recMan.addRecord({ ...args[0], type: pfx(args[0].type) }, ...args.slice(1));
+        
+        return recMan.addRecord(...args);
+        
+      }
+      
+    }),
+    
+    init({ prefix=null, habitats=[], recordForms={}, above=Function.stub, below=Function.stub }) {
+      
+      /// {DEBUG=
+      if (!habitats.count()) throw Error(`Api: supply at least 1 habitat`);
+      if (!prefix) throw Error(`Api: must supply "prefix"`);
+      /// =DEBUG}
+      
+      Object.assign(this, { prefix, habitats, recordForms, above, below });
+      
+    },
+    async open({ hereHut, rec=hereHut, netIden }) {
       
       let tmp = Tmp();
       tmp.endWith(netIden.runOnNetwork());
       
+      let recMan = rec.type.manager;
+      let pfx = Form.prefixer.bound(this.prefix);
+      
+      // This "utils" will get used both ABOVE and BELOW (note ABOVE
+      // needs to instantiate a 2nd "utils" for each AfarBelowHut)
+      let utils = Form.makeUtils(this.prefix, hereHut, recMan, pfx);
+      
       // Prepare all habitats
-      await Promise.all(this.habitats.map( async hab => tmp.endWith(await hab.prepare(hut)) ));
+      await Promise.all(this.habitats.map( async hab => tmp.endWith(await hab.prepare(hereHut)) ));
       
       // Add all type -> Form mappings
-      for (let [ k, v ] of this.recordForms) {
-        
-        // Note that the value mapped to is either some Record Form or a
-        // Function returning some Record Form!
-        tmp.endWith(rec.type.manager.addFormFn(k, v['~Forms'] ? () => v : v));
-        
-      }
+      // Note values in `this.recordForms` are either functions giving
+      // RecordForms, or RecordForms themselves
+      for (let [ k, v ] of this.recordForms)
+        tmp.endWith(utils.addFormFn(pfx(k), v['~Forms'] ? () => v : v));
       
-      let hinterlandReal = global.real.addReal(`${prefix}.loft`);
+      let hinterlandReal = global.real.addReal(pfx('loft'));
       tmp.endWith(hinterlandReal);
       
-      let loftRh = rec.relHandler({ type: `${prefix}.loft`, term: 'hut', offset: 0, limit: 1, fixed: true });
+      let loftRh = rec.relHandler({ type: pfx('loft'), term: 'hut', offset: 0, limit: 1, fixed: true });
       tmp.endWith(loftRh);
       
       /// {DEBUG=
@@ -111,25 +204,28 @@ global.rooms['Hinterland'] = async foundation => {
       };
       
       // Create the AppRecord identified by `<prefix>.loft`
-      let mainRec = rec.addRecord({ type: `${prefix}.loft`, group: { hut }, value: null, uid: `!loft@${prefix}` });
+      // TODO: I think the initial scope to get `loftRh` from `loftRec`
+      // is redundant because `loftRec === mainRec`
+      let mainRec = recMan.addRecord({ type: pfx('loft'), group: { hut: hereHut }, uid: `!loft@${rec.uid}` });
       
-      // Wait for the Loft to register as a HolderRec on `hut`
+      // Wait for the Loft to register as a HolderRec on `hereHut`
       let mainScope = Scope(loftRh, { processArgs: rhFromRecWithRhArgs, frameFn: resolveHrecs }, (loftRec, dep) => {
         
         // The AppRecord is ready; apply `this.above`
-        this.above(hut, loftRec, hinterlandReal, dep);
+        this.above(hereHut, loftRec, hinterlandReal, utils, dep);
         
         // Now KidHuts may access the AppRecord via the Hinterland; use
         // the default (0, Infinity, {}) relHandler - otherwise some
         // KidHut beyond the first N would never get processed!
-        dep.scp(hut.ownedHutRh, (owned, dep) => {
+        dep.scp(hereHut.ownedHutRh, (owned, dep) => {
           
           // `owned` has { par, kid }; "par" and "kid" are both Huts
           let kidHut = owned.getMember('below');
           
           // Records throughout `scp` get followed by `kidHut`
           dep.scp(loftRh, { frameFn: resolveHrecsAndFollowRecs.bind(null, kidHut) }, (loftRec, dep) => {
-            this.below(kidHut, loftRec, hinterlandReal, dep);
+            let utils = Form.makeUtils(this.prefix, kidHut, recMan, pfx);
+            this.below(kidHut, loftRec, hinterlandReal, utils, dep);
           });
           
         });
@@ -141,7 +237,7 @@ global.rooms['Hinterland'] = async foundation => {
       
       // As soon as Below syncs the root Rec it's good to go
       let kidScope = Scope(loftRh, { processArgs: rhFromRecWithRhArgs, frameFn: resolveHrecs }, (loftRec, dep) => {
-        this.below(hut, loftRec, hinterlandReal, dep);
+        this.below(hereHut, loftRec, hinterlandReal, utils, dep);
       });
       tmp.endWith(kidScope);
       

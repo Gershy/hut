@@ -34,7 +34,7 @@ global.rooms['logic.Scope'] = foundation => form({ name: 'Scope', has: { Tmp }, 
       // Dep and short-circuits
       if (!deps) { dep.end(); return dep; }
       
-      if (dep.constructor['~forms'].has(Tmp)) {
+      if (hasForm(dep, Tmp)) {
         
         // Any dependencies which are Tmps may end before the Scope
         // causes them to end - ended Tmps no longer need to be

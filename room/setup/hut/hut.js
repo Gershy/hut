@@ -235,12 +235,11 @@ global.rooms['setup.hut'] = async () => {
     // to their AboveHut (which would be globally accessible for any
     // BelowHut)
     
-    init({ prefix, recMan, ...args }) {
+    init({ recMan, ...args }) {
       
       /// {DEBUG=
       if (!recMan) recMan = args?.type?.manager;
       if (!recMan) throw Error('Api: "recMan" must be provided');
-      if (!isForm(prefix, String)) throw Error(`Api: "prefix" must be String; got ${getFormName(prefix)}`);
       /// =DEBUG}
       
       forms.Hut.init.call(this, {
@@ -257,7 +256,6 @@ global.rooms['setup.hut'] = async () => {
       
       Object.assign(this, {
         
-        prefix,
         belowHuts: Map(/* belowHutHid => BelowHut(...) */),
         
         /// {ABOVE=
@@ -402,27 +400,19 @@ global.rooms['setup.hut'] = async () => {
     },
     addKnownRoomDependencies(deps) { for (let dep of deps) this.knownRoomDependencies.add(dep); },
     addKnownRealDependencies(deps) { for (let dep of deps) this.knownRealDependencies.add(dep); },
-    enableKeep(...args /* term, keep | keep */) {
+    enableKeep(term, keep) {
       
       // Adds a Keep to `this.enabledKeeps`; this makes it available as
       // AboveHuts expose such Keeps via a CommandHandler named "asset"
       
+      if (isForm(keep, String)) keep = global.keep(keep);
+      
       /// {DEBUG= // TODO: Nested markers!
-      if (![ 1, 2 ].has(args.length)) throw Error(`Api: expected 1 or 2 arguments; got ${args.length}`).mod({ args });
-      /// =DEBUG}
-      
-      let term;
-      let keep;
-      if      (args.length === 1) term = keep = args[0]; // No alias for the `keepKey`
-      else if (args.length === 2) [ term, keep ] = args;
-      
-      /// {DEBUG=
-      if (!isForm(term, String)) throw Error(`Api: term must resolve to String`).mod({ term });
+      if (!hasForm(keep, Keep)) throw Error(`Api: "keep" must resolve to Keep; got ${getFormName(keep)}`);
+      if (!isForm(term, String)) throw Error(`Api: "term" must be String; got ${getFormName(term)}`);
       /// =DEBUG}
       
       if (this.enabledKeeps.has(term)) throw Error(`Api: already enabled Keep termed "${term}"`);
-      
-      if (!hasForm(keep, Keep)) keep = global.keep(keep);
       this.enabledKeeps.add(term, keep);
       return Tmp(() => this.enabledKeeps.rem(term));
       
@@ -606,8 +596,6 @@ global.rooms['setup.hut'] = async () => {
       //   `enableAction` can't directly communicate with the initiator;
       //   the return value is ignored, and no `src` (for `src.tell`) or
       //   `reply` are available
-      
-      if (!command.startsWith(`${this.aboveHut.prefix}.`)) command = `${this.aboveHut.prefix}.${command}`;
       
       let tmp = Tmp({ desc: () => `Action(${this.desc()}: "${command}")`, act: null });
       
@@ -866,7 +854,6 @@ global.rooms['setup.hut'] = async () => {
     getKeep(diveToken) {
       
       let dive = token.dive(diveToken);
-      
       /// {BELOW=
       return global.keep(dive);
       /// =BELOW} {ABOVE=

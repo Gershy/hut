@@ -1,6 +1,6 @@
-global.rooms['persona'] = async foundation => {
+global.rooms['persona'] = async () => {
   
-  let rooms = await foundation.getRooms([ 'logic.Chooser' ]);
+  let rooms = await getRooms([ 'logic.Chooser' ]);
   let { Chooser } = rooms;
   
   let PersonaSrc = form({ name: 'PersonaSrc', has: { Endable, Src }, props: (forms, Form) => ({
@@ -80,7 +80,7 @@ global.rooms['persona'] = async foundation => {
         
         if (creds.getValue('pass') !== pass) throw Error(`Invalid credentials`);
         
-        this.hut.addRecord(this.personaName, [ this.hut, account ], { ms: foundation.getMs() });
+        this.hut.addRecord(this.personaName, [ this.hut, account ], { ms: getMs() });
         
       });
       

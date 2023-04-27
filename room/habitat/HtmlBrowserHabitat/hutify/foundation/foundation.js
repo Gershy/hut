@@ -330,7 +330,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   if (initComm) belowHut.actOnComm({ src: aboveHut, msg: initComm });
   
   let loft = loftObj.toArr(v => v)[0];
-  await loft.open({ hut: belowHut, rec: aboveHut, netIden });
+  await loft.open({ hereHut: belowHut, rec: aboveHut, netIden });
   
   gsc(`Loft opened after ${(getMs() - performance.timeOrigin).toFixed(2)}ms`);
   

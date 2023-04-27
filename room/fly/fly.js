@@ -142,8 +142,8 @@ global.rooms['fly'] = async foundation => {
   return Hinterland('fly', 'fly', {
     habitats: [ HtmlBrowserHabitat() ],
     recordForms: {
-      'fly.level': models.Level,
-      'fly.entity': args => {
+      'level': models.Level,
+      'entity': args => {
         
         let { value: { type: typeName=null } } = args;
         if (!typeName) throw Error(`Couldn't figure out model type name`).mod({ args });

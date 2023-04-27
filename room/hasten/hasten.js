@@ -42,8 +42,8 @@ global.rooms['hasten'] = async foundation => {
   return Hinterland('hst', 'hasten', {
     
     recordForms: {
-      'hst.world': () => HstWorld,
-      'hst.entity': ({ form }) => hstForms[form]
+      'world': () => HstWorld,
+      'entity': ({ form }) => hstForms[form]
     },
     habitats: [ HtmlBrowserHabitat() ],
     above: async (hut, rec, real, dep) => {

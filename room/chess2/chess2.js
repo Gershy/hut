@@ -1,6 +1,6 @@
 global.rooms['chess2'] = async chess2Keep => {
   
-  let c2Subcon = subcon('chess2.gameplay', {});
+  let sc = subcon('chess2.gameplay', {});
   
   let rooms = await getRooms([
     
@@ -179,7 +179,7 @@ global.rooms['chess2'] = async chess2Keep => {
     let pieceMoves = { white: [], black: [] };
     let dangerTiles = { white: [], black: [] };
     
-    c2Subcon(() => ({
+    sc(() => ({
       
       match: match.getValue('desc'),
       moves: playerMoves.map(move => {
@@ -283,9 +283,9 @@ global.rooms['chess2'] = async chess2Keep => {
   /// =ABOVE}
   
   return Hinterland({
-    
+    prefix: 'c2',
     habitats: [ HtmlBrowserHabitat() ],
-    above: async (hut, chess2, real, dep) => {
+    above: async (hut, chess2, real, loft, dep) => {
       
       /// {ABOVE=
       
@@ -315,7 +315,7 @@ global.rooms['chess2'] = async chess2Keep => {
       ]);
       
       // Enable access to all piece images via term "pieces"
-      dep(hut.enableKeep('pieces', chess2Keep.seek(`img.${pieceStyle}`)));
+      dep(loft.enableKeep('pieces', chess2Keep.seek(`img.${pieceStyle}`)));
       
       let { random: { FastRandom } } = rooms;
       let random = FastRandom();
@@ -453,20 +453,20 @@ global.rooms['chess2'] = async chess2Keep => {
       });
       
       // Create Player Records for each Hut that joins
-      dep.scp(hut, 'hut.owned/above', (owned, dep) => {
+      dep.scp(hut, 'owned/above', (owned, dep) => {
         
         /*
         let kidHut = owned.m('below');
         let desc = kidHut.desc() + ' @ ' + kidHut.getKnownNetAddrs().toArr(v => v).join('+');
         
         let timerSrc = dep(TimerSrc({ ms: 1500 }));
-        timerSrc.route(() => c2Subcon(`${desc} FAILED to make player!`), 'prm');
+        timerSrc.route(() => sc(`${desc} FAILED to make player!`), 'prm');
         timerSrc.route(() => (/*kidHut.strike(0.075, 'Failed timely chess2 player creation'), * /kidHut.end()), 'prm');
         
         dep.scp(kidHut, `player`, (player, dep) => {
           
-          c2Subcon(`${desc} OPEN player! (${player.getValue('term')})`)
-          dep(() => c2Subcon(`${desc} SHUT player! (${player.getValue('term')})`));
+          sc(`${desc} OPEN player! (${player.getValue('term')})`)
+          dep(() => sc(`${desc} SHUT player! (${player.getValue('term')})`));
           timerSrc.end(); // If we get the Player before the Timeout cancel the Timeout
           
         });
@@ -494,15 +494,15 @@ global.rooms['chess2'] = async chess2Keep => {
             
             round.end();
              
-            if ( wAlive && !bAlive) hut.addRecord(`outcome`, [ match ], { winner: 'white', reason: 'checkmate' });
-            if (!wAlive &&  bAlive) hut.addRecord(`outcome`, [ match ], { winner: 'black', reason: 'checkmate' });
-            if (!wAlive && !bAlive) hut.addRecord(`outcome`, [ match ], { winner: null, reason: 'stalemate' });
-            if ( wAlive &&  bAlive) hut.addRecord(`round`, [ match ], { ms: Date.now() }); // Game continues!
+            if ( wAlive && !bAlive) loft.addRecord(`outcome`, [ match ], { winner: 'white', reason: 'checkmate' });
+            if (!wAlive &&  bAlive) loft.addRecord(`outcome`, [ match ], { winner: 'black', reason: 'checkmate' });
+            if (!wAlive && !bAlive) loft.addRecord(`outcome`, [ match ], { winner: null, reason: 'stalemate' });
+            if ( wAlive &&  bAlive) loft.addRecord(`round`, [ match ], { ms: Date.now() }); // Game continues!
             
           } else {
             
             round.end();
-            hut.addRecord(`outcome`, [ match ], { winner: null, reason: 'lethargy' });
+            loft.addRecord(`outcome`, [ match ], { winner: null, reason: 'lethargy' });
             
           }
           
@@ -545,15 +545,15 @@ global.rooms['chess2'] = async chess2Keep => {
             
             // Get Players from PlayerStatus({ type: 'queue' }) Records
             
-            let match = hut.addRecord('match', [ chess2 ], { ms, desc: `white:${pw.getValue('term')} vs black:${pb.getValue('term')}` });
+            let match = loft.addRecord('match', [ chess2 ], { ms, desc: `white:${pw.getValue('term')} vs black:${pb.getValue('term')}` });
             
-            if (c2Subcon.enabled) {
+            if (sc.enabled) {
               
-              c2Subcon(`MATCH OPEN (${match.getValue('desc')})`);
-              match.endWith(() => { c2Subcon(`MATCH SHUT (${match.getValue('desc')})`); });
+              sc(`MATCH OPEN (${match.getValue('desc')})`);
+              match.endWith(() => { sc(`MATCH SHUT (${match.getValue('desc')})`); });
               
               // RelHandle Dep Ends when Match Ends
-              match.rh('outcome').route(({ rec: outcome }) => c2Subcon(`MATCH OTCM (${match.getValue('desc')})`, outcome.getValue()));
+              match.rh('outcome').route(({ rec: outcome }) => sc(`MATCH OTCM (${match.getValue('desc')})`, outcome.getValue()));
               
             }
             
@@ -561,28 +561,28 @@ global.rooms['chess2'] = async chess2Keep => {
             match.endWith(() => mmm('chess2Match', -1));
             
             // Initial Round of Match
-            hut.addRecord('round', [ match ], { ms: Date.now() });
+            loft.addRecord('round', [ match ], { ms: Date.now() });
             
             // Add Pieces to Match
             for (let [ colour, pieces ] of activePieceDef)
               for (let [ type, col, row ] of pieces)
-                hut.addRecord('piece', [ match ], { colour, type, col, row, wait: 0, moves: 0 });
+                loft.addRecord('piece', [ match ], { colour, type, col, row, wait: 0, moves: 0 });
             
             // Add Players to Match
-            let mpw = hut.addRecord('matchPlayer', [ match, pw.status ], { colour: 'white' });
-            let mpb = hut.addRecord('matchPlayer', [ match, pb.status ], { colour: 'black' });
+            let mpw = loft.addRecord('matchPlayer', [ match, pw.status ], { colour: 'white' });
+            let mpb = loft.addRecord('matchPlayer', [ match, pb.status ], { colour: 'black' });
             mpw.endWith(async () => {
-              c2Subcon(`WHITE ENDED (${pw.getValue('term')})`);
+              sc(`WHITE ENDED (${pw.getValue('term')})`);
               let round = await match.withRh('round', 'one');
               if (round) {
                 round.end();
-                hut.addRecord('outcome', [ match ], { winner: 'black', reason: 'cowardice' });
+                loft.addRecord('outcome', [ match ], { winner: 'black', reason: 'cowardice' });
               }
             });
             mpb.endWith(async () => {
-              c2Subcon(`BLACK ENDED (${pb.getValue('term')})`);
+              sc(`BLACK ENDED (${pb.getValue('term')})`);
               let round = await match.withRh('round', 'one');
-              if (round) { round.end(); hut.addRecord('outcome', [ match ], { winner: 'white', reason: 'cowardice' }); }
+              if (round) { round.end(); loft.addRecord('outcome', [ match ], { winner: 'white', reason: 'cowardice' }); }
             });
             
             // Keep the Match alive so long as any Player is alive
@@ -598,7 +598,7 @@ global.rooms['chess2'] = async chess2Keep => {
       /// =ABOVE}
       
     },
-    below: async (hut, chess2, real, dep) => {
+    below: async (hut, chess2, real, loft, dep) => {
       
       // Async delay may cause players to see the uprighting rotation.
       // We can initiate loading these rooms immediately, and hope they
@@ -614,18 +614,18 @@ global.rooms['chess2'] = async chess2Keep => {
       
       let nodePlayerless = (dep, real) => {
         
-        let makePlayerAct = dep(hut.enableAction('makePlayer', () => {
+        let makePlayerAct = dep(loft.enableAction('makePlayer', () => {
           
           /// {ABOVE=
           let termTmp = termBank.checkout();
-          let player = hut.addRecord('player', [ chess2, hut ], { term: termTmp.term, status: 'chill' });
+          let player = loft.addRecord('player', [ chess2, hut ], { term: termTmp.term, status: 'chill' });
           
           mmm('chess2Player', +1);
           player.endWith(() => mmm('chess2Player', -1));
           player.endWith(termTmp);
           
           // Add a "status" property to the Player
-          player.status = hut.addRecord('playerStatus', [ player ], { type: 'chill', ms: Date.now() });
+          player.status = loft.addRecord('playerStatus', [ player ], { type: 'chill', ms: Date.now() });
           
           // Update the single PlayerStatus based on changes to "status"
           let statusSrc = player.getValuePropSrc('status');
@@ -635,7 +635,7 @@ global.rooms['chess2'] = async chess2Keep => {
             if (status === player.status.getValue('type')) return;
             
             player.status.end();
-            player.status = hut.addRecord('playerStatus', [ player ], { type: status, ms: Date.now() });
+            player.status = loft.addRecord('playerStatus', [ player ], { type: status, ms: Date.now() });
             
           }, 'prm');
           /// =ABOVE}
@@ -735,10 +735,10 @@ global.rooms['chess2'] = async chess2Keep => {
         let queueChooser = dep(Chooser(queueRh));
         dep.scp(queueChooser.srcs.off, (noQueue, dep) => {
           
-          let queueAct = dep(hut.enableAction('enterQueue', ({ term }) => {
+          let queueAct = dep(loft.enableAction('enterQueue', ({ term }) => {
             if (!isForm(term, String)) throw Error('Term must be String');
             if (term.length > 50) throw Error('Term max length: 50');
-            hut.addRecord('queue', [ chess2, status ], { term, ms: Date.now() });
+            loft.addRecord('queue', [ chess2, status ], { term, ms: Date.now() });
           }));
           
           /// {BELOW=
@@ -760,7 +760,7 @@ global.rooms['chess2'] = async chess2Keep => {
         });
         dep.scp(queueChooser.srcs.onn, (queue, dep) => {
           
-          let leaveQueueAct = dep(hut.enableAction('leaveQueue', () => queue.end()));
+          let leaveQueueAct = dep(loft.enableAction('leaveQueue', () => queue.end()));
           
           /// {BELOW=
           let term = queue.getValue('term');
@@ -894,7 +894,7 @@ global.rooms['chess2'] = async chess2Keep => {
             
             pieceReal.mod({
               ...tileCoord(col, row),
-              keep: hut.getKeep(`/pieces/${fp}`), 
+              keep: loft.getKeep(`/pieces/${fp}`), 
               colour: (wait > 0) ? 'rgba(255, 110, 0, 0.4)' : null
             });
             
@@ -918,7 +918,8 @@ global.rooms['chess2'] = async chess2Keep => {
             Axis1d: { axis: 'y', dir: '+', mode: 'compactCenter' },
             Decal: { colour: 'rgba(0, 0, 0, 0.4)' },
             Press: { pressFn: () => changeStatusAct.act({ status: 'queue' }) },
-            Transform: { rotate: (myColour === 'white') ? 0 : 0.5 }
+            Transform: { rotate: (myColour === 'white') ? 0 : 0.5 },
+            opacity: 0
           }));
           let contentReal = outcomeReal.addReal('content', {
             Geom: { w: '70%', h: '70%' },
@@ -954,15 +955,17 @@ global.rooms['chess2'] = async chess2Keep => {
           contentReal.addReal('text', lay.text(text, tsP1));
           contentReal.addReal('text', lay.text('Click anywhere to play again\u2026'));
           
+          dep(TimerSrc({ num: 1, ms: 350 })).route(() => outcomeReal.mod({ opacity: 1 }));
+          
         });
         dep.scp(outcomeChooser.srcs.off, (nop, dep) => {
           
-          let resignAct = dep(hut.enableAction('resign', async () => {
+          let resignAct = dep(loft.enableAction('resign', async () => {
             
             /// {ABOVE=
             let round = await match.withRh('round', 'one');
             if (round) round.end();
-            hut.addRecord('outcome', [ match ], { winner: (myColour === 'white') ? 'black' : 'white', reason: 'resign' });
+            loft.addRecord('outcome', [ match ], { winner: (myColour === 'white') ? 'black' : 'white', reason: 'resign' });
             /// =ABOVE}
             
           }));
@@ -1000,13 +1003,13 @@ global.rooms['chess2'] = async chess2Keep => {
             
             dep.scp(roundMoveChooser.srcs.off, (noRoundMove, dep) => {
               
-              let submitMoveAct = dep(hut.enableAction('submitMove', async move => {
+              let submitMoveAct = dep(loft.enableAction('submitMove', async move => {
                 
                 /// {ABOVE=
                 
                 let { type='play' } = move;
                 if (type === 'pass')
-                  return void hut.addRecord('roundMove', { 0: round, 1: matchPlayer, 'piece?': null });
+                  return void loft.addRecord('roundMove', { 0: round, 1: matchPlayer, 'piece?': null });
                 
                 let { trg } = move;
                 if (!trg) throw Error(`Missing "trg"`);
@@ -1026,7 +1029,7 @@ global.rooms['chess2'] = async chess2Keep => {
                 
                 let { col, row, cap } = vm;
                 
-                hut.addRecord('roundMove', { 0: round, 1: matchPlayer, 'piece?': piece }, { col, row, cap: !!cap });
+                loft.addRecord('roundMove', { 0: round, 1: matchPlayer, 'piece?': piece }, { col, row, cap: !!cap });
                 
                 /// =ABOVE}
                 
@@ -1107,7 +1110,7 @@ global.rooms['chess2'] = async chess2Keep => {
             });
             dep.scp(roundMoveChooser.srcs.onn, (roundMove, dep) => {
               
-              let retractMoveAct = dep(hut.enableAction('retractMove', async () => {
+              let retractMoveAct = dep(loft.enableAction('retractMove', async () => {
                 
                 /// {ABOVE=
                 // Really this is just sanity; a move must exist due to
@@ -1185,14 +1188,14 @@ global.rooms['chess2'] = async chess2Keep => {
       dep.scp(playerExistsChooser.srcs.off, (noPlayer, dep) => nodePlayerless(dep, paneReal, chess2));
       dep.scp(playerExistsChooser.srcs.onn, (player, dep) => {
         
-        let changeStatusAct = dep(hut.enableAction('changeStatus', async msg => {
+        let changeStatusAct = dep(loft.enableAction('changeStatus', async msg => {
           
           /// {ABOVE=
           let { status=null } = msg ?? {};
           if (![ 'chill', 'learn', 'queue', 'lobby' ].has(status)) throw Error('Invalid status!');
           if (status === player.getValue('status')) throw Error(`Can't change to same status!`);
           
-          c2Subcon(`Player "${player.getValue('term')}" status: "${player.getValue('status')}" -> "${status}"`);
+          sc(`Player "${player.getValue('term')}" status: "${player.getValue('status')}" -> "${status}"`);
           
           player.setValue({ status });
           /// =ABOVE}
@@ -1218,7 +1221,6 @@ global.rooms['chess2'] = async chess2Keep => {
       });
       
     }
-    
   });
   
 };
