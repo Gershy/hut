@@ -517,8 +517,8 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
       catch (err) { if (err.code !== 'ENOENT') return itPrm.reject(err); } // Note that `prm` still succeeds in this case!
       
       if (!dir) return itPrm.resolve({
-        async* [Symbol.asyncIterator]() { itCompletePrm.resolve(); }, // No yields, just completion
-        async close() { itCompletePrm.resolve(); }
+        async* [Symbol.asyncIterator]() {}, // No yields, just completion
+        async close() {}
       });
       
       // A dir exists and needs to be iterated; don't resolve `doLocked`

@@ -206,40 +206,46 @@ global.rooms['Hinterland'] = async foundation => {
       // Create the AppRecord identified by `<prefix>.loft`
       // TODO: I think the initial scope to get `loftRh` from `loftRec`
       // is redundant because `loftRec === mainRec`
-      let mainRec = recMan.addRecord({ type: pfx('loft'), group: { hut: hereHut }, uid: `!loft@${rec.uid}` });
+      let loftRec = recMan.addRecord({ type: pfx('loft'), group: { hut: hereHut }, uid: `!loft@${rec.uid}` });
+      tmp.endWith(loftRec);
       
-      // Wait for the Loft to register as a HolderRec on `hereHut`
-      let mainScope = Scope(loftRh, { processArgs: rhFromRecWithRhArgs, frameFn: resolveHrecs }, (loftRec, dep) => {
-        
-        // The AppRecord is ready; apply `this.above`
+      // Run Above logic once
+      let aboveHooks = {
+        processArgs: rhFromRecWithRhArgs,
+        frameFn: resolveHrecs
+      };
+      let aboveScp = Scope(Src(), aboveHooks, (_, dep) => {
         this.above(hereHut, loftRec, hinterlandReal, utils, dep);
-        
-        // Now KidHuts may access the AppRecord via the Hinterland; use
-        // the default (0, Infinity, {}) relHandler - otherwise some
-        // KidHut beyond the first N would never get processed!
-        dep.scp(hereHut.ownedHutRh, (owned, dep) => {
-          
-          // `owned` has { par, kid }; "par" and "kid" are both Huts
-          let kidHut = owned.getMember('below');
-          
-          // Records throughout `scp` get followed by `kidHut`
-          dep.scp(loftRh, { frameFn: resolveHrecsAndFollowRecs.bind(null, kidHut) }, (loftRec, dep) => {
-            let utils = Form.makeUtils(this.prefix, kidHut, recMan, pfx);
-            this.below(kidHut, loftRec, hinterlandReal, utils, dep);
-          });
-          
-        });
-        
       });
-      tmp.endWith(mainScope);
+      aboveScp.makeFrame(tmp); // Kick off single frame linked to `tmp`
+      
+      // Run Below logic for every BelowHut
+      tmp.endWith(hereHut.ownedHutRh.route(ownedHrec => {
+        
+        let belowHut = ownedHrec.rec.getMember('below');
+        let belowHooks = {
+          processArgs: rhFromRecWithRhArgs,
+          frameFn: resolveHrecsAndFollowRecs.bound(belowHut)
+        };
+        let belowScp = Scope(Src(), belowHooks, (_, dep) => {
+          let utils = Form.makeUtils(this.prefix, belowHut, recMan, pfx);
+          belowHut.followRec(loftRec);
+          this.below(belowHut, loftRec, hinterlandReal, utils, dep);
+        });
+        belowScp.makeFrame(belowHut); // Kick off single frame
+        
+      }));
       
       /// =ABOVE} {BELOW=
       
       // As soon as Below syncs the root Rec it's good to go
-      let kidScope = Scope(loftRh, { processArgs: rhFromRecWithRhArgs, frameFn: resolveHrecs }, (loftRec, dep) => {
+      let belowHooks = {
+        processArgs: rhFromRecWithRhArgs,
+        frameFn: resolveHrecs
+      };
+      tmp.endWith(Scope(loftRh, belowHooks, (loftRec, dep) => {
         this.below(hereHut, loftRec, hinterlandReal, utils, dep);
-      });
-      tmp.endWith(kidScope);
+      }));
       
       /// =BELOW}
       

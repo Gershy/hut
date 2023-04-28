@@ -425,6 +425,7 @@ Object.assign(global, {
         
         if (!match) return line;
         let [ , file, row, col=null ] = match;
+        if (!file.hasHead('/[')) file = `/[file]/${file.replace(/[/\\]+/g, '/')}`;
         let src = mapCmpToSrc(file, row, col ?? 0);
         return `${src.file.replace(/[\\]+/g, '/')} [${src.row}:${src.col}]`;
         

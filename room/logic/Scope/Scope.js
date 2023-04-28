@@ -1,11 +1,41 @@
-global.rooms['logic.Scope'] = foundation => form({ name: 'Scope', has: { Tmp }, props: (forms, Form) => ({
+global.rooms['logic.Scope'] = foundation => form({ name: 'Scope', has: { Tmp }, props: (forms, Scope) => ({
   
   // Note that Scope must be Tmp, and not just Endable, because Deps
   // need to be cleaned up when either the current Frame ends, or the
   // Scope itself ends - this latter condition requires calling
   // `endWith` on the Scope!
   
-  $makeFrame: (scope, tmp) => {
+  init(...args /* src, fn | src, hooks, fn */) {
+    
+    /// {DEBUG=
+    if (![ 2, 3 ].has(args.length)) throw Error(`Provide 2 or 3 args`);
+    /// =DEBUG}
+    
+    let [ src, hooks, fn ] = (args.length === 3) ? args : [ args[0], {}, args[1] ];
+    // Note that `hooks` enables heirarchical modifications to Scope
+    // behaviour - it contains Functions that extend typical Scope
+    // behaviour, and `hooks` are propagated to all subscopes!
+    // - hooks.processArgs: modifies arguments passed to `dep.scp`
+    //   before they are used to init the subscope
+    // - hooks.frameFn: processes every Tmp received by the Scope
+    
+    /// {DEBUG=
+    if (!hasForm(fn, Function)) throw Error(`"fn" must be a Function (got ${getFormName(fn)})`);
+    if (!hasForm(src, Src)) throw Error(`"src" must be a Src (got ${getFormName(src)})`);
+    if (hasForm(src, Tmp)) throw Error(`"src" should not be ${getFormName(src)}`);
+    /// =DEBUG}
+    
+    forms.Tmp.init.call(this);
+    
+    // Sends from `src` are processed by `this.makeFrame`
+    Object.assign(this, { fn, hooks, frameRoute: null });
+    
+    // Need to set `fn` and `hooks` on `this` before making Frames
+    this.frameRoute = src.route(tmp => this.makeFrame(tmp))
+    
+  },
+  
+  makeFrame(tmp) {
     
     // TODO: Think about how `dep` interacts with Tmp.prototype.ref - a
     // single Scope can only hold a single Dep for any Tmp; this means
@@ -16,9 +46,11 @@ global.rooms['logic.Scope'] = foundation => form({ name: 'Scope', has: { Tmp }, 
     // A Tmp has entered into the Scope; a Frame represents the
     // lifetime of this Tmp within the Scope
     
-    if (!hasForm(tmp, Tmp)) throw Error(`Scope expects Tmp - got ${getFormName(tmp)}`);
+    /// {DEBUG=
+    if (!hasForm(tmp, Tmp)) throw Error(`Api: Scope expects Tmp; got ${getFormName(tmp)}`);
+    /// =DEBUG}
     if (tmp.off()) return;
-    if (scope.off()) return;
+    if (this.off()) return;
     
     // Define `addDep` and `addDep.scp` to enable nice shorthand
     let deps = Set();
@@ -58,7 +90,7 @@ global.rooms['logic.Scope'] = foundation => form({ name: 'Scope', has: { Tmp }, 
       
       if (!deps) return Tmp.stub;
       
-      if (scope.hooks.has('processArgs')) args = scope.hooks.processArgs(args, addDep);
+      if (this.hooks.has('processArgs')) args = this.hooks.processArgs(args, addDep);
       
       /// {DEBUG=
       if (hasForm(args[0], Tmp)) throw Error(`Invalid Src; it can't be ${getFormName(args[0])}`);
@@ -67,12 +99,10 @@ global.rooms['logic.Scope'] = foundation => form({ name: 'Scope', has: { Tmp }, 
       if (![ 2, 3 ].has(args.length)) throw Error(`Won't accept ${args.length} arguments`);
       
       let [ src, hooks, fn ] = (args.length === 3) ? args : [ args[0], {}, ...args.slice(1) ];
-      hooks = hooks.empty() ? scope.hooks : { ...scope.hooks, ...hooks };
+      hooks = hooks.empty() ? this.hooks : { ...this.hooks, ...hooks };
       
-      let subScope = new scope.Form(src, hooks, fn);
-      
-      deps.add(subScope);
-      return subScope;
+      let subScp = new Scope(src, hooks, fn);
+      return (deps.add(subScp), subScp);
       
     };
     
@@ -87,40 +117,11 @@ global.rooms['logic.Scope'] = foundation => form({ name: 'Scope', has: { Tmp }, 
       for (let dep of origDeps) dep.end();
       
     };
-    deps.add(scope.route(doCleanup));
+    deps.add(this.route(doCleanup));
     deps.add(tmp.route(doCleanup));
     
-    if (scope.hooks.has('frameFn')) tmp = scope.hooks.frameFn(tmp, addDep);
-    scope.fn(tmp, addDep);
-    
-  },
-  
-  init(...args /* src, fn | src, hooks, fn */) {
-    
-    /// {DEBUG=
-    if (![ 2, 3 ].has(args.length)) throw Error(`Provide 2 or 3 args`);
-    /// =DEBUG}
-    
-    let [ src, hooks, fn ] = (args.length === 3) ? args : [ args[0], {}, args[1] ];
-    // Note that `hooks` enables heirarchical modifications to Scope
-    // behaviour - it contains Functions that extend typical Scope
-    // behaviour, and `hooks` are propagated to all subscopes!
-    // - hooks.processArgs: modifies arguments passed to `dep.scp`
-    //   before they are used to init the subscope
-    // - hooks.frameFn: processes every Tmp received by the Scope
-    
-    /// {DEBUG=
-    if (!hasForm(fn, Function)) throw Error(`"fn" must be a Function (got ${getFormName(fn)})`);
-    if (!hasForm(src, Src)) throw Error(`"src" must be a Src (got ${getFormName(src)})`);
-    if (hasForm(src, Tmp)) throw Error(`"src" should not be ${getFormName(src)}`);
-    /// =DEBUG}
-    
-    forms.Tmp.init.call(this);
-    
-    Object.assign(this, { fn, hooks, frameRoute: null });
-    
-    // Sends from `src` are processed by `Form.makeFrame`
-    this.frameRoute = src.route(Form.makeFrame.bind(null, this));
+    if (this.hooks.has('frameFn')) tmp = this.hooks.frameFn(tmp, addDep);
+    this.fn(tmp, addDep);
     
   },
   

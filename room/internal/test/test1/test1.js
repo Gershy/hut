@@ -12,19 +12,24 @@ global.rooms['internal.test.test1'] = async () => {
     
   ]);
   
-  return Hinterland('test1', {
+  return Hinterland({
+    
+    prefix: 'internalTest1',
     
     habitats: [ HtmlBrowserHabitat() ],
     
     // Server initializes counter to 0
-    above: async (hut, test1, real, dep) => test1.setValue({ count: 0 }),
+    above: async (hut, test1, real, loft, dep) => {
+      
+      test1.setValue({ count: 0 });
+    },
     
     // Clients interact with the counter
-    below: async (hut, test1, real, dep) => {
+    below: async (hut, test1, real, loft, dep) => {
       
       // Users can always decrement and increment
-      let decrementAct = hut.enableAction('decrement', () => test1.setValue(v => void v.count--))
-      let incrementAct = hut.enableAction('increment', () => test1.setValue(v => void v.count++))
+      let decrementAct = dep(loft.enableAction('decrement', () => test1.setValue(v => void v.count--)))
+      let incrementAct = dep(loft.enableAction('increment', () => test1.setValue(v => void v.count++)))
       
       // Ui gives access to decrement/increment Acts
       let mainReal = dep(real.addReal('main', {
@@ -36,13 +41,13 @@ global.rooms['internal.test.test1'] = async () => {
         Text: { size: '300%', text: '-' },
         Press: { pressFn: () => decrementAct.act() },
       })
-      let displayReal = mainReal.addReal('display', [
+      let displayReal = mainReal.addReal('display', {
         Geom: { w: '25%' },
         Text: { size: '250%', text: '... loading ...' }
-      ])
+      })
       let incrementReal = mainReal.addReal('increment', {
         Text: { size: '300%', text: '+' },
-        Press: { pressFn: incrementAct.act() }
+        Press: { pressFn: () => incrementAct.act() }
       })
       
       // Update the counter when the value changes

@@ -354,18 +354,16 @@ global.rooms['setup.hut'] = async () => {
     makeBelowHut(hid) {
       
       /// {DEBUG=
-      if (!hid) throw Error(`Must supply "hid" (maybe use ${getFormName(this)}(...).makeBelowUid()?)`);
+      if (!hid) throw Error(`Api: must supply "hid" (maybe use ${getFormName(this)}(...).makeBelowUid()?)`);
+      if (this.belowHuts.has(hid)) throw Error(`Api: duplicate "hid"`).mod({ hid });
       /// =DEBUG}
       
       let { manager } = this.type;
       let type = manager.getType('hut.below');
       let group = manager.getGroup([]);
       let bh = BelowHut({
-        aboveHut: this,
-        isHere: !this.isHere,
-        type,
-        group,
-        hid,
+        aboveHut: this, isHere: !this.isHere,
+        type, group, hid,
         heartbeatMs: this.heartbeatMs
       });
       
@@ -416,10 +414,8 @@ global.rooms['setup.hut'] = async () => {
       this.enabledKeeps.add(term, keep);
       return Tmp(() => this.enabledKeeps.rem(term));
       
-    },
+    }
     /// =ABOVE}
-    
-    addRecord(...args) { return this.type.manager.addRecord(...args); }
     
   })});
   let BelowHut = form({ name: 'BelowHut', has: { Hut }, props: (forms, Form) => ({
@@ -498,12 +494,13 @@ global.rooms['setup.hut'] = async () => {
           // Now perform as many pending syncs as possible; these must
           // be sequential, and beginning with the very next expected
           // sync (numbered `this.syncHearVersion`)
-          let bank = this.type.manager.bank;
+          let recMan = this.type.manager;
+          let bank = recMan.bank;
           while (this.bufferedSyncs.has(this.syncHearVersion)) {
             let sync = this.bufferedSyncs.get(this.syncHearVersion);
             this.bufferedSyncs.rem(this.syncHearVersion); mmm('bufferSync', -1);
             this.syncHearVersion++;
-            bank.syncSer(this, sync);
+            bank.syncSer(recMan, sync);
           }
           
           if (this.bufferedSyncs.size > 50) throw Error('Too many pending syncs');
@@ -538,7 +535,7 @@ global.rooms['setup.hut'] = async () => {
         // relationship BelowHut and AboveHut; note this relationship is
         // only initiated ABOVE, as BELOW the relationship is synced
         // from ABOVE
-        if (this.roads.size === 1) this.addRecord({
+        if (this.roads.size === 1) this.aboveHut.type.manager.addRecord({
           type: 'hut.owned',
           group: { above: this.aboveHut, below: this },
           uid: `!owned@${this.aboveHut.hid}@${this.hid}`
@@ -563,13 +560,6 @@ global.rooms['setup.hut'] = async () => {
       }
       return bestRoad;
       
-    },
-    addRecord(...args) {
-      let rec = this.aboveHut.addRecord(...args);
-      /// {ABOVE=
-      this.followRec(rec);
-      /// =ABOVE}
-      return rec;
     },
     getKnownNetAddrs() {
       return Set(this.roads.toArr(road => road.netAddr)).toArr(Function.stub);

@@ -642,7 +642,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       init(map) { Object.assign(this, { map: Object.plain(map) }); },
       access(prop) {
         if (prop[0] === '[') prop = prop.slice(1, -1);
-        if (!this.map[prop]) throw Error(`Api: invalid ${getFormName(this)} Slot: "${prop}"`);
+        if (!this.map[prop]) throw Error(`Api: invalid slot: ${getFormName(this)} -> "${prop}"`);
         return this.map[prop];
       }
       
@@ -1322,18 +1322,18 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     // Wipe out code from previous run
     await keep([ 'file:code:cmp' ]).rem();
     
-    let { uid=null, prefix, keep: keepTerm, host: hosting } = global.conf('deploy');
+    let { uid=null, prefix, bankKeep: bankKeepTerm, host: hosting } = global.conf('deploy');
     let { heartbeatMs } = hosting;
     
     let { hut, record, WeakBank=null, KeepBank=null } = await global.getRooms([
       'setup.hut',
       'record',
-      `record.bank.${keepTerm ? 'KeepBank' : 'WeakBank'}`
+      `record.bank.${bankKeepTerm ? 'KeepBank' : 'WeakBank'}`
     ]);
     
     // Get an AboveHut with the appropriate config
-    let bank = keepTerm
-      ? KeepBank({ subcon: global.subcon('bank'), keep: global.keep(keepTerm) })
+    let bank = bankKeepTerm
+      ? KeepBank({ subcon: global.subcon('bank'), keep: global.keep(bankKeepTerm) })
       : WeakBank({ subcon: global.subcon('bank') });
     
     let recMan = record.Manager({ bank });
