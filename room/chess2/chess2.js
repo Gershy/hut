@@ -463,7 +463,7 @@ global.rooms['chess2'] = async chess2Keep => {
         timerSrc.route(() => sc(`${desc} FAILED to make player!`), 'prm');
         timerSrc.route(() => (/*kidHut.strike(0.075, 'Failed timely chess2 player creation'), * /kidHut.end()), 'prm');
         
-        dep.scp(kidHut, `player`, (player, dep) => {
+        dep.scp(kidHut, 'player', (player, dep) => {
           
           sc(`${desc} OPEN player! (${player.getValue('term')})`)
           dep(() => sc(`${desc} SHUT player! (${player.getValue('term')})`));
@@ -557,9 +557,6 @@ global.rooms['chess2'] = async chess2Keep => {
               
             }
             
-            mmm('chess2Match', +1);
-            match.endWith(() => mmm('chess2Match', -1));
-            
             // Initial Round of Match
             loft.addRecord('round', [ match ], { ms: Date.now() });
             
@@ -620,8 +617,6 @@ global.rooms['chess2'] = async chess2Keep => {
           let termTmp = termBank.checkout();
           let player = loft.addRecord('player', [ chess2, hut ], { term: termTmp.term, status: 'chill' });
           
-          mmm('chess2Player', +1);
-          player.endWith(() => mmm('chess2Player', -1));
           player.endWith(termTmp);
           
           // Add a "status" property to the Player
@@ -1184,7 +1179,8 @@ global.rooms['chess2'] = async chess2Keep => {
         Decal: { colour: 'rgba(120, 120, 170, 1)' }
       }));
       let playerRh = dep(hut.rh('c2.player')); // Note the prefix is essential here!!
-      let playerExistsChooser = dep(Chooser(playerRh, null));
+      let playerExistsChooser = dep(Chooser(playerRh));
+      
       dep.scp(playerExistsChooser.srcs.off, (noPlayer, dep) => nodePlayerless(dep, paneReal, chess2));
       dep.scp(playerExistsChooser.srcs.onn, (player, dep) => {
         

@@ -35,6 +35,12 @@ global.rooms['record'] = async () => {
         
       });
       
+      denumerate(this, 'recPrms');
+      denumerate(this, 'recPrmTimeouts');
+      denumerate(this, 'types');
+      denumerate(this, 'formFns');
+      
+      
       if (this.bank) {
         this.getNextUid = () => this.bank.getNextUid().encodeStr(String.base62, 8);
       } else {
@@ -296,6 +302,7 @@ global.rooms['record'] = async () => {
       // Doen't hurt to have the Type mapped immediately!
       manager.types[name] = Object.assign(this, { name, manager, termTypes: {} });
       denumerate(this, 'manager');
+      denumerate(this, 'termTypes');
       
     },
     getPrefix() { return this.name.cut('.')[0] },
@@ -735,9 +742,9 @@ global.rooms['record'] = async () => {
     
     init({ type, uid, group=Group(type.manager, {}), value=null, volatile=false }) {
       
-      if (group.mems.find( mem => mem.off() ).found) throw Error('Record created with ended Member');
-      
       /// {DEBUG=
+      let offMem = group.mems.find( mem => mem.off() ).val;
+      if (offMem) throw Error('Api: Record created with ended Member').mod({ member: offMem });
       if (!isForm(type, Type)) throw Error(`Api: "type" must be Type; got ${getFormName(type)}`).mod({ type });
       if (!isForm(uid, String)) throw Error(`Api: "uid" must be String; got ${getFormName(uid)}`).mod({ uid });
       /// =DEBUG}

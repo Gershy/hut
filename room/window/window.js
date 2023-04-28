@@ -387,8 +387,8 @@ global.rooms['window'] = foundation => ({ open: async () => {
     
     init: function({ text=[], vertOff=0, ...args }) {
       forms.TerminalRenderer.init.call(this, {
-        w: Form.defWFn.bind(null, this),
-        h: Form.defHFn.bind(null, this),
+        w: Form.defWFn.bound(this),
+        h: Form.defHFn.bound(this),
         ...args
       });
       

@@ -34,7 +34,6 @@ global.rooms['logic.Scope'] = foundation => form({ name: 'Scope', has: { Tmp }, 
     this.frameRoute = src.route(tmp => this.makeFrame(tmp))
     
   },
-  
   makeFrame(tmp) {
     
     // TODO: Think about how `dep` interacts with Tmp.prototype.ref - a
@@ -86,11 +85,12 @@ global.rooms['logic.Scope'] = foundation => form({ name: 'Scope', has: { Tmp }, 
       return dep;
       
     };
+    let scpProcessArgs = this.hooks.has('processArgs') ? this.hooks.processArgs : Function.stub;
     addDep.scp = (...args /* src, fn | src, hooks, fn */) => {
       
       if (!deps) return Tmp.stub;
       
-      if (this.hooks.has('processArgs')) args = this.hooks.processArgs(args, addDep);
+      args = scpProcessArgs(args, addDep);
       
       /// {DEBUG=
       if (hasForm(args[0], Tmp)) throw Error(`Invalid Src; it can't be ${getFormName(args[0])}`);
@@ -99,12 +99,12 @@ global.rooms['logic.Scope'] = foundation => form({ name: 'Scope', has: { Tmp }, 
       if (![ 2, 3 ].has(args.length)) throw Error(`Won't accept ${args.length} arguments`);
       
       let [ src, hooks, fn ] = (args.length === 3) ? args : [ args[0], {}, ...args.slice(1) ];
-      hooks = hooks.empty() ? this.hooks : { ...this.hooks, ...hooks };
       
-      let subScp = new Scope(src, hooks, fn);
+      let subScp = new Scope(src, { ...this.hooks, ...hooks }, fn);
       return (deps.add(subScp), subScp);
       
     };
+    addDep.scope = this;
     
     // If either `tmp` or Scope ends, all existing dependencies end as
     // well (scope relationship is itself a dependency)
@@ -124,7 +124,6 @@ global.rooms['logic.Scope'] = foundation => form({ name: 'Scope', has: { Tmp }, 
     this.fn(tmp, addDep);
     
   },
-  
   cleanup() { this.frameRoute.end(); }
   
 })});

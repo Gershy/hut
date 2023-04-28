@@ -338,7 +338,7 @@ Object.assign(global, {
     
     $stub: v => v,
     $createStub: v => () => v,
-    bound: function(...args) { return this.bind(null, ...args); }
+    bound(...args) { return this.bind(null, ...args); }
     
   });
   protoDefs(Error, {

@@ -273,6 +273,7 @@ global.rooms['setup.hut'] = async () => {
         
       });
       denumerate(this, 'allFollows');
+      
       /// {ABOVE=
       
       let subconConf = conf => {
@@ -308,6 +309,9 @@ global.rooms['setup.hut'] = async () => {
       denumerate(this, 'ownedHutRh');
       denumerate(this, 'knownRoomDependencies');
       denumerate(this, 'knownRealDependencies');
+      denumerate(this, 'serverInfos');
+      denumerate(this, 'enabledKeeps');
+      denumerate(this, 'belowConf');
       
       /// =ABOVE}
       

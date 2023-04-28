@@ -1,6 +1,6 @@
 global.rooms['Hinterland'] = async foundation => {
   
-  let { record: { Record }, Scope } = await getRooms([ 'record', 'logic.Scope' ]);
+  let { record: { Record }, Scope, Chooser } = await getRooms([ 'record', 'logic.Scope', 'logic.Chooser' ]);
   return form({ name: 'Hinterland', props: (forms, Form) => ({
     
     // Hinterland is the space in which multiple Huts interact according
@@ -192,15 +192,36 @@ global.rooms['Hinterland'] = async foundation => {
         
       };
       let resolveHrecs = (tmp, dep) => tmp.rec?.Form?.['~forms']?.has(Record) ? tmp.rec : tmp;
+      let handleBelowLofter = (loftRec, belowHut, dep) => {
+        
+        let lofterRh = belowHut.relHandler(pfx('lofter'));
+        let lofterExistsChooser = dep(Chooser(lofterRh));
+        dep.scp(lofterExistsChooser.srcs.off, (noPlayer, dep) => {
+          
+          let makeLofterAct = dep(belowHut.enableAction(`${this.prefix}.makeLofter`, () => {
+            /// {ABOVE=
+            gsc('MAKING LOFTER!!');
+            let lofter = recMan.addRecord(`${this.prefix}.lofter`, [ belowHut, loftRec ]);
+            belowHut.followRec(lofter);
+            /// =ABOVE}
+          }));
+          
+          /// {BELOW=
+          gsc('Request make lofter...');
+          makeLofterAct.act();
+          /// =BELOW}
+          
+        });
+        dep.scp(lofterExistsChooser.srcs.onn, (player, dep) => { /* Stop strike timer? */ });
+        
+      };
       
       /// {ABOVE=
       
       let resolveHrecsAndFollowRecs = (follower, tmp) => {
-        
-        if      (     tmp.Form?.['~forms']?.has(Record)) { follower.followRec(tmp);     return tmp; }
-        else if (tmp.rec?.Form?.['~forms']?.has(Record)) { follower.followRec(tmp.rec); return tmp.rec; }
+        if (hasForm(tmp, Record))      { follower.followRec(tmp);     return tmp; }
+        if (hasForm(tmp?.rec, Record)) { follower.followRec(tmp.rec); return tmp.rec; }
         return tmp;
-        
       };
       
       // Create the AppRecord identified by `<prefix>.loft`
@@ -230,6 +251,7 @@ global.rooms['Hinterland'] = async foundation => {
         let belowScp = Scope(Src(), belowHooks, (_, dep) => {
           let utils = Form.makeUtils(this.prefix, belowHut, recMan, pfx);
           belowHut.followRec(loftRec);
+          handleBelowLofter(loftRec, belowHut, dep);
           this.below(belowHut, loftRec, hinterlandReal, utils, dep);
         });
         belowScp.makeFrame(belowHut); // Kick off single frame
@@ -244,6 +266,7 @@ global.rooms['Hinterland'] = async foundation => {
         frameFn: resolveHrecs
       };
       tmp.endWith(Scope(loftRh, belowHooks, (loftRec, dep) => {
+        handleBelowLofter(loftRec, hereHut, dep);
         this.below(hereHut, loftRec, hinterlandReal, utils, dep);
       }));
       

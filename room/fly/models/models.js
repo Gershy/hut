@@ -248,8 +248,8 @@ global.rooms['fly.models'] = async foundation => {
       
       let calc = null;
       if (val.has('nx') && val.has('ny'))       calc = () => val.slice([ 'nx', 'ny', 'dist' ]);
-      else if (val.has('tx') && val.has('ty'))  calc = Form.carteParams.bind(null, val.tx, val.ty);
-      else if (val.has('ang'))                  calc = Form.polarParams.bind(null, val.ang, val.dist);
+      else if (val.has('tx') && val.has('ty'))  calc = Form.carteParams.bound(val.tx, val.ty);
+      else if (val.has('ang'))                  calc = Form.polarParams.bound(val.ang, val.dist);
       else                                      calc = () => { throw Error(`Supply either "tx" and "ty", or "ang"`); };
       
       let { nx, ny, dist, ang=Math.atan2(nx, ny) / (Math.PI * 2) } = calc();

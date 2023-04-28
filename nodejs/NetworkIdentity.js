@@ -543,8 +543,8 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       
     };
     
-    let stdoutFn = handleChunk.bind(null, 'out', stdoutChunks);
-    let stderrFn = handleChunk.bind(null, 'out', stderrChunks);
+    let stdoutFn = handleChunk.bound('out', stdoutChunks);
+    let stderrFn = handleChunk.bound('out', stderrChunks);
     proc.stdout.on('data', stdoutFn);
     proc.stderr.on('data', stderrFn);
     
