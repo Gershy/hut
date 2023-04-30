@@ -126,12 +126,10 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   };
   global.subconOpts = sc => {
     
-    //global.subconOpts = sc => {
-      //let terms = token.dive(sc.term);
-      //return global.conf(terms.join('.kids.'));
-    //};
-    
-    return global.conf(token.dive(sc.term).join('.kids.'));
+    return {
+      output: { inline: 0, therapist: 0 },
+      ...global.conf(token.dive(sc.term).join('.kids.'))
+    };
     
   };
   global.getRooms = (names, { shorten=true, ...opts }={}) => {
@@ -286,6 +284,64 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     
   })();
   
+  // Ensure single tab
+  let foundationTmp = Tmp();
+  (() => {
+    
+    // TODO: Support multiple tabs! (Probably with a SharedWorker)
+    let { localStorage: storage } = window;
+    if (!storage) throw Error(`No "localStorage" available`);
+    
+    // Set our view under the hid; end this Foundation if the value ever
+    // changes (indicating another Foundation has taken over)
+    let viewId = (Number.int32 * Math.random()).encodeStr(String.base32, 7);
+    let hutKey = `view/${belowHid}`;
+    storage.setItem(hutKey, `${viewId}/${Date.now().toString(32)}`);
+    let evtFn = null;
+    window.evt('storage', evtFn = evt => {
+      
+      if (evt.key !== hutKey) return;
+      
+      // Any other event means another tab took control
+      subcon('multiview')(`Lost view priority (hut: ${belowHid}, view: ${viewId})`, evt);
+      window.removeEventListener('storage', evtFn);
+      
+      let val = window.localStorage.getItem(`view/${belowHid}`);
+      if (val.hasHead(`${viewId}/`)) window.localStorage.removeItem(`view/${belowHid}`);
+      foundationTmp.end();
+      
+      for (let child of document.body.querySelectorAll(':scope > *')) child.remove();
+      
+      let anchor = document.createElement('a');
+      anchor.setAttribute('href', (window.location.pathname ?? '/') + (window.location.search ?? ''));
+      Object.assign(anchor.style, {
+        display: 'block',
+        position: 'absolute',
+        left: '0', right: '0', top: '0', bottom: '0',
+        margin: 'auto',
+        width: '65vmin', height: '65vmin',
+        textAlign: 'center',
+        fontSize: 'calc(10px + 1vmin)',
+        backgroundColor: '#0002'
+      });
+      
+      let span = document.createElement('span');
+      Object.assign(span.style, {
+        position: 'absolute',
+        left: '0', right: '0', top: '0', bottom: '0',
+        margin: 'auto'
+      });
+      span.textContent = 'To use this tab click or refresh';
+      anchor.appendChild(span);
+      
+      document.body.appendChild(anchor);
+      
+    });
+    
+    subcon('multiview')(`Took view priority (hut: ${belowHid}, view: ${viewId})`);
+    
+  })();
+  
   // `global` is set up... now run a Hut based on settings
   let { hut, record, WeakBank=null, ...loftObj } = await global.getRooms([
     'setup.hut',
@@ -302,6 +358,8 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   
   let aboveHut = hut.AboveHut({ hid: aboveHid, prefix, isHere: false, recMan, heartbeatMs });
   let belowHut = aboveHut.makeBelowHut(belowHid);
+  
+  foundationTmp.endWith(() => { aboveHut.end(); belowHut.end(); });
   
   // Note that `netIden` is just a stub - Hinterland will want to call
   // `netIden.runOnNetwork`; BELOW we know that the Tmp produced by this
@@ -332,6 +390,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     
     let protocolServer = await global.getRoom(`${hutifyPath}.protocol.${protocol}`);
     let server = protocolServer.createServer({ hut: belowHut, netIden, netProc: `${netAddr}:${port}`, ...opts });
+    foundationTmp.endWith(server);
     setupServer(protocolObj, server);
     
   }));

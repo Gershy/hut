@@ -6,6 +6,39 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.geom'] = () => {
     if (v.constructor === Number) return `${v}px`;
     return v;
   };
+  let anchorFns = Object.plain({
+    
+    mid: (x, y) => ({
+      inset: {
+        l: `calc(${x} - 10000px)`,
+        t: `calc(${y} - 10000px)`,
+        b: '-10000px',
+        r: '-10000px'
+      },
+      margin: 'tlbr'.split('').toObj(v => [ v, 'auto' ])
+    }),
+    l: (x, y) => ({
+      inset: { t: `calc(${y} - 10000px)`, b: '-10000px', l: x, r: '' },
+      margin: { t: 'auto', b: 'auto' }
+    }),
+    r: (x, y) => ({
+      inset: { t: `calc(${y} - 10000px)`, b: '-10000px', l: '', r: x },
+      margin: { t: 'auto', b: 'auto' }
+    }),
+    t: (x, y) => ({
+      inset: { t: y, b: '', l: `calc(${x} - 10000px)`, r: '-10000px' },
+      margin: { l: 'auto', r: 'auto' }
+    }),
+    b: (x, y) => ({
+      inset: { t: '', b: y, l: `calc(${x} - 10000px)`, r: '-10000px' },
+      margin: { l: 'auto', r: 'auto' }
+    }),
+    tl: (x, y) => ({ inset: { l: x, t: y }, margin: {} }),
+    tr: (x, y) => ({ inset: { r: x, t: y }, margin: {} }),
+    bl: (x, y) => ({ inset: { l: x, b: y }, margin: {} }),
+    br: (x, y) => ({ inset: { r: x, b: y }, margin: {} })
+    
+  });
   
   return {
     
@@ -30,8 +63,8 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.geom'] = () => {
       
       let xAnchor;
       let yAnchor;
-      let inset = 'tlbr'.split('').toObj(v => [ v, '' ]);
-      let margin = 'tlbr'.split('').toObj(v => [ v, '' ]);
+      //let inset = 'tlbr'.split('').toObj(v => [ v, '' ]);
+      //let margin = 'tlbr'.split('').toObj(v => [ v, '' ]);
       
       let x = numericCss(props.x) || '0px';
       let y = numericCss(props.y) || '0px';
@@ -43,54 +76,8 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.geom'] = () => {
       // Kid anchored to its Par's TOP - obviously positive Y moves the
       // Kid downwards, but what about X? It's kind of "undefined" which
       // way X moves the kid
-      if (props.anchor === 'mid') {
-        
-        Object.assign(inset, {
-          l: `calc(${x} - ${bigInset})`,
-          t: `calc(${y} - ${bigInset})`,
-          b: `-${bigInset}`,
-          r: `-${bigInset}`
-        });
-        margin = margin.map(v => 'auto');
-        
-      } else if (props.anchor === 'l') {
-        
-        Object.assign(inset, { t: `calc(${y} - ${bigInset})`, b: `-${bigInset}`, l: x, r: '' });
-        Object.assign(margin, { t: 'auto', b: 'auto' });
-        
-      } else if (props.anchor === 'r') {
-        
-        Object.assign(inset, { t: `calc(${y} - ${bigInset})`, b: `-${bigInset}`, l: '', r: x });
-        Object.assign(margin, { t: 'auto', b: 'auto' });
-        
-      } else if (props.anchor === 't') {
-        
-        Object.assign(inset, { t: y, b: '', l: `calc(${x} - ${bigInset})`, r: `-${bigInset}` });
-        Object.assign(margin, { l: 'auto', r: 'auto' });
-        
-      } else if (props.anchor === 'b') {
-        
-        Object.assign(inset, { t: '', b: y, l: `calc(${x} - ${bigInset})`, r: `-${bigInset}` });
-        Object.assign(margin, { l: 'auto', r: 'auto' });
-        
-      } else if (props.anchor === 'tl') {
-        
-        Object.assign(inset, { l: x, t: y });
-        
-      } else if (props.anchor === 'tr') {
-        
-        Object.assign(inset, { r: x, t: y });
-        
-      } else if (props.anchor === 'bl') {
-        
-        Object.assign(inset, { l: x, b: y });
-        
-      } else if (props.anchor === 'br') {
-        
-        Object.assign(inset, { r: x, b: y });
-        
-      }
       
+      let { inset, margin } = anchorFns[props.anchor](x, y);
       Object.assign(style, {
         
         position: 'absolute',
