@@ -124,6 +124,16 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     console.log(...args.map(a => isForm(a?.desc, Function) ? a.desc() : a));
     
   };
+  global.subconOpts = sc => {
+    
+    //global.subconOpts = sc => {
+      //let terms = token.dive(sc.term);
+      //return global.conf(terms.join('.kids.'));
+    //};
+    
+    return global.conf(token.dive(sc.term).join('.kids.'));
+    
+  };
   global.getRooms = (names, { shorten=true, ...opts }={}) => {
     
     let err = Error('trace');

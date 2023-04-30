@@ -9,8 +9,8 @@ global.rooms['internal.test.layout.geom'] = async () => {
     
     prefix: 'geomTest',
     habitats: [ HtmlBrowserHabitat() ],
-    above: async (hut, geom, real, loft, dep) => {},
-    below: async (hut, geom, real, loft, dep) => {
+    //above: async ({}, dep) => {},
+    below: async ({ real }, dep) => {
       
       let testsReal = dep(real.addReal('tests', {
         Geom: { w: '100%', h: '100%' },

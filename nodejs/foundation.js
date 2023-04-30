@@ -748,6 +748,10 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       
     });
     
+    global.subconOpts = sc => {
+      return global.conf(token.dive(sc.term).join('.kids.'));
+    };
+    
   })();
   
   // Enable `global.conf`
@@ -927,7 +931,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       /// =DEBUG}
       
       let content = await keep.getContent('utf8');
-      if (!content) throw Error(`Api: provided Keep has no sourcecode`).mod({ keep });
+      if (!content) throw Error(`Api: no sourcecode available from ${keep.desc()}`);
       
       let srcLines = content.split('\n'); // TODO: What about \r??
       

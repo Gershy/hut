@@ -19,17 +19,16 @@ global.rooms['internal.test.test1'] = async () => {
     habitats: [ HtmlBrowserHabitat() ],
     
     // Server initializes counter to 0
-    above: async (hut, test1, real, loft, dep) => {
-      
-      test1.setValue({ count: 0 });
+    above: async ({ record }, dep) => {
+      record.setValue({ count: 0 });
     },
     
     // Clients interact with the counter
-    below: async (hut, test1, real, loft, dep) => {
+    below: async ({ record, real, enableAction }, dep) => {
       
       // Users can always decrement and increment
-      let decrementAct = dep(loft.enableAction('decrement', () => test1.setValue(v => void v.count--)))
-      let incrementAct = dep(loft.enableAction('increment', () => test1.setValue(v => void v.count++)))
+      let decrementAct = dep(enableAction('decrement', () => record.setValue(v => void v.count--)))
+      let incrementAct = dep(enableAction('increment', () => record.setValue(v => void v.count++)))
       
       // Ui gives access to decrement/increment Acts
       let mainReal = dep(real.addReal('main', {
@@ -51,7 +50,7 @@ global.rooms['internal.test.test1'] = async () => {
       })
       
       // Update the counter when the value changes
-      dep(test1.getValuePropSrc('count'))
+      dep(record.getValuePropSrc('count'))
         .route(num => displayReal.mod({ text: num.toString(10) }))
       
     }

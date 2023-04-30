@@ -66,7 +66,6 @@ global.rooms['Hinterland'] = async foundation => {
       // Note that none of these should conflict with properties that
       // can be found on a Record!!
       
-      enableAction: (term, ...args) => hut.enableAction(pfx(term), ...args),
       addFormFn: (term, ...args) => recMan.addFormFn(pfx(term), ...args),
       enableKeep: (term, keep) => hut.enableKeep(pfx(term), keep),
       getKeep: (diveToken) => {
@@ -145,26 +144,25 @@ global.rooms['Hinterland'] = async foundation => {
       tmp.endWith(loftRh);
       
       /// {DEBUG=
-      let recordSampleScConf = subcon('subcon.record.sample');
-      let enabled = conf('subcon.kids.record.kids.sample.output.inline');
-      if (enabled) (async () => {
+      let sampleSc = subcon('subcon.record.sample');
+      if (sampleSc.conf.output.inline) (async () => {
         
         let rank = rec => rec.uid.hasHead('!') ? -1 : 0;
         let rankType = (a, b) => a.type.name.localeCompare(b.type.name);
         let rankUid = (a, b) => a.uid.localeCompare(b.uid);
-        let sc = subcon('record.sample');
         
         let TimerSrc = await getRoom('logic.TimerSrc');
-        TimerSrc({ num: Infinity, ms: recordSampleScConf.ms }).route(() => {
+        TimerSrc({ num: Infinity, ms: sampleSc.conf.ms }).route(() => {
           
           let ts = getMs();
           let results = [ ...rec.iterateAll() ]
             .sort((a, b) => (rank(a) - rank(b)) || rankType(a, b) || rankUid(a, b))
             .map(rec => `- ${rec.uid.padTail(24, ' ')} -> ${rec.type.name.padTail(24, ' ')} ${JSON.stringify(rec.getValue())}`);
-          sc([
+          
+          sampleSc([
             `Sampled ${results.count()} Record(s) (took ${((getMs() - ts) / 1000).toFixed(2)}ms)`,
             ...results
-          ].join('\n'))
+          ].join('\n'));
           
         });
         
@@ -194,25 +192,29 @@ global.rooms['Hinterland'] = async foundation => {
       let resolveHrecs = (tmp, dep) => tmp.rec?.Form?.['~forms']?.has(Record) ? tmp.rec : tmp;
       let handleBelowLofter = (loftRec, belowHut, dep) => {
         
-        let lofterRh = belowHut.relHandler(pfx('lofter'));
+        let lofterRh = dep(belowHut.relHandler(`${this.prefix}.lofter`));
+        
         let lofterExistsChooser = dep(Chooser(lofterRh));
         dep.scp(lofterExistsChooser.srcs.off, (noPlayer, dep) => {
           
           let makeLofterAct = dep(belowHut.enableAction(`${this.prefix}.makeLofter`, () => {
             /// {ABOVE=
-            gsc('MAKING LOFTER!!');
             let lofter = recMan.addRecord(`${this.prefix}.lofter`, [ belowHut, loftRec ]);
             belowHut.followRec(lofter);
             /// =ABOVE}
           }));
           
           /// {BELOW=
-          gsc('Request make lofter...');
-          makeLofterAct.act();
+          // Don't act unless we know that `lofterRh` won't Send - this
+          // is known when `lofterRh.ready()` resolves, and
+          // `makeLofterAct` hasn't yet been Ended by `dep`
+          then(lofterRh.ready(), () => makeLofterAct.act());
           /// =BELOW}
           
         });
         dep.scp(lofterExistsChooser.srcs.onn, (player, dep) => { /* Stop strike timer? */ });
+        
+        return lofterRh;
         
       };
       
@@ -236,7 +238,12 @@ global.rooms['Hinterland'] = async foundation => {
         frameFn: resolveHrecs
       };
       let aboveScp = Scope(Src(), aboveHooks, (_, dep) => {
-        this.above(hereHut, loftRec, hinterlandReal, utils, dep);
+        this.above({
+          record: loftRec,
+          real: hinterlandReal,
+          addKnownRoomDependencies: hereHut.addKnownRoomDependencies.bind(hereHut),
+          ...utils
+        }, dep);
       });
       aboveScp.makeFrame(tmp); // Kick off single frame linked to `tmp`
       
@@ -249,10 +256,16 @@ global.rooms['Hinterland'] = async foundation => {
           frameFn: resolveHrecsAndFollowRecs.bound(belowHut)
         };
         let belowScp = Scope(Src(), belowHooks, (_, dep) => {
-          let utils = Form.makeUtils(this.prefix, belowHut, recMan, pfx);
           belowHut.followRec(loftRec);
-          handleBelowLofter(loftRec, belowHut, dep);
-          this.below(belowHut, loftRec, hinterlandReal, utils, dep);
+          let lofterRh = handleBelowLofter(loftRec, belowHut, dep);
+          this.below({
+            record: loftRec,
+            real: hinterlandReal,
+            lofterRh: lofterRh,
+            lofterRelHandler: lofterRh,
+            enableAction: (term, ...args) => belowHut.enableAction(pfx(term), ...args),
+            ...Form.makeUtils(this.prefix, belowHut, recMan, pfx)
+          }, dep);
         });
         belowScp.makeFrame(belowHut); // Kick off single frame
         
@@ -266,8 +279,16 @@ global.rooms['Hinterland'] = async foundation => {
         frameFn: resolveHrecs
       };
       tmp.endWith(Scope(loftRh, belowHooks, (loftRec, dep) => {
-        handleBelowLofter(loftRec, hereHut, dep);
-        this.below(hereHut, loftRec, hinterlandReal, utils, dep);
+        let lofterRh = handleBelowLofter(loftRec, hereHut, dep);
+        
+        this.below({
+          record: loftRec,
+          real: hinterlandReal,
+          lofterRh: lofterRh,
+          lofterRelHandler: lofterRh,
+          enableAction: (term, ...args) => hereHut.enableAction(pfx(term), ...args),
+          ...utils
+        }, dep);
       }));
       
       /// =BELOW}

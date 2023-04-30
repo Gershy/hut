@@ -851,8 +851,16 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   subcon: (diveToken, opts={}) => {
     //let dive = token.dive(diveToken);
     let sc = (...args) => subconOutput(sc, ...args);
-    return Object.assign(sc, { term: diveToken, opts });
+    C.def(sc, 'conf', { writable: true, value: null });
+    return Object.assign(sc, {
+      term: diveToken,
+      get conf() {
+        C.def(sc, 'conf', { value: subconOpts(sc) });
+        return sc.conf;
+      }
+    });
   },
+  subconOpts: sc => ({}),
   subconOutput: (sc, ...args) => console.log(`\nSubcon "${sc.term}": ${global.formatAnyValue(args)}`),
   
   // Urls
@@ -1056,7 +1064,7 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
       
       this.fns.add(fn);
       this.newRoute(fn);
-      if (mode === 'tmp') return Tmp(() => this.fns.rem(fn));
+      if (mode === 'tmp') return Endable(() => this.fns.rem(fn));
       
     },
     send(arg=skip) {
@@ -1193,7 +1201,7 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
         if      (arg instanceof Function) this.route(arg, 'prm');
         else if (arg) {
           
-          let { cleanup=null, ...args } = arg;
+          let { cleanup=null, ...args } = arg; // TODO: in-band signal!
           Object.assign(this, args);
           if (cleanup) this.route(cleanup, 'prm');
           
@@ -1241,7 +1249,7 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
         // If `val` is a Tmp and `mode` is "tmp", ensure that `val` ends
         // when `this` ends - but if `val` ends first, make sure the
         // relationship is automatically removed
-        if (mode === 'tmp' && val.constructor['~forms'].has(Tmp)) {
+        if (mode === 'tmp' && hasForm(val, Tmp)) {
           
           if (val.off()) return val;
           
@@ -1254,7 +1262,9 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
           // If the relationship is ended externally stop waiting for
           // it to end; this is a permanent feature of `endWithTmp` and
           // this Route is never Ended
-          endWithTmp.route(() => remRelTmp.end(), 'prm');
+          let origCleanup = endWithTmp.cleanup;
+          endWithTmp.cleanup = () => { origCleanup(); remRelTmp.end(); };
+          //endWithTmp.route(() => remRelTmp.end(), 'prm');
           
           return endWithTmp;
           
@@ -1268,7 +1278,7 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
     };
     
   }});
-  Tmp.stub = onto(Tmp(), t => t.end());
+  Tmp.stub = (() => { let t = Tmp(); t.end(); return t; })();
   
   let Slots = form({ name: 'Slots', props: (forms, Form) => ({
     

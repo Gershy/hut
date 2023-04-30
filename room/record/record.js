@@ -40,7 +40,6 @@ global.rooms['record'] = async () => {
       denumerate(this, 'types');
       denumerate(this, 'formFns');
       
-      
       if (this.bank) {
         this.getNextUid = () => this.bank.getNextUid().encodeStr(String.base62, 8);
       } else {
@@ -682,6 +681,7 @@ global.rooms['record'] = async () => {
     },
     
     ready() {
+      if (this.activeSignal.off()) return;
       if (!this.activeSignal['~prm']) this.activeSignal['~prm'] = Promise(rsv => this.activeSignal.route(rsv, 'prm'));
       return this.activeSignal['~prm'];
     },
@@ -769,7 +769,10 @@ global.rooms['record'] = async () => {
         bankedPrm: null
         
       });
-      for (let p of [ 'group', 'relHandlers', 'endWithMemRoutes', 'bankedPrm' ]) denumerate(this, p);
+      denumerate(this, 'group');
+      denumerate(this, 'relHandlers');
+      denumerate(this, 'endWithMemRoutes');
+      denumerate(this, 'bankedPrm');
       
       mmm('record', +1);
       this.endWith(() => mmm('record', -1));
