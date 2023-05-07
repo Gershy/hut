@@ -157,11 +157,21 @@ global.rooms['fly'] = async foundation => {
       
       /// {ABOVE=
       
-      hut.addKnownRoomDependencies([
-        'fly.models', 'internal.real.RealTree', 'logic.TimerSrc',
-      ]);
-      hut.addKnownRealDependencies([
-        'Art', 'Axis1d', 'Decal', 'Geom', 'Press', 'Real', 'Scroll', 'Size', 'Text', 'TextInput', 'Image'
+      hut.addPreloadRooms([
+        'fly.models',
+        'internal.real.RealTree',
+        'logic.TimerSrc',
+        'reality.layout.Art',
+        'reality.layout.Axis1d',
+        'reality.layout.Decal',
+        'reality.layout.Geom',
+        'reality.layout.Press',
+        'reality.layout.Real',
+        'reality.layout.Scroll',
+        'reality.layout.Size',
+        'reality.layout.Text',
+        'reality.layout.TextInput',
+        'reality.layout.Image'
       ]);
       
       dep.scp(hut, 'hut.owned/above', (owned, dep) => {

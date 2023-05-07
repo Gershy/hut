@@ -1,6 +1,11 @@
-global.rooms['Hinterland'] = async foundation => {
+global.rooms['Hinterland'] = async () => {
   
   let { record: { Record }, Scope, Chooser } = await getRooms([ 'record', 'logic.Scope', 'logic.Chooser' ]);
+  
+  /// {LOADTEST=
+  let { hut } = await getRooms([ 'setup.hut' ]);
+  /// =LOADTEST}
+  
   return form({ name: 'Hinterland', props: (forms, Form) => ({
     
     // Hinterland is the space in which multiple Huts interact according
@@ -8,13 +13,6 @@ global.rooms['Hinterland'] = async foundation => {
     
     $prefixer: (pfx, term) => term.has('.') ? term : `${pfx}.${term}`,
     $makeUtils: (prefix, hut, recMan, pfx=Form.prefixer.bound(prefix)) => ({
-      
-      // TODO: Maybe here is the place to define the connection from
-      // `netIden` to `hereHut`? I.e. that network communications to the
-      // NetworkIdentity get translated to `hut`. This may be some good
-      // candidate logic to define once and reference from ABOVE/BELOW.
-      // If that *doesn't* make sense, maybe all Hinterlands logic needs
-      // to move to `foundation` + `HtmlBrowserHabitat/init/init.js`
       
       // The Loft defined by `this.above` and `this.below` should be
       // able to omit prefixes for almost all operations. For many
@@ -106,7 +104,7 @@ global.rooms['Hinterland'] = async foundation => {
       
     }),
     
-    init({ prefix=null, habitats=[], recordForms={}, above=Function.stub, below=Function.stub }) {
+    init({ prefix=null, habitats=[], recordForms={}, above=Function.stub, below=Function.stub, ...args }) {
       
       /// {DEBUG=
       if (!habitats.count()) throw Error(`Api: supply at least 1 habitat`);
@@ -115,11 +113,39 @@ global.rooms['Hinterland'] = async foundation => {
       
       Object.assign(this, { prefix, habitats, recordForms, above, below });
       
+      /// {LOADTEST=
+      let { loadtestConf } = args;
+      if (!loadtestConf) throw Error(`Api: must supply "loadtestConf" for loadtest`);
+      Object.assign(this, { loadtestConf });
+      /// =LOADTEST}
+      
     },
-    async open({ hereHut, rec=hereHut, netIden }) {
+    
+    /// {LOADTEST=
+    async setupBelowLoadtesting({ belowHut, loftRh, belowHooks }) {
+      
+      let TimerSrc = await getRoom('logic.TimerSrc');
       
       let tmp = Tmp();
-      tmp.endWith(netIden.runOnNetwork());
+      
+      tmp.endWith(Scope(loftRh, belowHooks, (loft, dep) => {
+        
+        dep.scp(belowHut, `${this.prefix}.lofter`, (lofter, dep) => {
+          
+          this.loadtestConf.fn({ belowHut, loft, lofter, dep });
+          
+        });
+        
+      }));
+      
+      return tmp;
+      
+    },
+    /// =LOADTEST}
+    
+    async open({ hereHut, rec=hereHut }) {
+      
+      let tmp = Tmp();
       
       let recMan = rec.type.manager;
       let pfx = Form.prefixer.bound(this.prefix);
@@ -134,8 +160,7 @@ global.rooms['Hinterland'] = async foundation => {
       // Add all type -> Form mappings
       // Note values in `this.recordForms` are either functions giving
       // RecordForms, or RecordForms themselves
-      for (let [ k, v ] of this.recordForms)
-        tmp.endWith(utils.addFormFn(pfx(k), v['~Forms'] ? () => v : v));
+      for (let [ k, v ] of this.recordForms) tmp.endWith(utils.addFormFn(pfx(k), v['~Forms'] ? () => v : v));
       
       let hinterlandReal = global.real.addReal(pfx('loft'));
       tmp.endWith(hinterlandReal);
@@ -145,7 +170,7 @@ global.rooms['Hinterland'] = async foundation => {
       
       /// {DEBUG=
       let sampleSc = subcon('subcon.record.sample');
-      if (sampleSc.conf.output.inline) (async () => {
+      if (sampleSc.conf.output.inline && sampleSc.conf.ms) (async () => {
         
         let rank = rec => rec.uid.hasHead('!') ? -1 : 0;
         let rankType = (a, b) => a.type.name.localeCompare(b.type.name);
@@ -241,7 +266,7 @@ global.rooms['Hinterland'] = async foundation => {
         this.above({
           record: loftRec,
           real: hinterlandReal,
-          addKnownRoomDependencies: hereHut.addKnownRoomDependencies.bind(hereHut),
+          addPreloadRooms: hereHut.addPreloadRooms.bind(hereHut),
           ...utils
         }, dep);
       });
@@ -280,7 +305,6 @@ global.rooms['Hinterland'] = async foundation => {
       };
       tmp.endWith(Scope(loftRh, belowHooks, (loftRec, dep) => {
         let lofterRh = handleBelowLofter(loftRec, hereHut, dep);
-        
         this.below({
           record: loftRec,
           real: hinterlandReal,
@@ -292,6 +316,20 @@ global.rooms['Hinterland'] = async foundation => {
       }));
       
       /// =BELOW}
+      
+      /// {LOADTEST=
+      
+      let isBelow = isForm(hereHut, hut.BelowHut);
+      if (isBelow && hereHut.isLoadtestBot) tmp.endWith(await this.setupBelowLoadtesting({
+        belowHut: hereHut,
+        loftRh,
+        belowHooks: {
+          processArgs: rhFromRecWithRhArgs,
+          frameFn: resolveHrecs
+        }
+      }));
+      
+      /// =LOADTEST}
       
       return tmp;
       

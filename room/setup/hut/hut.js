@@ -262,8 +262,7 @@ global.rooms['setup.hut'] = async () => {
         childUidCnt: 0,
         ownedHutRh,
         bankedPrm,
-        knownRoomDependencies: Set(),
-        knownRealDependencies: Set(),
+        preloadRooms: Set(),
         serverInfos: [],
         enabledKeeps: Map(),
         belowConf: null,
@@ -289,26 +288,22 @@ global.rooms['setup.hut'] = async () => {
         aboveHid: this.hid,
         subcon: subconConf(conf('subcon')),
         deploy: {
-          
           maturity: conf('deploy.maturity'),
-          
+          features: conf('deploy.features'),
           host: {
             netIden: { secureBits: conf('deploy.host.netIden.secureBits') },
             netAddr: conf('deploy.host.netAddr'),
             heartbeatMs: conf('deploy.host.heartbeatMs'),
             protocols: conf('deploy.host.protocols')
           },
-          
           uid: conf('deploy.uid'),
           loft: conf('deploy.loft')
-          
         }
         
       };
       
       denumerate(this, 'ownedHutRh');
-      denumerate(this, 'knownRoomDependencies');
-      denumerate(this, 'knownRealDependencies');
+      denumerate(this, 'preloadRooms');
       denumerate(this, 'serverInfos');
       denumerate(this, 'enabledKeeps');
       denumerate(this, 'belowConf');
@@ -400,8 +395,7 @@ global.rooms['setup.hut'] = async () => {
       this.serverInfos.push({ secure, protocol, netAddr, port });
        
     },
-    addKnownRoomDependencies(deps) { for (let dep of deps) this.knownRoomDependencies.add(dep); },
-    addKnownRealDependencies(deps) { for (let dep of deps) this.knownRealDependencies.add(dep); },
+    addPreloadRooms(deps) { for (let dep of deps) this.preloadRooms.add(dep); },
     enableKeep(term, keep) {
       
       // Adds a Keep to `this.enabledKeeps`; this makes it available as
@@ -448,7 +442,9 @@ global.rooms['setup.hut'] = async () => {
         /// =ABOVE} {=BELOW
         syncHearVersion: 0,
         bufferedSyncs: Map(),
-        /// =BELOW}
+        /// =BELOW} {LOADTEST=
+        loadtestActions: Set(),
+        /// =LOADTEST}
         
         roads: Map(/* Server(...) => Road/Session(...) */)
       });
@@ -592,6 +588,12 @@ global.rooms['setup.hut'] = async () => {
       //   `reply` are available
       
       let tmp = Tmp({ desc: () => `Action(${this.desc()}: "${command}")`, act: null });
+      
+      /// {LOADTEST=
+      tmp.command = command;
+      this.loadtestActions.add(tmp);
+      tmp.endWith(() => this.loadtestActions.rem(tmp));
+      /// =LOADTEST}
       
       /// {BELOW=
       

@@ -87,13 +87,13 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     if (!keep) seenHttpKeeps.add(key, keep = HttpKeep(uri({ path: 'asset', query: { dive: key } })));
     return keep;
   };
-  global.conf = diveToken => {
+  global.conf = (diveToken, def=null) => {
     
     // Resolve nested Arrays and period-delimited Strings
     let dive = token.dive(diveToken);
     let ptr = global.rawConf;
     for (let pc of dive) {
-      if (!isForm(ptr, Object) || !ptr.has(pc)) return null;
+      if (!isForm(ptr, Object) || !ptr.has(pc)) return def;
       ptr = ptr[pc];
     }
     return ptr;
@@ -228,7 +228,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   };
   /// =DEBUG}
   
-  let { hid: belowHid, aboveHid, deploy: { uid, prefix, host } } = global.conf();
+  let { hid: belowHid, aboveHid, deploy: { uid, host } } = global.conf();
   let { netAddr, netIden: netIdenConf, protocols, heartbeatMs } = host;
   
   // Make sure that refreshes redirect to the same session
@@ -280,7 +280,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     let body = document.body;
     if (/^[\s]+$/.test(body.textContent)) body.textContent = '';
     
-    global.real = Real({ prefix, name: 'root', tech, tree: Real.Tree(), node: body });
+    global.real = Real({ prefix: 'foundation', name: 'root', tech, tree: Real.Tree(), node: body });
     
   })();
   
@@ -343,7 +343,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   })();
   
   // `global` is set up... now run a Hut based on settings
-  let { hut, record, WeakBank=null, ...loftObj } = await global.getRooms([
+  let { hut, record, WeakBank, ...loftObj } = await global.getRooms([
     'setup.hut',
     'record',
     
@@ -356,7 +356,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   let bank = WeakBank({ subcon: global.subcon('bank') });
   let recMan = record.Manager({ bank });
   
-  let aboveHut = hut.AboveHut({ hid: aboveHid, prefix, isHere: false, recMan, heartbeatMs });
+  let aboveHut = hut.AboveHut({ hid: aboveHid, isHere: false, recMan, heartbeatMs });
   let belowHut = aboveHut.makeBelowHut(belowHid);
   
   foundationTmp.endWith(() => { aboveHut.end(); belowHut.end(); });
@@ -369,9 +369,9 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   
   // TODO: This assumes Above never ends which may introduce annoyances
   // for development (e.g. Above restarting should refresh Below)
-  let netIden = { ...netIdenConf, runOnNetwork: () => Tmp.stub };
+  let netIden = { ...netIdenConf };
   
-  let setupServer = (protocolObj, server) => {
+  let setupServer = (server) => {
     
     // Any Session represents a Session with Above
     server.src.route(session => {
@@ -383,15 +383,13 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     });
     
   };
-  
   await Promise.all(protocols.map(async protocolObj => {
     
     let { protocol, port, ...opts } = protocolObj;
-    
     let protocolServer = await global.getRoom(`${hutifyPath}.protocol.${protocol}`);
     let server = protocolServer.createServer({ hut: belowHut, netIden, netProc: `${netAddr}:${port}`, ...opts });
     foundationTmp.endWith(server);
-    setupServer(protocolObj, server);
+    setupServer(server);
     
   }));
   
@@ -399,7 +397,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   if (initComm) belowHut.actOnComm({ src: aboveHut, msg: initComm });
   
   let loft = loftObj.toArr(v => v)[0];
-  await loft.open({ hereHut: belowHut, rec: aboveHut, netIden });
+  await loft.open({ hereHut: belowHut, rec: aboveHut });
   
   gsc(`Loft opened after ${(getMs() - performance.timeOrigin).toFixed(2)}ms`);
   

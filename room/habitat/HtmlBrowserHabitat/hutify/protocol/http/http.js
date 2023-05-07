@@ -15,9 +15,11 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.protocol.http'] = () => ({ creat
   // TODO: Think about how to clean this up so the logic which results
   // in a refresh is clearer! Right now refreshes are ignored if the
   // Foundation was explicitly ended for losing tab priority!
-  server.src.route(session => {
+  let session = (() => {
     
     let err = Error('');
+    
+    let session = Tmp({ key: '!above', currentCost: () => 0.625, tell: Src(), hear: Src() });
     let route = session.tell.route(async msg => {
       
       server.activeReqs++;
@@ -56,13 +58,12 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.protocol.http'] = () => ({ creat
     // Immediately bank a request
     session.tell.send('');
     
-  });
+    return session;
+    
+  })();
   
-  soon(() => {
-    // Every Server immediately creates a Session with the AboveHut
-    let session = Tmp({ key: '!above', currentCost: () => 0.625, tell: Src(), hear: Src() });
-    server.src.send(session);
-  });
+  // Every Server immediately creates a Session with the AboveHut
+  soon(() => server.src.send(session));
   
   return server;
   

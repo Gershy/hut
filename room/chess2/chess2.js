@@ -52,18 +52,21 @@ global.rooms['chess2'] = async chess2Keep => {
       Decal: { colour: '#a0a0ff30' }
     })
   };
-  let getValidMoves = (pieces, matchLofter, piece) => {
+  
+  let makeBoard = pieces => {
+    
+    let data = (8).toArr(() => (8).toArr(() => null));
+    for (let pc of pieces) {
+      let { col, row } = pc.getValue();
+      data[col][row] = pc;
+    }
+    return { data, check: (col, row) => (col < 0 || col > 7 || row < 0 || row > 7) ? 'OOB' : data[col][row] };
+    
+  };
+  let getValidMoves = (board, matchLofter, piece) => {
     
     if (piece.getValue('wait') > 0) return [];
     if (matchLofter.getValue('colour') !== piece.getValue('colour')) return [];
-    
-    // Make a nice 2d representation of the board
-    let calc = (8).toArr(() => (8).toArr(() => null));
-    for (let pc of pieces) calc[pc.getValue('col')][pc.getValue('row')] = pc;
-    
-    // Utility func for checking tiles (OOB=out-of-bounds, null=empty tile, otherwise a Piece)
-    let checkTile = (col, row) => (col < 0 || col > 7 || row < 0 || row > 7) ? 'OOB' : calc[col][row];
-    
     let { type, colour, col, row } = piece.getValues('type', 'colour', 'col', 'row');
     
     let moves = [];
@@ -71,20 +74,19 @@ global.rooms['chess2'] = async chess2Keep => {
     if (type === 'pawn') {
       
       let dir = colour === 'white' ? 1 : -1;
-      let initRow = colour === 'white' ? 1 : 6;
       
-      if (!checkTile(col, row + dir)) {
+      if (!board.check(col, row + dir)) {
         moves.push({ col, row: row + dir, cap: null }); // Add first step if unblocked
-        if (row === initRow && !checkTile(col, row + dir + dir)) {
+        if (piece.getValue('moves') === 0 && !board.check(col, row + dir + dir)) {
           moves.push({ col, row: row + dir + dir, cap: null }); // Add second step if unblocked and unmoved
         }
       }
       
       // Check for captures in both directions
-      let cap1 = checkTile(col - 1, row + dir);
+      let cap1 = board.check(col - 1, row + dir);
       if (cap1 && cap1 !== 'OOB' && cap1.getValue('colour') !== colour) moves.push({ col: col - 1, row: row + dir, cap: cap1 });
       
-      let cap2 = checkTile(col + 1, row + dir);
+      let cap2 = board.check(col + 1, row + dir);
       if (cap2 && cap2 !== 'OOB' && cap2.getValue('colour') !== colour) moves.push({ col: col + 1, row: row + dir, cap: cap2 });
       
     } else if (type === 'knight') {
@@ -94,7 +96,7 @@ global.rooms['chess2'] = async chess2Keep => {
       ];
       offsets.each(([ dx, dy ]) => {
         let [ c, r ] = [ col + dx, row + dy ];
-        let check = checkTile(c, r);
+        let check = board.check(c, r);
         if (!check || (check !== 'OOB' && check.getValue('colour') !== colour)) moves.push({ col: c, row: r, cap: check });
       });
       
@@ -108,7 +110,7 @@ global.rooms['chess2'] = async chess2Keep => {
         
         let [ xx, yy ] = [ col + dx * (n + 1), row + dy * (n + 1) ];
         
-        let check = checkTile(xx, yy);
+        let check = board.check(xx, yy);
         
         // Stepping terminates at edge of board
         if (check === 'OOB') break;
@@ -138,7 +140,7 @@ global.rooms['chess2'] = async chess2Keep => {
           for (numSteps = 1; true; numSteps++) {
             
             let loc = [ col + Math.round(step[0] * numSteps), row + Math.round(step[1] * numSteps) ];
-            let check = checkTile(...loc);
+            let check = board.check(...loc);
             
             if (check === 'OOB') { break; }
             if (check) { castlePiece = check; break; }
@@ -290,9 +292,9 @@ global.rooms['chess2'] = async chess2Keep => {
       /// {ABOVE=
       
       let { record: chess2 } = experience;
-      let { addRecord, enableKeep, addKnownRoomDependencies } = experience;
+      let { addRecord, enableKeep, addPreloadRooms } = experience;
       
-      addKnownRoomDependencies([
+      addPreloadRooms([
         'Hinterland',
         'habitat.HtmlBrowserHabitat',
         'record.bank.WeakBank',
@@ -426,6 +428,30 @@ global.rooms['chess2'] = async chess2Keep => {
             [ 'pawn',     6, 6 ],
             [ 'pawn',     7, 6 ]
           ]
+        },
+        pawnShowdown: {
+          white: [
+            [ 'king',     4, 0 ],
+            [ 'pawn',     0, 3 ],
+            [ 'pawn',     1, 3 ],
+            [ 'pawn',     2, 3 ],
+            [ 'pawn',     3, 3 ],
+            [ 'pawn',     4, 3 ],
+            [ 'pawn',     5, 3 ],
+            [ 'pawn',     6, 3 ],
+            [ 'pawn',     7, 3 ]
+          ],
+          black: [
+            [ 'king',     4, 7 ],
+            [ 'pawn',     0, 4 ],
+            [ 'pawn',     1, 4 ],
+            [ 'pawn',     2, 4 ],
+            [ 'pawn',     3, 4 ],
+            [ 'pawn',     4, 4 ],
+            [ 'pawn',     5, 4 ],
+            [ 'pawn',     6, 4 ],
+            [ 'pawn',     7, 4 ]
+          ]
         }
       };
       
@@ -543,15 +569,11 @@ global.rooms['chess2'] = async chess2Keep => {
             
             let match = addRecord('match', [ chess2 ], { ms, desc: `white:${pw.getValue('term')} vs black:${pb.getValue('term')}` });
             
-            if (sc.enabled) {
-              
-              sc(`MATCH OPEN (${match.getValue('desc')})`);
-              match.endWith(() => { sc(`MATCH SHUT (${match.getValue('desc')})`); });
-              
-              // RelHandle Dep Ends when Match Ends
-              match.rh('outcome').route(({ rec: outcome }) => sc(`MATCH OTCM (${match.getValue('desc')})`, outcome.getValue()));
-              
-            }
+            sc(`MATCH OPEN (${match.getValue('desc')})`);
+            match.endWith(() => { sc(`MATCH SHUT (${match.getValue('desc')})`); });
+            
+            // RelHandle Dep Ends when Match Ends
+            match.rh('outcome').route(({ rec: outcome }) => sc(`MATCH OTCM (${match.getValue('desc')})`, outcome.getValue()));
             
             // Initial Round of Match
             addRecord('round', [ match ], { ms: Date.now() });
@@ -592,9 +614,6 @@ global.rooms['chess2'] = async chess2Keep => {
       
     },
     below: async (experience, dep) => {
-      
-      /// {LOADTEST=
-      /// =LOADTEST}
       
       let { record: chess2, real: chess2Real, lofterRh } = experience;
       let { addRecord, enableAction } = experience;
@@ -655,16 +674,16 @@ global.rooms['chess2'] = async chess2Keep => {
         learnReal.addReal('item', lay.textFwd('Finally, chess with no imbalance - just black and white matched evenly in a battle of strategy and wits!'));
         learnReal.addReal('item', lay.gap());
         learnReal.addReal('item', lay.textFwd('All the rules of chess apply, BUT:'));
-        learnReal.addReal('item', lay.textFwd('- Lofters select a move at the same time'));
-        learnReal.addReal('item', lay.textFwd('- Nothing happens until both lofters have selected a move'));
-        learnReal.addReal('item', lay.textFwd('- Once both lofters have selected a move, the moves occur simultaneously!'));
+        learnReal.addReal('item', lay.textFwd('- Players select a move at the same time'));
+        learnReal.addReal('item', lay.textFwd('- Nothing happens until both players have selected a move'));
+        learnReal.addReal('item', lay.textFwd('- Once both players have selected a move, the moves occur simultaneously!'));
         learnReal.addReal('item', lay.textFwd('- The same piece may not move twice in a row'));
         learnReal.addReal('item', lay.textFwd('- Kings are never considered to be in check'));
         learnReal.addReal('item', lay.textFwd('- Win by capturing, not checkmating, the enemy\'s king!'));
         learnReal.addReal('item', lay.textFwd('- No en passant!'));
-        learnReal.addReal('item', lay.textFwd('- Lofters may always choose to pass instead of play a move'));
+        learnReal.addReal('item', lay.textFwd('- Players may always choose to pass instead of play a move'));
         learnReal.addReal('item', lay.textFwd('- Failing to submit a move within the time limit results in passing'));
-        learnReal.addReal('item', lay.textFwd('- If both lofters pass simultaneously the game ends in a draw'));
+        learnReal.addReal('item', lay.textFwd('- If both players pass simultaneously the game ends in a draw'));
         learnReal.addReal('item', lay.gap());
         learnReal.addReal('item', lay.text('Chess2 by Gershom Maes'));
         learnReal.addReal('item', lay.link('(Hut framework also by Gershom Maes)', 'https://github.com/Gershy/hut', { size: tsM2 }));
@@ -907,7 +926,7 @@ global.rooms['chess2'] = async chess2Keep => {
             
           } else if (reason === 'lethargy') {
             
-            text = `Neither lofter made a move!\nStalemate!`;
+            text = `Neither player made a move!\nStalemate!`;
             
           } else if (reason === 'resign') {
             
@@ -918,7 +937,9 @@ global.rooms['chess2'] = async chess2Keep => {
           contentReal.addReal('text', lay.text(text, tsP1));
           contentReal.addReal('text', lay.text('Click anywhere to play again\u2026'));
           
-          dep(TimerSrc({ num: 1, ms: 350 })).route(() => outcomeReal.mod({ opacity: 1 }));
+          // Only "dramatic" outcomes have a delay
+          let delayMs = [ 'checkmate', 'stalemate' ].has(reason) ? 350 : 0;
+          dep(TimerSrc({ num: 1, ms: delayMs })).route(() => outcomeReal.mod({ opacity: 1 }));
           
         });
         dep.scp(outcomeChooser.srcs.off, (nop, dep) => {
@@ -939,8 +960,8 @@ global.rooms['chess2'] = async chess2Keep => {
             let timeBarReal = dep(myLofterHolderReal.addReal('timer', {
               Geom: { anchor: 'mid', z: 0, w: '0', h: '100%' },
               Decal: { colour: 'rgba(40, 40, 100, 0.35)', transition: {
-                x: { ms: 800, curve: 'linear' },
-                w: { ms: 800, curve: 'linear' }
+                x: { ms: 500, curve: 'linear' },
+                w: { ms: 500, curve: 'linear' }
               }}
             }));
             let passReal = dep(myLofterHolderReal.addReal('pass', {
@@ -971,24 +992,24 @@ global.rooms['chess2'] = async chess2Keep => {
                 /// {ABOVE=
                 
                 let { type='play' } = move;
-                if (type === 'pass')
-                  return void addRecord('roundMove', { 0: round, 1: matchLofter, 'piece?': null });
+                if (type === 'pass') return addRecord('roundMove', { 0: round, 1: matchLofter, 'piece?': null });
                 
                 let { trg } = move;
-                if (!trg) throw Error(`Missing "trg"`);
+                if (!trg) throw Error(`Api: must supply "trg"`).mod({ move });
                 
                 let { piece: pieceUid } = move;
                 let pieces = await match.withRh('piece', 'all');
                 let piece = pieces.find(piece => piece.uid === pieceUid).val;
-                if (!piece) throw Error(`Invalid piece uid: ${pieceUid}`).mod({ move });
-                if (piece.getValue('wait') > 0) throw Error(`Selected piece needs to wait`);
                 
-                let vm = getValidMoves(pieces, matchLofter, piece)
+                if (!piece) throw Error(`Api: invalid piece uid`).mod({ move });
+                if (piece.getValue('wait') > 0) throw Error(`Api: piece must wait`).mod({ move });
+                
+                let vm = getValidMoves(makeBoard(pieces), matchLofter, piece)
                   .find(vm => vm.col === trg.col && vm.row === trg.row)
                   .val;
                 
                 // Ensure the provided move is a valid move
-                if (!vm) return;
+                if (!vm) throw Error(`Api: invalid move!`);
                 
                 let { col, row, cap } = vm;
                 
@@ -1013,12 +1034,12 @@ global.rooms['chess2'] = async chess2Keep => {
                     loc:    { ms: 2000, curve: 'linear' },
                     size:   { ms: 2000, curve: 'linear' }
                   }},
-                  
                   w: '120%', h: '120%', colour: '#faa2'
                   
                 }));
                 
-                setTimeout(() => holdReal.mod({ colour: '#c2a4', w: '200%', h: '200%' }), 100);
+                dep(TimerSrc({ ms: 100 }))
+                  .route(() => holdReal.mod({ colour: '#c2a4', w: '200%', h: '200%' }));
                 
                 dep(TimerSrc({ ms: 2000 })).route(() => {
                   holdReal.end();
@@ -1050,7 +1071,7 @@ global.rooms['chess2'] = async chess2Keep => {
                 
                 let pieces = await match.withRh('piece', 'all');
                 
-                for (let { col, row, cap } of getValidMoves(pieces, matchLofter, piece)) {
+                for (let { col, row, cap } of getValidMoves(makeBoard(pieces), matchLofter, piece)) {
                   
                   let optionReal = dep(boardReal.addReal('option', {
                     Geom: { anchor: 'tl', w: tileVal(1), h: tileVal(1), ...tileCoord(col, row) },
@@ -1155,7 +1176,7 @@ global.rooms['chess2'] = async chess2Keep => {
           
           /// {ABOVE=
           let { status=null } = msg ?? {};
-          if (![ 'chill', 'learn', 'queue', 'lobby' ].has(status)) throw Error('Invalid status!');
+          if (![ 'chill', 'learn', 'queue' ].has(status)) throw Error('Invalid status!');
           if (status === lofter.getValue('status')) throw Error(`Can't change to same status!`);
           
           sc(`Lofter "${lofter.getValue('term')}" status: "${lofter.getValue('status')}" -> "${status}"`);
@@ -1183,7 +1204,171 @@ global.rooms['chess2'] = async chess2Keep => {
         
       });
       
+    },
+    
+    /// {LOADTEST=
+    loadtestConf: {
+      
+      fn: ({ belowHut, loft, lofter, dep }) => {
+        
+        let randInt = (min, max) => min + Math.floor(Math.random() * (max - min));
+        let randPick = arr => arr[randInt(0, arr.length)];
+        let randomWeight = opts => {
+          
+          let total = opts.reduce((m, opt) => m + opt.weight, 0);
+          let rand = Math.random() * total;
+          
+          let amt = 0;
+          for (let opt of opts) {
+            if (rand >= amt && rand < amt + opt.weight) return opt.val;
+            amt += opt.weight;
+          }
+          
+        };
+        
+        // Different automated Belows move at different rates
+        let ms = 800 + Math.floor(Math.random() * 400);
+        dep(TimerSrc({ ms, num: Infinity })).route(async () => {
+          
+          let lofterStatus = await lofter.withRh('lofterStatus', 'one');
+          if (!lofterStatus) return;
+          
+          let status = lofterStatus.getValue('status');
+          
+          let actions = belowHut.loadtestActions.toObj(act => [ act.command, act ]);
+          if (status === 'chill' && actions.has('c2.changeStatus')) {
+            
+            actions['c2.changeStatus'].act({ status: randomWeight([
+              { weight: 1, val: 'learn' },
+              { weight: 4, val: 'queue' }
+            ])});
+            
+          } else if (status === 'learn') {
+            
+            actions['c2.changeStatus'].act({ status: randomWeight([
+              { weight: 1, val: 'chill' },
+            ])});
+            
+          } else if (status === 'queue') {
+            
+            let queue = await lofterStatus.withRh('queue', 'one');
+            if (queue) {
+              
+              let action = randomWeight([
+                { weight:  1, val: 'back' },
+                { weight: 10, val: 'stay' }
+              ]);
+              if      (action === 'back') actions['c2.leaveQueue'].act();
+              else if (action === 'stay') { /* Do nothing */ }
+              
+            } else {
+              
+              let action = randomWeight([
+                { weight: 1, val: 'back' },
+                { weight: 3, val: 'play' },
+              ]);
+              if      (action === 'back') actions['c2.changeStatus'].act({ status: 'chill' });
+              else if (action === 'play') actions['c2.enterQueue'].act({ term: '' });
+              
+            }
+            
+          } else if (status === 'match') {
+            
+            let matchLofter = await lofterStatus.withRh('matchLofter', 'one');
+            let roundMove = await matchLofter.withRh('roundMove', 'one');
+            let match = matchLofter.m('match');
+            
+            let outcome = await match.withRh('outcome', 'one');
+            if (outcome) {
+              
+              let action = randomWeight([
+                { weight:  1, val: 'play' },
+                { weight: 10, val: 'wait' }
+              ]);
+              
+              if      (action === 'wait') { /* Do nothing */ }
+              else if (action === 'play') actions['c2.changeStatus'].act({ status: 'queue' });
+              
+            } else {
+              
+              if (roundMove) {
+                
+                let action = randomWeight([
+                  { weight: 1, val: 'retract' },
+                  { weight: 2, val: 'hold' },
+                ]);
+                if      (action === 'retract') actions['c2.retractMove']?.act();
+                else if (action === 'hold')    { /* Do nothing */ }
+                
+              } else {
+                
+                let action = randomWeight([
+                  { weight:   1, val: 'resign' },
+                  { weight:   3, val: 'pass' },
+                  { weight:  60, val: 'think' },
+                  { weight: 150, val: 'play' },
+                ]);
+                
+                if (action === 'resign' && actions['c2.resign']) {
+                  
+                  actions['c2.resign'].act();
+                  
+                } else if (action === 'pass' && actions['c2.submitMove']) {
+                  
+                  actions['c2.submitMove'].act({ type: 'pass' });
+                  
+                } else if (action === 'play' && actions['c2.submitMove']) {
+                  
+                  let myColour = matchLofter.getValue('colour');
+                  let pieces = await match.withRh('piece', 'all');
+                  let board = makeBoard(pieces);
+                  
+                  pieces = [ ...pieces ].filter(piece => piece.getValue('colour') === myColour)
+                    .sort(() => Math.random() - 0.6)
+                    .sort(() => Math.random() - 0.4)
+                    .sort(() => Math.random() - 0.5);
+                  
+                  let decision = null;
+                  for (let piece of pieces) {
+                    let validMoves = getValidMoves(board, matchLofter, piece);
+                    validMoves.each(v => v.cap = v.cap?.getValue() ?? null);
+                    if (!validMoves.length) continue;
+                    
+                    decision = { piece, ...randPick(validMoves) };
+                    break;
+                  }
+                  
+                  if (!decision) {
+                    
+                    actions['c2.submitMove'].act({ type: 'pass' });
+                    
+                  } else {
+                    
+                    let { piece, col, row } = decision;
+                    if (!actions['c2.submitMove']) gsc('WHATTT');
+                    actions['c2.submitMove'].act({ piece: piece.uid, trg: { col, row } });
+                    
+                  }
+                  
+                } else if (action === 'think') {
+                  
+                  // Do nothing
+                  
+                }
+                
+              }
+              
+            }
+            
+          }
+          
+        });
+        
+      }
+      
     }
+    /// =LOADTEST}
+    
   });
   
 };

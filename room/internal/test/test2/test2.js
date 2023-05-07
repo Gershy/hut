@@ -13,9 +13,13 @@ global.rooms['internal.test.test2'] = async foundation => {
     above: async (hut, appRec, real, dep) => {
       
       /// {ABOVE=
-      hut.addKnownRealDependencies([ 'Geom', 'Axis1d', 'Decal', 'Text', 'Press' ]);
-      /// =ABOVE}
-      
+      hut.addPreloadRooms([
+        'reality.layout.Geom',
+        'reality.layout.Axis1d',
+        'reality.layout.Decal',
+        'reality.layout.Text',
+        'reality.layout.Press'
+      ]);
       dep.scp(hut, 'hut.owned/above', async (owned, dep) => { // "get all 'hut.owned' Recs where `hut` is the PAR
         
         // Whenever a new KidHut appears create a "user" Record
@@ -25,6 +29,7 @@ global.rooms['internal.test.test2'] = async foundation => {
         if (!user) hut.addRecord('t2.user', [ appRec, kidHut ], { name: kidHut.uid });
         
       });
+      /// =ABOVE}
       
     },
     below: async (hut, appRec, real, dep) => {

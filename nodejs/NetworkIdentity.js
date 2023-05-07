@@ -1273,15 +1273,10 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
   },
 
-  async startServers() {
-    
-    // TODO: Certify every NetworkAddress in `this.servers`
-    
-    return this.runManagedServers();
-    
-  },
   addServer(server) { this.servers.add(server); },
   runOnNetwork() {
+    
+    // TODO: (?) Certify every NetworkAddress in `this.servers`
     
     let sc = Form.subcon.server;
     
@@ -1370,15 +1365,31 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
           //   which is just less than 25 days; if we need to wait more
           //   than 25 days we'll call do multiple `setTimeout` calls in
           //   series until we've waited long enough
-          while (tmp.onn() && sgn.validity.expiryMs > Date.now()) {
-            let route = null;
+          while (true) {
+            
+            if (tmp.off()) break;
+            
+            let msRemaining = sgn.validity.expiryMs - Date.now();
+            if (msRemaining < 0) break;
+            
+            sc(`NetworkIdentity current signing info remains valid for ${(msRemaining / (1000 * 60 * 60 * 24)).toFixed(2)} days`);
+            
+            // Wait until either the timeout elapses or `tmp` ends
+            let [ route, timeout ] = [ null, null ];
             await Promise(rsv => {
-              let msRemaining = sgn.validity.expiryMs - Date.now();
-              sc(`NetworkIdentity current signing info remains valid for ${(msRemaining / (1000 * 60 * 60 * 24)).toFixed(2)} days`);
-              setTimeout(rsv, Math.min(msRemaining, 2 ** 31 - 1)); // Resolve on timeout (2^31-1 is the max timeout duration)
-              route = tmp.route(rsv);                              // Resolve if `tmp` is Ended (signalling Server should stop)
+              
+              // Resolve on timeout (2^31-1 is the max timeout duration)
+              timeout = setTimeout(rsv, Math.min(msRemaining, 2 ** 31 - 1));
+              
+              // Resolve if `tmp` is Ended (meaning Server was stopped)
+              route = tmp.route(rsv);
+              
             });
+            
+            // Cleanup
+            clearTimeout(timeout);
             route.end();
+            
           }
           
         }

@@ -65,7 +65,6 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       key,
       desc: () => `HttpSession(http${secure ? 's' : ''}://${netAddr}:${port} / ${key})`,
       currentCost: () => session.queueRes.length ? 0.5 : 0.75,
-      timeout: null,
       netAddr: req.connection.remoteAddress,
       
       queueRes: [],

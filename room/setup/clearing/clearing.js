@@ -109,7 +109,7 @@ Object.assign(global, {
       // is probably worth the overhead of calling `Object.assign` x2 
       return Object.assign(this, Object.assign({}, ...o).map(v => v));
     },
-    merge(o) {
+    merge(o) { // Modifies `this` in-place
       for (let [ k, v ] of o) {
         // `skip` can be passed to remove properties
         if (v === skip) { delete this[k]; continue; }
@@ -848,12 +848,13 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   mapCmpToSrc: (file, row, col) => ({ file, row, col, context: null }),
   
   // Subcon debug
-  subcon: (diveToken, opts={}) => {
+  subcon: (diveToken) => {
     //let dive = token.dive(diveToken);
     let sc = (...args) => subconOutput(sc, ...args);
     C.def(sc, 'conf', { writable: true, value: null });
     return Object.assign(sc, {
       term: diveToken,
+      kid: dt2 => global.subcon([ ...token.dive(diveToken), ...token.dive(dt2) ]),
       get conf() {
         C.def(sc, 'conf', { value: subconOpts(sc) });
         return sc.conf;

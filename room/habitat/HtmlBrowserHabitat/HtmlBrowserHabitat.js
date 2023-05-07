@@ -6,7 +6,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
   // for all road names, but "hutify" won't work if prefixed. Maybe the
   // best solution requires changing how the Hut form handles "hutify"
   
-  init({ prefix='html', name='hut', rootRoadSrcName='hutify', debug=false, ...moreOpts }={}) {
+  init({ prefix='html', name='hut', rootRoadSrcName='hutify', ...moreOpts }={}) {
     
     /// {ABOVE=
     let { multiUserSim=null } = moreOpts;
@@ -35,7 +35,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
     let cmd = (name, fn) => tmp.endWith(hut.makeCommandHandler(name, fn));
     
     // TODO: `tmp.end()` should undo these dependency additions
-    hut.addKnownRoomDependencies([
+    hut.addPreloadRooms([
       'setup.hut',
       'record',
       'record.bank.WeakBank',
@@ -68,6 +68,13 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       let protocolRooms = Set(protocolsDef.toArr(v => v.protocol))
         .toArr(v => `habitat.HtmlBrowserHabitat.hutify.protocol.${v}`);
       
+      let preloadRooms = [ ...hut.preloadRooms ];
+      for (let r of preloadRooms) {
+        if (!r.hasHead('reality.layout.')) continue;
+        r = r.slice('reality.layout.'.length);
+        preloadRooms.push(`habitat.HtmlBrowserHabitat.hutify.layoutTech.${r[0].lower()}${r.slice(1)}`);
+      }
+      
       let { textSize='100%' } = msg;
       reply(String.multiline(`
         <!doctype html>
@@ -91,6 +98,9 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
               body > * { width: 100%; height: 100%; }
             </style>
             
+            ${roomScript('setup.clearing', 'defer')}
+            ${roomScript('habitat.HtmlBrowserHabitat.hutify.foundation', 'defer')}
+            ${protocolRooms.toArr(n => roomScript(n, 'defer')).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
             <script>
               Object.assign(window.global = window, { rooms: Object.create(null) });
               let evtSrc = EventTarget.prototype;
@@ -101,10 +111,8 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
               // Can't use window.evt - Tmp hasn't been defined yet
               window.addEventListener('DOMContentLoaded', e=>rooms['habitat.HtmlBrowserHabitat.hutify.foundation']().init(e));
             </script>
-            ${roomScript('setup.clearing', 'defer')}
-            ${roomScript('habitat.HtmlBrowserHabitat.hutify.foundation', 'defer')}
-            ${protocolRooms.toArr(n => roomScript(n, 'defer')).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
-            ${hut.knownRoomDependencies.toArr(n => roomScript(n, 'async')).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
+            
+            ${preloadRooms.toArr(n => roomScript(n, 'async')).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
 
             <link rel="stylesheet" type="text/css" href="${uri({ path: this.prefix + '.css' })}">
             
@@ -128,7 +136,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       `));
       
     });
-    cmd(`${this.prefix}.icon`, msg => msg.reply(keep('/file:repo/room/setup/asset/hut.ico')));
+    cmd(`${this.prefix}.icon`, msg => msg.reply(keep('/[file:repo]/room/setup/asset/hut.ico')));
     cmd(`${this.prefix}.room`, async ({ src, reply, msg }) => {
       
       // TODO: Watch out for traversal with room name??

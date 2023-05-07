@@ -66,10 +66,16 @@ require('./nodejs/foundation.js')({ hutFp: __dirname, conf: (() => { // Parse co
       if (!arg) continue;
       
       if (isForm(arg, String)) {
+        
         // String values without "=" are the single hoist room name;
-        // those with "=" represent key-value pairs
-        let [ k, v=null ] = arg.cut('=');
-        arg = (v === null) ? { 'deploy.loft.def': k } : { [k]: v };
+        // those with "=" represent key-value pairs; those with ":="
+        // represent key-value pairs with eval'd values
+        let isEval = arg.has(':=');
+        let [ k, v=null ] = arg.cut(isEval ? ':=' : '=');
+        if (v === null) [ k, v ] = [ 'deploy.loft.def', k ];
+        
+        arg = { [k]: isEval ? eval(`(${v})`) : v };
+        
       }
       
       if (!isForm(arg, Object)) throw Error(`Failed to process argument "${arg}"`);
@@ -77,6 +83,7 @@ require('./nodejs/foundation.js')({ hutFp: __dirname, conf: (() => { // Parse co
       conf.merge(arg);
       
     }
+    
     return conf;
     
   } catch (err) {

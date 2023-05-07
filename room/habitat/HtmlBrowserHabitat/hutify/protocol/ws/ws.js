@@ -8,12 +8,12 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.protocol.ws'] = () => ({ createS
     src: Src(),
   });
   
-  // TODO: Detect ssl properly!
-  let socket = new WebSocket(`${netIden.secureBits ? 'wss' : 'ws'}://${netProc}/?trn=sync&hid=${hut.hid}`);
-  socket.evt('error', err => subcon('warning')('Socket error event', err));
-  
-  server.src.route(session => {
+  let session = (() => {
     
+    let socket = new WebSocket(`${netIden.secureBits ? 'wss' : 'ws'}://${netProc}/?trn=sync&hid=${hut.hid}`);
+    socket.evt('error', err => subcon('warning')('Socket error event', err));
+    
+    let session = Tmp({ key: '!above', currentCost: () => 0.3, tell: Src(), hear: Src() });
     server.endWith(session, 'tmp');
     session.endWith(socket.evt('close', () => session.end()));
     
@@ -23,7 +23,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.protocol.ws'] = () => ({ createS
     });
     session.endWith(() => socket.close());
     
-    socket.addEventListener('message', ({ data: msg, ...stuff }) => {
+    socket.addEventListener('message', ({ data: msg /*, ...stuff */ }) => {
       msg = jsonToVal(msg);
       if (msg) session.hear.send({ ms: getMs(), reply: null, msg });
     });
@@ -43,13 +43,12 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.protocol.ws'] = () => ({ createS
       
     });
     
-  });
+    return session;
+    
+  })();
   
-  soon(() => {
-    // Every Server immediately creates a Session with the AboveHut
-    let session = Tmp({ key: '!above', currentCost: () => 0.3, tell: Src(), hear: Src() });
-    server.src.send(session);
-  });
+  // Every Server immediately creates a Session with the AboveHut
+  soon(() => server.src.send(session));
   
   return server;
   

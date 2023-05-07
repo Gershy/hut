@@ -526,7 +526,7 @@ let makeSchema = () => {
       debug: true,
       assert: true,
       wrapBelowCode: false,
-      loadTest: false,
+      loadtest: false,
       ...val
     };
     
@@ -684,13 +684,13 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     let horzDash = () => horzDashChars[Math.floor(Math.random() * horzDashChars.length)];
     let junction = () => junctionChars[Math.floor(Math.random() * junctionChars.length)];
     
-    let resolveFnArgs = (sc, args) => args.map(arg => isForm(arg, Function) ? arg(sc) : arg);
     setSubconOutput((sc, ...args) => {
       
       /// {DEBUG=
       let trace = Error('trace').getInfo().trace;
       /// =DEBUG}
-      thenAll(resolveFnArgs(sc, args), args => {
+      
+      thenAll(args.map(arg => isForm(arg, Function) ? arg(sc) : arg), args => {
         
         // Prevent stdout output if "output.format" is false
         // DO NOT PERFORM DEBUGGING SUBCON OUTPUT IN THIS FUNCTION
@@ -799,13 +799,13 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       }
       
     };
-    global.conf = diveToken => {
+    global.conf = (diveToken, def=null) => {
       
       // Resolve nested Arrays and period-delimited Strings
       let dive = token.dive(diveToken);
       let ptr = conf;
       for (let pc of dive) {
-        if (!isForm(ptr, Object) || !ptr.has(pc)) return null;
+        if (!isForm(ptr, Object) || !ptr.has(pc)) return def;
         ptr = ptr[pc];
       }
       return ptr;
@@ -899,8 +899,8 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
   // Depends on `global.conf`
   await (async () => {
     
-    let srcKeep = hutKeep.seek([ 'room' ]);
-    let cmpKeep = hutKeep.seek([ 'mill', 'cmp' ]);
+    let srcKeep = keep('[file:code:src]');
+    let cmpKeep = keep('[file:code:cmp]');
     let loadedRooms = Map();
     
     // Note these "default features" should only define features which
@@ -913,7 +913,6 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       assert: conf('deploy.maturity') === 'dev',
       ...conf('deploy.features')
     };
-    
     let getCompiledCode = async (keep, features=Object.stub) => {
       
       // Take a Keep containing source code and return compiled code and
@@ -1094,8 +1093,8 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       
       let srcKeep = keep([ 'file:code:src', ...roomDive, `${roomDive.slice(-1)[0]}.js` ]);
       let { lines, offsets } = await getCompiledCode(srcKeep, {
-        above: bearing === 'above',
-        below: bearing === 'below',
+        above: [ 'above', 'between' ].has(bearing),
+        below: [ 'below', 'between' ].has(bearing)
       });
       
       if (!lines.count()) {
@@ -1323,8 +1322,11 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
   // RUN DAT
   await (async () => {
     
+    let activateTmp = Tmp();
+    process.on('exit', () => activateTmp.end());
+    
     // Wipe out code from previous run
-    await keep([ 'file:code:cmp' ]).rem();
+    await keep('[file:code:cmp]').rem();
     
     let { uid=null, prefix, bankKeep: bankKeepTerm, host: hosting } = global.conf('deploy');
     let { heartbeatMs } = hosting;
@@ -1342,12 +1344,10 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     
     let recMan = record.Manager({ bank });
     let aboveHut = hut.AboveHut({ hid: uid, prefix, par: null, isHere: true, recMan, heartbeatMs });
-    
-    // Get a NetworkIdentity to handle the hosting
-    let NetworkIdentity = require('./NetworkIdentity.js');
-    let netIden = NetworkIdentity(hosting.netIden);
+    activateTmp.endWith(aboveHut);
     
     // Server management
+    let NetworkIdentity = require('./NetworkIdentity.js');
     let getSessionKey = (payload) => {
       
       let { trn='anon', hid=null } = payload;
@@ -1373,6 +1373,8 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       return aboveHut.makeBelowHut(hid).hid;
       
     };
+    
+    let netIden = NetworkIdentity(hosting.netIden);
     let servers = hosting.protocols.toArr(serverOpts => {
       
       // TODO: Abstract `${netAddr}:${port}` as a NetworkProcessAddress
@@ -1459,11 +1461,27 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       throw Error(`Unfamiliar protocol: ${protocol}`);
       
     });
+    let loadtest = null;
+    
+    if (conf('deploy.features.loadtest', false)) {
+      
+      // Cleanup any previous loadtests
+      await keep('[file:mill].loadtest').rem();
+      
+      loadtest = await require('./loadtest/loadtest.js')({
+        aboveHut,
+        netIden,
+        instancesKeep: keep('[file:mill].loadtest'),
+        getServerSessionKey: getSessionKey
+      });
+      
+      servers.push(loadtest.server);
+      
+    }
     
     // Each server gets managed by the NetworkIdentity, and is routed
     // so that Sessions are put in contact with the Hut
     for (let server of servers) {
-      
       netIden.addServer(server);
       aboveHut.addServerInfo({ ...server }.slice([ 'secure', 'protocol', 'netAddr', 'port' ]));
       server.src.route((session) => {
@@ -1522,21 +1540,17 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         });
         
       });
-      
+      activateTmp.endWith(server);
     }
     
+    activateTmp.endWith(netIden.runOnNetwork());
+    
     let loft = await getRoom(global.conf('deploy.loft'));
-    await loft.open({ hereHut: aboveHut, netIden });
+    let loftTmp = await loft.open({ hereHut: aboveHut, netIden });
+    activateTmp.endWith(loftTmp);
     
-    process.on('exit', () => {
-      aboveHut.end();
-      for (let server of servers) server.serverShut();
-    });
-    
-    if (conf('deploy.features.loadTest') ?? false) require('./loadTest/main.js')({
-      aboveHut,
-      netIden
-    });
+    // Run load-testing if configured
+    if (loadtest) activateTmp.endWith(loadtest.run());
     
   })();
   

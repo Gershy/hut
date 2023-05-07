@@ -101,21 +101,19 @@ global.rooms['collabowrite'] = async foundation => {
       
       /// {ABOVE=
       
-      hut.addKnownRoomDependencies([
+      hut.addPreloadRooms([
         'logic.MemSrc',
         'logic.Chooser',
         'logic.FnSrc',
         'logic.TimerSrc',
         'persona',
-        'clock'
-      ]);
-      hut.addKnownRealDependencies([
-        'Decal',
-        'Geom',
-        'Text',
-        'TextInput',
-        'Press',
-        'Axis1d'
+        'clock',
+        'reality.layout.Decal',
+        'reality.layout.Geom',
+        'reality.layout.Text',
+        'reality.layout.TextInput',
+        'reality.layout.Press',
+        'reality.layout.Axis1d'
       ]);
       
       let rand = random.NativeRandom();
