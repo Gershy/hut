@@ -558,14 +558,7 @@ let makeSchema = () => {
     return val;
     
   };
-  deployScm.seek('subconKeep').fn = (val, schema, chain) => {
-    
-    if (val === null) return null;
-    validate(chain, val, 'keep');
-    return val;
-    
-  };
-  deployScm.seek('bankKeep').fn = (val, schema, chain) => {
+  deployScm.seek('keep').fn = (val, schema, chain) => {
     
     if (val === null) return null;
     validate(chain, val, 'keep');
@@ -573,7 +566,88 @@ let makeSchema = () => {
     
   };
   
+  deployScm.seek('therapy').fn = (val, schema, chain) => {
+    if (val === null) return null;
+    return schema.inner(val, chain);
+  };
+  deployScm.seek('therapy.keep').fn = (val, schema, chain) => {
+    
+    if (val === null) return null;
+    validate(chain, val, 'keep');
+    return val;
+    
+  };
+  deployScm.seek('therapy').kids.host = hostsScm;
+  
   return scm;
+  
+};
+
+let makeSchema2 = () => {
+  
+  // TODO: `Schema` is so frickin inelegant!! Need ability to:
+  // - know the value being provided for it
+  // - know about all (resolved/unresolved) parent values?
+  //   - So ports can default based on whether they're secure or not
+  // - somehow differentiate between arbitrary object and structured
+  //   object - so subcon chains don't need ".kid." everywhere
+  // - Work with links to other objects in the schema ("@" syntax?) for
+  //   both value reuse, and for specifying necessary "context" (e.g.
+  //   can't return a port value until the host security is known - this
+  //   also probably requires a need for relative "@" links!)
+  // - Differentiate between "default" and "null" values - e.g. the
+  //   default value for "confKeeps" isn't `null` - it's an Array with
+  //   a single item, the "def" conf keep!
+  // - Should probably provide a dummy "values" slot within the conf for
+  //   any random stuff the user wants to declare once and reuse! E.g.
+  //   reuse the same set of values for different NetworkIdentities -
+  //   also is there a conceivable way to reuse some configured details,
+  //   but then replace/merge in different values? Could be powerful!
+  //   Would probably require functions to be inserted literally into
+  //   def.js (or even eval'd from the commandline??), which I suppose
+  //   is ok as long as the final resolved conf is JSON-compatible?
+  // - TODO: more stuff........
+  
+  let trickleFormat = (trace, value, result, opts) => {
+    
+    let orig = value;
+    
+    for (let [ Form, fn ] of opts)
+      if ((value == null && value === Form) || isForm(value, Form))
+        value = fn(value);
+    
+    if (!isForm(result, Array)) result = [ result ];
+    for (let R of result)
+      if ((value == null && value === R) || isForm(value, R))
+        return value;
+    
+    throw Error(trace
+      ? `Api: ${trace.desc()} expects ${result.join(' || ')}; got ${getFormName(orig)}`
+      : `Api: expects ${result.join(' || ')}; got ${getFormName(orig)}`
+    ).mod({ value: orig });
+    
+  };
+  
+  let keepSchema = {
+    format: (value, trace, context) => {
+      if (!isForm(value, String)) throw Error(`Api: ${trace.desc()} expects String`).mod({ value });
+      return token.dive(value);
+    }
+  };
+  
+  let confKeepsSchema = {
+    format: (value, trace, context) => {
+      
+      value = trickleFormat(trace, value, Array, [
+        [ null,   val => [] ],
+        [ String, val => val.split(',') ],
+        [ Object, val => val.toArr(Function.stub) ],
+      ]);
+      
+      
+      
+    }
+  };
   
 };
 
@@ -794,7 +868,9 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       hosts: {},
       deploy: {
         uid: null,
-        subconKeep: '[file:mill].sc',
+        therapy: {
+          keep: '[file:mill].sc'
+        },
         maturity: 'alpha'
       }
       
@@ -1328,7 +1404,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     // Wipe out code from previous run
     await keep('[file:code:cmp]').rem();
     
-    let { uid=null, prefix, bankKeep: bankKeepTerm, host: hosting } = global.conf('deploy');
+    let { uid=null, prefix, keep: bankKeepTerm, host: hosting, therapy } = global.conf('deploy');
     let { heartbeatMs } = hosting;
     
     let { hut, record, WeakBank=null, KeepBank=null } = await global.getRooms([
@@ -1548,6 +1624,16 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     let loft = await getRoom(global.conf('deploy.loft'));
     let loftTmp = await loft.open({ hereHut: aboveHut, netIden });
     activateTmp.endWith(loftTmp);
+    
+    if (therapy) {
+      
+      // Note that Keep is allowed to be null (volatile subcon logs) but
+      // "host" is mandatory
+      let { host, keep } = therapy;
+      
+      gsc({ therapy });
+      
+    }
     
     // Run load-testing if configured
     if (loadtest) activateTmp.endWith(loadtest.run());

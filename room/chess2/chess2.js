@@ -1,6 +1,6 @@
 global.rooms['chess2'] = async chess2Keep => {
   
-  let sc = subcon('chess2.gameplay');
+  let sc = subcon('loft.chess2');
   
   let rooms = await getRooms([
     
@@ -1368,7 +1368,6 @@ global.rooms['chess2'] = async chess2Keep => {
       
     }
     /// =LOADTEST}
-    
   });
   
 };

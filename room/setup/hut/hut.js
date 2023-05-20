@@ -344,11 +344,9 @@ global.rooms['setup.hut'] = async () => {
     },
     getRoadFor(trg) { return trg.getRoadFor(this); },
     makeBelowUid() {
-      
       return [ this.childUidCnt++, Math.floor(Math.random() * 62 ** 8) /* TODO: Use a stock random instance? */ ]
         .map(v => v.encodeStr(String.base62, 8))
         .join('');
-      
     },
     makeBelowHut(hid) {
       

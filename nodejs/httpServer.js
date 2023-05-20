@@ -479,7 +479,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
       let replyPrm = null;
       let replyable = () => {
-        let timeout = setTimeout(() => replyPrm.reject(Error('Timeout').mod({ keyedMsg })), 10 * 1000); // 10sec is v generous
+        let timeout = setTimeout(() => replyPrm.reject(Error('Timeout').mod({ keyedMsg })), 5 * 1000); // 5 sec is v generous
         replyPrm = Promise.later();
         replyPrm.then(() => clearTimeout(timeout));
         replyPrm.fail(err => (session.end(), err.propagate()));
@@ -567,3 +567,81 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   return tmp;
   
 };
+
+// TODO: Note this isn't being run - although it's the better approach!
+// As long as refactoring this, fix Comms!!
+//    | { hid: 'anHid', trn: 'someTrn', command: 'myCommand', ...args }
+// should become
+//    | { hid: '...', trn: '...', command: '...', args: { ... } }
+if (0) (async () => {
+  
+  let RoadAuthority = await getRoom('setup.hut.hinterland.RoadAuthority');
+  let HttpRoadAuthority = form({ name: 'HttpRoadAuthority', has: { RoadAuthority }, props: (forms, Form) => ({
+    
+    init({ ...args }) {
+      
+      forms.RoadAuthority.init.call(this, { protocol: 'http', ...args });
+      Object.assign(this, {
+        
+      });
+      
+    },
+    
+    async doOpen() {
+      // Run the server, make it call `hearComm` as necessary. Note that
+      // stupidly, the old above implementation passes the https cert
+      // data to `serverOpen`, not to the actual constructor!! This will
+      // need to change when using RoadAuthority!
+      throw Error('Plsssjjj implement');
+      
+      require('http').createServer((req, res) => {
+        
+        let ms = getMs();
+        
+        let msg = {
+          hid: null, command: 'hutify', trn: 'anon',
+          ...propsFromPath(),
+          ...propsFromQuery(),
+          ...propsFromFragment(),
+          ...propsFromCookie(),
+          ...propsFromBody()
+        };
+        let { hid=null, command, trn } = msg;
+        
+        // If command is "hutify" must use synchronous reply - or think
+        // of it this way: we deny a client's ability to do "hutify"
+        // asynchronously or anonymously!
+        if (command === 'hutify') trn = 'sync';
+        
+        let reply = msg => {
+          // TODO: reply using `res`; if `trn === 'sync'` ensure `reply`
+          // is called within time limit! If no reply within this time
+          // limit reply "503 Service Unavailable" (?) and do some high
+          // visibility subcon stuff
+        };
+        let { result } = this.hear(hid, req.connection.remoteAddress, ms, reply, msg);
+        
+        if (result === 'belowHutUnavailable') {
+          
+          /* TODO: Clear cookies and redirect client */
+          
+        } else if (result === 'sucess') {
+          
+          // Yay! Nothing to do besides subcon
+          
+        } else {
+          
+          throw Error(`Unexpected result: "${result}"`);
+          
+        }
+        
+      });
+      
+    },
+    async doShut() {
+      throw Error('Plsshhss implement');
+    },
+    
+  })});
+  
+})();
