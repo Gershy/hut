@@ -104,10 +104,11 @@ Object.assign(global, {
     empty() { for (let k in this) return false; return true; },
     gain(...o) {
       // Note for performance we combine all source Objects first, to
-      // reduce the number of items that need to be checked for skips
-      // (and note that skips are simply applied by using `map`). This
-      // is probably worth the overhead of calling `Object.assign` x2 
-      return Object.assign(this, Object.assign({}, ...o).map(v => v));
+      // reduce the number of items that need to be checked for skips -
+      // probably worth the overhead of calling `Object.assign` x2
+      let gain = Object.assign({}, ...o);
+      for (let k in gain) if (gain[k] === skip) delete gain[k];
+      return Object.assign(this, gain);
     },
     merge(o) { // Modifies `this` in-place
       for (let [ k, v ] of o) {
@@ -935,12 +936,12 @@ Object.assign(global, global.rooms['setup.clearing'] = {
       return tok.flat(Infinity);
       
     },
-    diveOn: (tok, ptr) => {
+    diveOn: (tok, ptr, def=null) => {
       let dive = token.dive(tok);
       let cnt = 0;
       for (let pc of dive) {
         if (!isForm(ptr, Object) || !ptr.has(pc))
-          return { found: false, val: null, deepest: ptr, remaining: dive.slice(cnt) };
+          return { found: false, val: def, deepest: ptr, remaining: dive.slice(cnt) };
         ptr = ptr[pc];
         cnt++;
       }

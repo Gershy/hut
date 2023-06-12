@@ -83,12 +83,6 @@ global.rooms['Hinterland'] = async () => {
         
         // Not applying any Follows here!! So Below can only follow
         // stuff via `resolveHrecsAndFollowRecs`!!!!
-        // HEEERE if this works it means there's no need for
-        // `Hut(...).addRecord`!! The single "c2." in chess2 may be
-        // possible to remove if the Hinterlands automatically adds a
-        // Record binding a Hut to a "Lofter" - i.e. a user of a Hut,
-        // and this rec establishes a way of talking about a BelowHut
-        // but the prefix is automatically set!!
         
         // args ~= [ 'eg.type', [ memRec1, memRec2 ], 'val', ... ]
         if (isForm(args[0], String))
