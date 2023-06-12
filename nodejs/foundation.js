@@ -1270,11 +1270,8 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     
     let t = getMs();
     
-    let conf = await resolveConf(rawConf);
-    gsc({ conf });
-    process.exit(0);
-    
-    global.conf = (diveToken, def=null) => token.diveOn(diveToken, conf, def).val;
+    let globalConf = await resolveConf(rawConf);
+    global.conf = (diveToken, def=null) => token.diveOn(globalConf, conf, def).val;
     
     /*
     // Additional Conf value sanitization and defaulting:
@@ -1295,7 +1292,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     }
     */
     
-    setupSc(`Configuration processed after ${(getMs() - t).toFixed(2)}ms`, conf);
+    setupSc(`Configuration processed after ${(getMs() - t).toFixed(2)}ms`, globalConf);
     
   })();
   
