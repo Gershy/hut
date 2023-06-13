@@ -1,7 +1,6 @@
 'use strict';
 
 require('../room/setup/clearing/clearing.js');
-let Schema = require('./Schema.js');
 
 // Make Errors better! (https://v8.dev/docs/stack-trace-api)
 Error.prepareStackTrace = (err, callSites) => {
@@ -23,19 +22,34 @@ Error.prepareStackTrace = (err, callSites) => {
   
 };
 
-// Set up basic process monitoring
+// Set up basic monitoring
 (() => {
   
   // https://nodejs.org/api/process.html#signal-events
   let origExit = process.exit;
   process.exitHard = () => origExit(1);
-  let revealBufferedLogs = () => {
-    
-  };
   process.exit = (...args) => {
+    
+    if (global.bufferedLogs?.length) {
+      
+      let util = require('util');
+      let logs = global.bufferedLogs;
+      global.bufferedLogs = null;
+      global.subconOutput = (sc, ...args) => console.log('\n' + [
+        `SUBCON: "${sc.term}"`,
+        ...args.map(a => isForm(a, String) ? a : util.inspect(a, { colors: false, depth: 7 }))
+      ].join('\n').indent('# '));
+      
+      console.log('OOOOOFFFF... fatal error initializing; dumping logs:');
+      for (let log of logs) global.subconOutput(...log);
+      
+      global.subconOutput({ term: 'earlyExitTrace' }, new Error('hi').stack);
+      
+    }
+    
     gsc(Error('Process explicitly exited').desc());
-    revealBufferedLogs();
     return origExit.call(process, ...args);
+    
   };
   
   // NOTE: Trying to catch SIGKILL or SIGSTOP crashes posix!
@@ -50,14 +64,6 @@ Error.prepareStackTrace = (err, callSites) => {
   let onErr = err => {
     if (err['~suppressed']) return; // Ignore suppressed errors
     gsc(`Uncaught ${getFormName(err)}:`, err.desc());
-    
-    if (global.bufferedLogs?.length) {
-      console.log('Error before logs displayable; outputting raw logged data:');
-      let logs = global.bufferedLogs;
-      global.bufferedLogs = null;
-      for (let args of logs) console.log(...args.map(a => a?.constructor?.name));
-    }
-    
     origExit(1);
   };
   process.on('uncaughtException', onErr);
@@ -68,7 +74,7 @@ Error.prepareStackTrace = (err, callSites) => {
 
 let { rootTransaction: rootTrn, Filepath, FsKeep } = require('./filesys.js');
 
-let niceRegex = (...args) => {
+let niceRegex = (...args /* flags, niceRegexStr | niceRegexStr */) => {
   
   // Allows writing self-documenting regular expressions
   
@@ -79,7 +85,7 @@ let niceRegex = (...args) => {
   cols.each(col => col.size > 1 && col.rem(' '));
   
   /// {DEBUG=
-  for (let col of cols) if (col.size > 1) throw Error(`Conflicting values at column ${num}: [${[ ...col ].join('')}]`);
+  for (let [ num, col ] of cols.entries()) if (col.size > 1) throw Error(`Conflicting values at column ${num}: [${[ ...col ].join('')}]`);
   /// =DEBUG}
   
   return RegExp(cols.map(col => [ ...col ][0]).join(''), flags);
@@ -103,987 +109,6 @@ let captureInlineBlockCommentRegex = niceRegex('g', String.baseline(`
   |         [^'"] ['][^']*['] ["][^"]*["] #[^#]*#       [/][*](?:            )*[*][/]
 `).replace(/#/g, '`')); // Simple way to include literal "`" in regex
 
-let makeSchema = () => {
-  
-  let resolveKeep = val => val;
-  let error = (chain, val, msg, err=Error()) => err.propagate({ msg: `Api: config at "${chain.join('.')}": ${msg}`, chain, val });
-  let validate = (chain, val, v=null) => {
-    
-    if (v === null) throw Error('Supply 3rd param');
-    
-    if (isForm(v, String)) {
-      
-      if (v === 'integer') {
-        validate(chain, val, { form: Number });
-        if (!val.isInteger()) error(chain, val, 'requires integer');
-      }
-      
-      if (v === 'keep') validate(chain, val, token.dive); // "keep" values are simply valid for `token.dive`
-      
-    } else if (isForm(v, Function)) {
-      
-      try { v(val); } catch (err) { error(chain, val, err.message); }
-      
-    } else {
-      
-      let { numberBound=null, arrayBound=null, stringBound=null } = v;
-      if (numberBound) {
-        validate(chain, val, { form: Number });
-        if (numberBound.has('min') && val < numberBound.min) error(chain, val, `must have minimum value ${numberBound.min} but got ${val}`);
-        if (numberBound.has('max') && val > numberBound.max) error(chain, val, `must have maximum value ${numberBound.max} but got ${val}`);
-      }
-      if (arrayBound) {
-        validate(chain, val, { form: Array });
-        if (arrayBound.has('min') && val.length < arrayBound.min) error(chain, val, `must have minimum ${arrayBound.min} item(s) but got ${val.length}`);
-        if (arrayBound.has('max') && val.length > arrayBound.max) error(chain, val, `must have maximum ${arrayBound.max} item(s) but got ${val.length}`);
-      }
-      if (stringBound) {
-        validate(chain, val, { form: String });
-        if (stringBound.has('min') && val.length < stringBound.min) error(chain, val, `must have minimum ${stringBound.min} item(s) but got ${val.length}`);
-        if (stringBound.has('max') && val.length > stringBound.max) error(chain, val, `must have maximum ${stringBound.max} item(s) but got ${val.length}`);
-      }
-      
-      let { form=null, regex=null, desc=null, options=null } = v;
-      if (form) {
-        if (!isForm(val, form)) error(chain, val, `requires ${form.name} but got ${getFormName(val)}`);
-      }
-      if (regex) {
-        validate(chain, val, { form: String });
-        if (!regex.test(val)) error(chain, val, `must match ${regex}${desc ? ' (' + desc + ')' : ''}`);
-      }
-      if (options) {
-        if (!options.has(val)) error(chain, val, `valid options are [ ${options.join(', ')} ] (got ${val})`);
-      }
-      
-    }
-    
-    return val;
-    
-  };
-  
-  let scm = Schema({ name: '(root)' });
-  
-  scm.seek('confKeeps').fn = (val, schema, chain) => {
-    
-    if (val === String) val = val.split(',').map(v => v.trim());
-    
-    if (isForm(val, Array)) val = val.map(diveToken => {
-      let dive = token.dive(diveToken);
-      return [ dive.slice(-1)[0], diveToken.replace(/[./]/g, '') ];
-    });
-    
-    validate(chain, val, { form: Object });
-    
-    return schema.inner(val, chain);
-    
-  };
-  scm.seek('confKeeps.*').fn = (val, schema, chain) => {
-    validate(chain, val, token.dive);
-    return val;
-  };
-  
-  let subconScm = scm.seek('subcon');
-  subconScm.fn = (val, schema, chain) => {
-    if (val === null) val = {};
-    validate(chain, val, { form: Object });
-    val = {
-      description: '<default>',
-      output: '<default>',
-      ...val
-    };
-    return schema.inner(val, chain);
-  };
-  subconScm.seek('description').fn = (val, schema, chain) => {
-    
-    if (val === null) val = '(No description)';
-    return validate(chain, val, { form: String });
-    
-  };
-  subconScm.seek('output').fn = (val, schema, chain) => {
-    
-    if (val === null) val = {};
-    validate(chain, val, { form: Object });
-    val = { inline: '<default>', therapist: '<default>', ...val };
-    
-    return schema.inner(val, chain);
-    
-  };
-  subconScm.seek('output.inline').fn = (val, schema, chain) => {
-    
-    if (val === null) val = 0;
-    if ([ 0, 1 ].has(val)) val = val === 1;
-    validate(chain, val, { form: Boolean });
-    return val;
-    
-  };
-  subconScm.seek('output.therapist').fn = (val, schema, chain) => {
-    
-    if (val === null) val = 0;
-    if ([ 0, 1 ].has(val)) val = val === 1;
-    validate(chain, val, { form: Boolean });
-    return val;
-    
-  };
-  subconScm.seek('format').fn = (val, schema, chain) => {
-    
-    // TODO: Functions can't be synced?
-    return val ? validate(chain, val, { form: Function }) : null;
-    
-  };
-  subconScm.seek('kids').all = subconScm;
-  subconScm.seek('*').fn = (val, schema, chain) => val; // Allow arbitrary properties
-  
-  let shellScm = scm.seek('shell');
-  shellScm.seek('openssl').fn = (val, schema, chain) => {
-    
-    if (val === null) val = 'openssl';
-    return validate(chain, val, { form: String });
-    
-  };
-  
-  scm.seek('netIdens').fn = (val, schema, chain) => {
-    
-    if (val === null) val = {};
-    return val;
-    
-  };
-  let idenScm = scm.seek('netIdens.*');
-  idenScm.fn = (val, schema, chain) => {
-    
-    validate(chain, val, { form: Object });
-    
-    if (!val.has('name')) val = { name: chain.slice(-2)[0], ...val };
-    
-    return schema.inner(val, chain);
-    
-  };
-  idenScm.seek('name').fn = (val, schema, chain, name) => {
-    validate(chain, val, { regex: /^[a-z][a-zA-Z]*$/, desc: 'only alphabetic characters and beginning with a lowercase character' });
-    return val;
-  };
-  idenScm.seek('keep').fn = (val, schema, chain) => {
-    
-    if (val === null) return null;
-    validate(chain, val, 'keep');
-    return val;
-    
-  };
-  idenScm.seek('secureBits').fn = (val, schema, chain) => {
-    
-    if (val === null) val = 0;
-    
-    /// {DEBUG=
-    validate(chain, val, 'integer');
-    validate(chain, val, { numberBound: { min: 0 } });
-    /// =DEBUG}
-    
-    return val;
-    
-  };
-  idenScm.seek('details').fn = (val, schema, chain) => {
-    
-    if (val === null) val = {};
-    validate(chain, val, { form: Object });
-    
-    val = {
-      geo: 'earth.continent.country.city.part',
-      org: 'company.division.division.division',
-      email: 'unknownOwner@hut.com',
-      ...val
-    };
-    
-    return schema.inner(val, chain);
-    
-  };
-  idenScm.seek('details.*').fn = (val, schema, chain) => {
-    
-    validate(chain, val, { form: String });
-    return val;
-    
-  };
-  idenScm.seek('details.geo').fn = (val, schema, chain) => {
-    
-    validate(chain, val, { form: String });
-    
-    let pcs = val.split('.');
-    while (pcs.length < 6) pcs.push('?');
-    return pcs.slice(0, 6).join('.');
-    
-  };
-  idenScm.seek('details.org').fn = (val, schema, chain) => {
-    
-    validate(chain, val, { form: String });
-    
-    let pcs = val.split('.');
-    while (pcs.length < 6) pcs.push('?');
-    return pcs.slice(0, 6).join('.');
-    
-  };
-  idenScm.seek('email').fn = (val, schema, chain) => {
-    
-    if (val === null) return null;
-    
-    validate(chain, val, { regex: /^[^@]+[@][^.]+[.][.*]$/, desc: 'a valid email address' });
-    
-    return val;
-    
-  };
-  idenScm.seek('password').fn = (val, schema, chain) => {
-    
-    if (val === null) return null;
-    
-    validate(chain, val, { form: String });
-    
-    return val;
-    
-  };
-  idenScm.seek('certificateType').fn = (val, schema, chain) => {
-    
-    if (val === null) return null;
-    return validate(chain, val, { form: String });
-    
-  };
-  
-  let hostsScm = scm.seek('hosts.*');
-  hostsScm.fn = (val, schema, chain) => {
-    
-    validate(chain, val, { form: Object });
-    return schema.inner(val, chain);
-    
-  };
-  hostsScm.seek('netIden').fn = (val, schema, chain) => {
-    
-    // @netIdens.tester
-    // @netIdens.main
-    // { name: 'zzz', keep: '/file:mill/netIden/zzz', secureBits: 2048, ... }
-    
-    if (isForm(val, String))
-      return validate(chain, val, { regex: /^@netIdens./, desc: 'begins with "@netIdens.", e.g. "@netIdens.myIden"' });
-    
-    return idenScm.getConf(val, chain);
-    
-  };
-  hostsScm.seek('netAddr').fn = (val, schema, chain) => {
-    
-    // 'localhost'
-    // '127.0.0.1'
-    // '211.122.42.7'
-    // '<autodetect>'
-    
-    validate(chain, val, { form: String });
-    
-    return val;
-    
-  };
-  hostsScm.seek('dns').fn = val => {
-    if (val === null) val = '1.1.1.1+1.0.0.1'; // TODO: Cloudflare?
-    if (isForm(val, String)) val = val.split('+').map(v => v.trim());
-    if (!isForm(val, Array)) throw Error('Api: "dns" must be Array');
-    return val;
-  };
-  hostsScm.seek('heartbeatMs').fn = val => {
-    if (val === null) val = 20 * 1000;
-    if (!isForm(val, Number)) throw Error('Api: "hearbeatMs" must be a Number');
-    if (!val.isInteger()) throw Error('Api: "heartbeatMs" must be an integer');
-    if (val < 1000) throw Error('Api: heartbeat must be <= 1hz');
-    return val;
-  };
-  hostsScm.seek('protocols').fn = (val, schema, chain) => {
-    
-    if (isForm(val, String)) {
-      
-      let splitReg = niceRegex('g', String.baseline(`
-        | ([a-zA-Z]+)
-        |            (?:           )?
-        |               [:]([0-9]+)
-        |                            (?:             )?
-        |                               [<]([^>]*)[>]
-        |                                              (?:$|[+])
-      `));
-      let matches = val.match(splitReg);
-      val = matches.map(str => str.hasTail('+') ? str.slice(0, -1) : str);
-      
-    }
-    
-    if (isForm(val, Array)) val = val.toObj((v, i) => [ i, v ]);
-    
-    validate(chain, val, { form: Object });
-    return schema.inner(val, chain);
-    
-  };
-  hostsScm.seek('protocols.*').fn = (val, schema, chain) => {
-    
-    // 'http'
-    // 'http:80<gzip+deflate>'
-    // 'http<gzip>'
-    // 'http:80'
-    // { protocol: 'http', port: 80, compression: 'gzip+deflate' }
-    // { protocol: 'http', port: 80, compression: [ 'gzip', 'deflate' ] }
-    // Note that "port" can also be left `null` - it takes an annoying
-    // amount of context to pick a default port because we need to know
-    // about the protocol but also the NetworkIdentity (which isn't
-    // readily referenced from here)
-    
-    if (isForm(val, String)) {
-      
-      let regex = /^([a-zA-Z]+)(?:[:]([0-9]+))?(?:[<]([^>]+)[>])?(?:$|[+])$/;
-      
-      validate(chain, val, { regex, desc: 'e.g. "http:80<gzip+deflate>", "http<deflate>", "http:80", "http"' });
-      let [ , protocol, port='<default>', compression=null ] = val.match(regex);
-      val = { protocol, port, compression };
-      
-    }
-    
-    validate(chain, val, { form: Object });
-    return schema.inner({ port: '<default>', ...val }, chain);
-    
-  };
-  hostsScm.seek('protocols.*.protocol').fn = (val, schema, chain) => validate(chain, val, { form: String });
-  hostsScm.seek('protocols.*.port').fn = (val, schema, chain) => {
-    
-    if (isForm(val, String)) val = parseInt(val, 10);
-    validate(chain, val, { numberBound: { min: 0 } });
-    return val;
-    
-  };
-  hostsScm.seek('protocols.*.compression').fn = (val, schema, chain) => {
-    
-    if (val === null) val = 'gzip+deflate';
-    if (isForm(val, String)) val = val.split('+');
-    validate(chain, val, { form: Array });
-    return val;
-    
-  };
-  
-  let loftDefsScm = scm.seek('loftDefs.*')
-  loftDefsScm.fn = (val, schema, chain) => {
-    
-    // 'c2.chess2 /[file:mill]/bank/cw0'
-    // 'c2.chess2'
-    // { prefix: 'c2', room: 'chess2', bank: '[file:mill].bank.cw0' }
-    
-    //if (val === null) return skip;
-    
-    if (isForm(val, String)) {
-      
-      let regex = /^([a-zA-Z0-9]+)[.]([a-zA-Z0-9]+)(?:[ ]+(.*))?$/;
-      validate(chain, val, { regex });
-      
-      let [ , prefix, room, keep=null ] = val.match(regex);
-      val = { prefix, room, keep };
-      
-    }
-    
-    validate(chain, val, { form: Object });
-    return schema.inner(val, chain);
-    
-  };
-  loftDefsScm.seek('prefix').fn = (val, schema, chain) => {
-    
-    validate(chain, val, { stringBound: { min: 1, max: 5 } });
-    return val;
-    
-  };
-  loftDefsScm.seek('room').fn = (val, schema, chain) => {
-    
-    validate(chain, val, { form: String });
-    
-    return val;
-    
-  };
-  loftDefsScm.seek('keep').fn = (val, schema, chain) => {
-    
-    if (val === null) return null;
-    
-    validate(chain, val, 'keep');
-    
-    return val;
-    
-  };
-  
-  let deployScm = scm.seek('deploy');
-  deployScm.seek('maturity').fn = (val, schema, chain) => {
-    
-    if (val === null) val = 'alpha';
-    validate(chain, val, { options: [ 'dev', 'beta', 'alpha' ] });
-    return val;
-    
-  };
-  deployScm.seek('bearing').fn = (val, schema, chain) => {
-    
-    if (val === null) val = 'above';
-    validate(chain, val, { options: [ 'above', 'below', 'between' ] });
-    return val;
-    
-  };
-  deployScm.seek('features').fn = (val, schema, chain) => {
-    
-    if (val === null) val = {};
-    if (isForm(val, Array)) val = Set(val);
-    if (isForm(val, Set)) val = val.toObj(prop => [ prop, true ]);
-    validate(chain, val, { form: Object });
-    return {
-      debug: true,
-      assert: true,
-      wrapBelowCode: false,
-      loadtest: false,
-      ...val
-    };
-    
-  };
-  deployScm.seek('features.*').fn = (val, schema, chain) => {
-    
-    validate(chain, chain.slice(-1)[0], { regex: /^[a-zA-Z]+$/, desc: 'a valid feature key' });
-    validate(chain, val, { form: Boolean });
-    return val;
-    
-  };
-  deployScm.kids.host = hostsScm;
-  deployScm.seek('uid').fn = (val, schema, chain) => {
-    
-    if (val === null) val = Math.random().toString(36).slice(2, 8);
-    validate(chain, val, { form: String });
-    return val;
-    
-  };
-  deployScm.seek('prefix').fn = (val, schema, chain) => {
-    
-    validate(chain, val, { stringBound: { min: 2, max: 4 } });
-    return val;
-    
-  };
-  deployScm.seek('loft').fn = (val, schema, chain) => {
-    
-    validate(chain, val, { form: String });
-    return val;
-    
-  };
-  deployScm.seek('keep').fn = (val, schema, chain) => {
-    
-    if (val === null) return null;
-    validate(chain, val, 'keep');
-    return val;
-    
-  };
-  
-  deployScm.seek('therapy').fn = (val, schema, chain) => {
-    if (val === null) return null;
-    return schema.inner(val, chain);
-  };
-  deployScm.seek('therapy.keep').fn = (val, schema, chain) => {
-    
-    if (val === null) return null;
-    validate(chain, val, 'keep');
-    return val;
-    
-  };
-  deployScm.seek('therapy').kids.host = hostsScm;
-  
-  return scm;
-  
-};
-
-let resolveConf = async userConf => {
-  
-  // !<ref>
-  // !<rem>
-  // !<def>
-  
-  let churn = async (actions) => {
-    
-    let remaining;
-    if (isForm(actions, Object)) remaining = { ...actions };
-    if (isForm(actions, Array)) remaining = actions.toObj((v, i) => [ i, v ]);
-    if (!remaining) throw Error('Api: "actions" must resolve to Object/Array');
-    
-    let values = {};
-    while (true) {
-      let errs = [];
-      let progress = false;
-      let furtherActions = {};
-      
-      for (let [ k, fn ] of remaining) {
-        
-        let actionResult; /* { result, actions: { ... } }*/
-        try { actionResult = await fn(values); } catch (err) { errs.push(err); continue; }
-        
-        if (!isForm(actionResult, Object)) throw Error('woAWwowowwaa').mod({ actionResult, fn: fn.toString() });
-        
-        progress = true;
-        values[k] = actionResult.result;
-        delete remaining[k];
-        
-        if (actionResult.has('actions')) {
-          /// {DEBUG=
-          if (!isForm(actionResult.actions, Object)) throw Error('OOofofowwwwsoasaoo').mod({ actionResult });
-          /// =DEBUG}
-          Object.assign(furtherActions, actionResult.actions);
-        }
-        
-      }
-      
-      if (!progress) throw Error('Api: unable to make progress on churn').mod({
-        remaining,
-        cause: errs,
-        partiallyChurnedValues: values
-      });
-      Object.assign(remaining, furtherActions);
-      
-      if (remaining.empty()) break;
-      
-    }
-    return values;
-    
-  };
-  let ipRegex = /[0-9]{1,3}(?:[.][0-9]{1,3}){3}/;
-  
-  let Confy = form({ name: 'Confy', props: (forms, Form) => ({
-    
-    $getValue: (values, relChain, relOrAbsDive) => {
-      
-      let dive = token.dive(relOrAbsDive);
-      let [ cmp0, ...cmps ] = dive;
-      /// {DEBUG=
-      if (![ '[abs]', '[rel]' ].has(cmp0)) throw Error('Api: first dive component must be "[abs]" or "[rel]"');
-      /// =DEBUG}
-      
-      let absCmps = [];
-      for (let cmp of cmp0 === '[rel]' ? [ ...relChain, ...cmps ] : cmps)
-        absCmps[cmp !== '[par]' ? 'push' : 'pop'](cmp); // `absCmp.pop(cmp)` simply ignores `cmp`
-      
-      // Imagine a case where `values` looks like:
-      //    | {
-      //    |   'root.heap.netIdens.myNetIden': {
-      //    |     'details.email': 'myEmail'
-      //    |   }
-      //    | }
-      // And `relOrAbsDive` looks like:
-      //    | "[abs].root.heap.netIdens.myNetIden.detail.email"
-      // (or generally any case where a mixture of dive-keys and actual
-      // references need to be traversed in order to find the value)
-      // TODO: This can be implemented more efficiently; still a search
-      // against the whole `values` Object, for each key in the current
-      // subset of `value` check if each key is a prefix of
-      // `relOrAbsDive`, and for each which is, recurse on that key!
-      // BETTER TODO: simply always store `values` in "diveKeysResolved"
-      // format????
-      values = values.diveKeysResolved(); // Creates new value (no in-place modification)
-      
-      let { found, val } = token.diveOn(absCmps, values);
-      if (found) return val;
-      
-      throw Error(
-        (absCmps.join('.') === cmps.join('.'))
-          ? `Api: conf path "${relChain.join('.')}" requires missing chain "${absCmps.join('.')}"`
-          : `Api: conf path "${relChain.join('.')}" requires missing chain "${absCmps.join('.')}" (provided as "${dive.join('.')}")`
-      ).mod({ rel: relChain.join('.') });
-        
-    },
-    
-    init({ id=Math.random().toString(36).slice(2, 4) }={}) {
-      Object.assign(this, { id });
-    },
-    async resolve({ conf, chain, getValue /* (relOrAbsDive) => someResolvedValue */ }) {
-      throw Error('Not implemented');
-    },
-    getAction(conf, chain=['root']) {
-      return values => {
-        
-        let getValue = Form.getValue.bound(values, chain);
-        
-        if (isForm(conf, String) && conf.hasHead('!<ref>'))
-          conf = getValue(conf.slice('!<ref>'.length).trim());
-        
-        return this.resolve({ conf, chain, getValue });
-        
-      };
-    }
-    
-  })});
-  let ConfySet = form({ name: 'ConfySet', has: { Confy }, props: (forms, Form) => ({
-    init({ kids={}, all=null, headOp=null, tailOp=null, ...args }={}) {
-      forms.Confy.init.call(this, args);
-      Object.assign(this, { kids: Object.plain(kids), all, headOp, tailOp });
-    },
-    resolve({ conf, chain, getValue }) {
-      
-      // We'll have problems if the parent needs its children resolved
-      // first; the parent would throw an Error saying something like
-      // "a.b.c requires a.b.c.d", which short-circuits before "a.b.c.d"
-      // is returned as a further Action, meaning "a.b.c.d" will never
-      // be initialized (results in churn failure)
-      
-      if (conf === '!<def>') conf = {};
-      if (isForm(conf, String)) conf = conf.split(/[,+]/);
-      if (isForm(conf, Array)) conf = conf.toObj((v, i) => [ i, v ]);
-      if (!isForm(conf, Object)) throw Error(`Api: "${chain.join('.')}" expects value resolving to Object; got ${getFormName(conf)}`).mod({ value: conf });
-      
-      // Process `conf` before recursing (e.g. add some default items)
-      if (this.headOp) conf = this.headOp({ conf, chain, getValue });
-      
-      // Pass the '!<def>' value for every Kid
-      let orig = conf;
-      conf = { ...{}.map.call(this.kids, v => '!<def>'), ...orig };
-      
-      let actions = {};
-      for (let [ k, v ] of conf) {
-        if (v === '!<rem>') continue;
-        let kid = this.kids[k] ?? this.all;
-        let kidChain = [ ...chain, k ];
-        if (!kid) {
-          actions[kidChain.join('.')] = () => Error(`Api: "${chain.join('.')}" has no Kid to handle "${k}"`).propagate({ conf });
-          continue;
-        }
-        actions[kidChain.join('.')] = kid.getAction(v, kidChain);
-      }
-      
-      // Processing afterwards looks a bit tricky - we add another
-      // pending Action for the parent alongside all the Kid Actions -
-      // this one will be able to reference values resulting from Kid
-      // Actions! Note that this additional Action for the parent never
-      // produces any further Actions!
-      if (this.tailOp) actions[chain.join('.')] = values => tailOp({ conf, chain, getValue });
-      
-      // Note that `result` can be overwritten by `tailOp`, and also by
-      // merging in the results from all Kids
-      return { result: conf, actions };
-    }
-  })});
-  let ConfyVal = form({ name: 'ConfyVal', has: { Confy }, props: (forms, Form) => ({
-    
-    $settlers: Object.plain({
-      bln: { target: Boolean, tries: [
-        [ Number, v => !!v ],
-        [ String, v => {
-          if ([ 'yes', 'true', 't', 'y' ].has(v.lower())) return true;
-          if ([ 'no', 'false', 'f', 'n' ].has(v.lower())) return false;
-          throw Error(`Api: string doesn't resolve to Boolean: "${v}"`);
-        }]
-      ]},
-      str: { target: String, tries: [] },
-      num: { target: Number, tries: [] },
-      arr: { target: Array, tries: [
-        [ String, v => v.split(/[,+]/).map(v => v.trim()) ],
-        [ Object, v => v.toArr(v => v) ]
-      ]}
-    }),
-    $rejectDefault: ({ chain }) => { throw Error(`Api: "${chain.join('.')}" was not provided a value and does not support a default value`); },
-    
-    init({ def=Form.rejectDefault, nullable=def===null, settle=null, fn=null, ...args }={}) {
-      
-      // - `def` is the default value or a synchronous Function giving a
-      //   default value if the Confy receives "!<def>"
-      // - `settle` is { target: Form, tries: [ [ Form1, fn1 ], [ Form2, fn2 ], ... ] }
-      //   The settle "tries" must resolve the incoming value to the
-      //   settle "target"; the only exception is if the incoming value
-      //   is null and `nullable` is set to true
-      // - `fn` arbitrarily rejects or transforms the given value; `fn`
-      //   gets the final say after all logic has finished!
-      
-      if (isForm(settle, String)) {
-        if (!Form.settlers[settle]) throw Error(`Api: invalid settle String "${settle}"`);
-        settle = Form.settlers[settle];
-      }
-      if (settle && !isForm(settle, Object)) throw Error(`Api: when provided "settle" must resolve to Array; got ${getFormName(settle)}`);
-      if (!hasForm(def, Function)) def = Function.createStub(def);
-      
-      forms.Confy.init.call(this, args);
-      Object.assign(this, { def, settle, fn, nullable });
-      
-    },
-    async resolve({ conf, chain, getValue }) {
-      if (conf === '!<def>') conf = this.def({ conf, chain, getValue });
-      
-      if (this.settle) {
-        let { target, tries } = this.settle;
-        for (let [ Form, fn ] of tries) if (isForm(conf, Form)) conf = fn(conf);
-        
-        let valid = (conf === null && this.nullable) || isForm(conf, target);
-        if (!valid) throw Error(`Api: "${chain.join('.')}" couldn't resolve value to ${target.name}`);
-      }
-      
-      if (this.fn) {
-        try { conf = await this.fn(conf, { getValue }); } catch (err) {
-          if (!err.message.hasHead('Api: ')) err.message = `Api: "${chain.join('.')}" ${err.message}`;
-          throw err;
-        }
-      }
-      
-      return { result: conf };
-    }
-    
-  })});
-  
-  let confyRoot = ConfySet();
-  confyRoot.kids.confKeeps = ConfySet({
-    // Add in the default "def.js" Conf Keep
-    headOp: ({ conf }) => ({ defInMill: '/[file:mill]/conf/def.js', ...conf }),
-    all: ConfyVal({ settle: 'str' })
-  });
-  confyRoot.kids.heap = ConfyVal({ def: null }); // Accept arbitrary values
-  let confyEnv = confyRoot.kids.environment = ConfySet();
-  let confyDep = confyRoot.kids.deploy = ConfySet({ all: ConfySet() });
-  
-  // Environment values include:
-  // - "device": metadata about this device running Hut
-  // - "shell": info related to executing shell utilities
-  // - "dnsProviders": hosts to use for resolving dns queries
-  confyEnv.kids.device = ConfySet({ kids: {
-    platform: ConfyVal({ settle: 'str', def: () => require('os').platform() }),
-    operatingSystem: ConfyVal({ settle: 'str', def: () => require('os').version() }),
-    numCpus: ConfyVal({ settle: 'num', def: () => require('os').cpus().length })
-  }});
-  confyEnv.kids.shell = ConfySet({
-    kids: { openssl: ConfyVal({ settle: 'str', def: 'openssl' }) }
-  });
-  confyEnv.kids.dnsProviders = ConfyVal({ settle: 'arr', def: '1.1.1.1+1.0.0.1', fn: dnsNetAddrs => {
-    
-    if (dnsNetAddrs.length < 2) throw Error('requires minimum 2 dns values');
-    for (let na of dnsNetAddrs)
-      if (!ipRegex.test(na))
-        throw Error(`requires valid network addresses; got "${na}"`);
-    return dnsNetAddrs;
-    
-  }});
-  
-  // Make some reusable Confy instances:
-  let confyNetIden = ConfySet({ kids: {
-    
-    name: ConfyVal({ settle: 'str', fn: (name, chain) => {
-      if (!/^[a-z][a-zA-Z]*$/.test(name)) throw Error(`requires a String of alphabetic characters beginning with a lowercase character`);
-      return name;
-    }}),
-    keep: ConfyVal({ settle: 'str' }),
-    secureBits: ConfyVal({ settle: 'num', fn: (bits, chain) => {
-      if (!bits.isInteger()) throw Error(`requires an integer number`);
-      if (bits < 0) throw Error(`requires a value >= 0`);
-      return bits;
-    }}),
-    email: ConfyVal({ settle: 'str', fn: email => {
-      email = email.trim();
-      if (!/^[^@]+[@][^.]+[.][^.]/.test(email)) throw Error(`must be a valid email`);
-      return email;
-    }}),
-    password: ConfyVal({ settle: 'str', def: null }),
-    certificateType: ConfyVal({ settle: 'str', def: null }),
-    details: ConfySet({
-      kids: {
-        geo: ConfyVal({ settle: 'str', fn: geo => {
-          let pcs = val.split('.');
-          while (pcs.length < 6) pcs.push('?');
-          return pcs.slice(0, 6).join('.');
-        }}),
-        org: ConfyVal({ settle: 'str', fn: org => {
-          let pcs = val.split('.');
-          while (pcs.length < 6) pcs.push('?');
-          return pcs.slice(0, 6).join('.');
-        }}),
-      },
-      all: ConfyVal({ settle: 'str' }) // Arbitrary String values
-    })
-    
-  }});
-  
-  // Deploy values include:
-  // - "subcon": control how debug information is output
-  // - "host": hosting info for this deployment
-  confyDep.all.kids.subcon = onto(ConfySet({
-    headOp: ({ chain, conf, getValue }) => {
-      let isRootSc = /^root[.]deploy[.][0-9]+[.]subcon$/.test(chain.join('.'));
-      let params = isRootSc ? { chatter: 1, therapy: 0 } : getValue('[rel].[par].params');
-      return { params }.merge(conf);
-    },
-    kids: {
-      params: ConfySet({
-        kids: {
-          chatter: ConfyVal({ settle: 'bln' }),
-          therapy: ConfyVal({ settle: 'bln' })
-        },
-        all: ConfyVal() // Accept aribtrary values
-      })
-    }
-  }), confy => confy.all = confy);
-  confyDep.all.kids.host = ConfySet({ kids: {
-    
-    netIden: confyNetIden,
-    netAddr: ConfyVal({ settle: 'str', def: '!<auto>', fn: async (netAddr, { getValue }) => {
-      
-      // 'localhost'
-      // '127.0.0.1'
-      // '211.122.42.7'
-      // '!<auto>'
-      
-      // TODO: HEEERE!!! Copy from (removed) foundationNodejs, then
-      // immediately test NetworkIdentity, Hosting, etc. within conf! I
-      // think typed lists are totally (like netIdens, hosts, etc.) are
-      // totally deprecated; there should be one big blob of "stored"
-      // values, and it can be naively referenced however a user wants
-      // to set up their configuration. At the end of the day the
-      // "deploy" property validates all values so that all
-      // NetworkIdentities, hosts, etc. must be properly configured!
-      
-      if (netAddr === '!<auto>') {
-        
-        // Autodetect the best NetworkAddress to use for this machine
-        
-        let dnsNetAddrs = getValue('[abs].root.environment.dnsProviders');
-        let dnsResolver = new (require('dns').promises.Resolver)();
-        dnsResolver.setServers(dnsNetAddrs); // Use DNS servers defined in Conf
-        
-        let ips = require('os').networkInterfaces()
-          .toArr(v => v).flat()                       // Flat list of all interfaces
-          .map(v => v.internal ? skip : v.address);   // Remove internal interfaces
-        
-        let potentialHosts = (await Promise.all(ips.map(async ip => {
-          
-          ip = ip.split('.').map(v => parseInt(v, 10));
-          
-          // TODO: support ipv6!
-          if (ip.count() !== 4 || ip.find(v => !isForm(v, Number)).found) return skip;
-          
-          let type = (() => {
-            
-            // Reserved:
-            // 0.0.0.0 -> 0.255.255.255
-            if (ip[0] === 0) return 'reserved';
-            
-            // Loopback:
-            // 127.0.0.0 -> 127.255.255.255
-            if (ip[0] === 127) return 'loopback';
-            
-            // Private; any of:
-            // 10.0.0.0 -> 10.255.255.255,
-            // 172.16.0.0 -> 172.31.255.255,
-            // 192.168.0.0 -> 192.168.255.255
-            if (ip[0] === 10) return 'private'
-            if (ip[0] === 172 && ip[1] >= 16 && ip[1] <= 31) return 'private';
-            if (ip[0] === 192 && ip[1] === 168) return 'private';
-            
-            // Any other address is public
-            return 'external';
-            
-          })();
-          
-          // Reserved hosts are ignored entirely
-          if (type === 'reserved') return skip;
-          
-          // Loopback hosts are the least powerful
-          if (type === 'loopback') return { type, rank: 0, ip, addr: null };
-          
-          // Next-best is private; available on local network. Note
-          // that class C ips (whose first component is >= 192) are
-          // preferable to class B ips (below that range)
-          if (type === 'private' && ip[0] <= 191) return { type, rank: 1, ip, addr: null };
-          if (type === 'private' && ip[0] >= 192) return { type, rank: 2, ip, addr: null };
-          
-          // Remaining types will be "external"; within "external"
-          // there are three different ranks (from worst to best:)
-          // - Non-reversible
-          // - Reversible but lacking A-record
-          // - Reversible with A-record present (globally addressable)
-          try {
-            
-            // Reverse `ip` into any related hostnames
-            let addrs = await dnsResolver.reverse(ip.map(n => n.toString(10)).join('.'));
-            
-            // Only consider hostnames with available A records
-            return Promise.all(addrs.map(async addr => {
-              
-              // If an A record is found this is the most powerful
-              // address possible (globally addressable)
-              try {
-                await dnsResolver.resolve(addr, 'A');
-                return { type: 'public', rank: 5, ip, addr };
-              } catch (err) {
-                // Reversable ips without A records are one level down
-                // from globally addressable results
-                return { type: 'publicNoHost', rank: 4, ip, addr };
-              }
-              
-            }));
-            
-          } catch (err) {
-            
-            // The address is external but not reversible
-            return { type: 'external', rank: 3, ip, addr: null };
-            
-          }
-          
-        }))).flat();
-        
-        let bestRank = Math.max(...potentialHosts.map(v => v.rank));
-        let bestHosts = potentialHosts.map(v => v.rank === bestRank ? (v.addr || v.ip.join('.')) : skip);
-        
-        netAddr = bestHosts.length ? bestHosts[0] : 'localhost';
-        
-      }
-      
-      if (netAddr !== 'localhost' && !ipRegex.test(netAddr))
-        throw Error(`requires valid network address; got "${netAddr}"`);
-      
-      return netAddr;
-      
-    }})
-    
-  }});
-  
-  // TODO: Right now this mirrors the present-use logic, except some
-  // logic related to defaulting ports is still missing
-  
-  let fullConf = {};
-  let extendConf = async (cf, { tolerateErrors=false }) => {
-    
-    // Modifies `fullConf` in-place
-    
-    fullConf.merge(cf.diveKeysResolved());
-    
-    let values;
-    try {
-      values = await churn({ root: confyRoot.getAction(fullConf, [ 'root' ]) });
-    } catch (err) {
-      if (!tolerateErrors) throw err;
-      if (!/unable to make progress on churn/.test(err.message)) throw err.mod(msg => `Unexpected error while churning: ${mg}`);
-      values = err.partiallyChurnedValues;
-    }
-    
-    fullConf = values.diveKeysResolved().root;
-    
-  };
-  
-  await extendConf(userConf, { tolerateErrors: true });
-  
-  if (fullConf.has('confKeeps') && !fullConf.confKeeps.empty()) {
-    
-    let confKeeps = await Promise.all(fullConf.confKeeps.map(async (confKeepDiveToken, term) => {
-      
-      let confKeep = global.keep(confKeepDiveToken);
-      let content = null;
-      try {
-        content = await confKeep.getContent('utf8');
-        content = content.replace(/[;\s]+$/, ''); // Remove tailing whitespace and semicolons
-        return await eval(`(${content})`);
-      } catch (err) {
-        err.propagate({ term, confKeep: confKeep.desc(), content });
-      }
-      
-    }));
-    
-    // Apply all KeepConfs
-    for (let [ confKeepKey, confKeep ] of confKeeps) await extendConf(confKeep, { tolerateErrors: true });
-    
-  }
-  
-  // Always finally merge the UserConf (it overrides any KeepConf)
-  try { await extendConf(userConf, { tolerateErrors: false }); } catch (err) {
-    if (!/unable to make progress on churn/.test(err.message)) throw err;
-    gsc([ 'Invalid configuration:', ...err.cause.map(err => `- ${err.message}`) ].join('\n'));
-    process.exitHard();
-  }
-  
-  return fullConf;
-  
-};
-
 module.exports = async ({ hutFp, conf: rawConf }) => {
   
   // Extend `global` with all the functionality needed to run Huts
@@ -1094,8 +119,13 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
   hutFp = Filepath(hutFp);
   let hutKeep = FsKeep(await rootTrn.kid(hutFp), hutFp);
   
+  global.conf = Object.assign(() => null, { raw: {} });
   global.bufferedLogs = [];
-  global.subconOutput = (...args) => void global.bufferedLogs.push(args);
+  global.subconOutput = (...args) => void (global.bufferedLogs ?? []).push(args);
+  global.subconOpts = sc => {
+    if (![ 'gsc', 'setup' ].has(sc.term)) return null;
+    return { chatter: true, therapy: false };
+  };
   
   let setupSc = subcon('setup');
   setupSc(`utc: ${getMs()}\npid: ${process.pid}`);
@@ -1161,12 +191,14 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       
     });
     
-    global.keep = (diveToken) => rootKeep.seek(token.dive(diveToken));
+    global.keep = (diveToken) => {
+      return rootKeep.seek(token.dive(diveToken));
+    };
     
   })();
   
   // Upgrade `global.subconOutput`
-  // - No dependencies (but using subcons requires `global.conf`)
+  // - Uses `global.subconOpts`
   await (async () => {
     
     let util = require('util');
@@ -1175,7 +207,6 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       writable: true,
       value: function(depth, opts, custom) { return this.desc(); }
     });
-    
     global.formatAnyValue = (val, { colors=true, depth=10 }={}) => util.inspect(val, { colors, depth });
     
     let vertDashChars = '166,124,33,9597,9599,9551,9483,8286,8992,8993,10650'.split(',').map(v => parseInt(v, 10).char());
@@ -1197,21 +228,13 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       
       thenAll(args.map(arg => isForm(arg, Function) ? arg(sc) : arg), args => {
         
-        // TODO: Prevent stdout output if "output.format" is false; this
-        // can replace `output.inline`! (Or... can it??)
-        // DO NOT PERFORM DEBUGGING SUBCON OUTPUT IN THIS FUNCTION
+        // TODO: Use `format === null` to indicate { chatter: false }?
         
-        let ptr = { kids: { root: conf('subcon') } };
-        let inheritedConf = {};
-        for (let pc of [ 'root', ...token.dive(sc.term) ]) {
-          ptr = ptr.kids?.[pc];
-          if (!ptr) break;
-          inheritedConf.merge(ptr);
-          delete inheritedConf.kids;
-        }
+        let subconOpts = global.subconOpts(sc);
+        if (subconOpts === null) return global.bufferedLogs.push([ sc, ...args ]);
         
-        let { output={ inline: true }, format=null } = inheritedConf;
-        if (!output.inline) return;
+        let { chatter=true, therapy=false, format } = subconOpts;
+        if (!chatter) return;
         
         // Format args if formatter is available
         if (format) args = args.map(arg => format(arg, sc));
@@ -1252,47 +275,714 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       
     };
     
+  })();
+  
+  // Enable `global.conf`
+  // - Upgrades `global.subconOpts`
+  // - Outputs pending subcon output
+  // - will do subcon output (requiring `global.subconOutput`, which at
+  //   this point will just buffer the output until it's defined
+  await (async () => {
+    
+    let t = getMs();
+    
+    let churn = async actions => {
+      
+      let remaining;
+      if (isForm(actions, Object)) remaining = { ...actions };
+      if (isForm(actions, Array)) remaining = actions.toObj((v, i) => [ i, v ]);
+      if (!remaining) throw Error('Api: "actions" must resolve to Object/Array');
+      
+      let values = {};
+      while (!remaining.empty()) {
+        
+        let errs = [];
+        let progress = false;
+        let furtherActions = {};
+        
+        for (let [ k, fn ] of remaining) {
+          
+          let actionResult; /* { result, actions: { ... } }*/
+          try { actionResult = await fn(values); } catch (err) {
+            if (!isForm(err, Error)) throw err;
+            errs.push(err);
+            continue;
+          }
+          
+          if (!isForm(actionResult, Object)) throw Error('woAWwowowwaa poorly implemented churn function...').mod({ actionResult, fn: fn.toString() });
+          
+          progress = true;
+          values[k] = actionResult.result;
+          delete remaining[k];
+          
+          if (actionResult.has('actions')) {
+            /// {DEBUG=
+            if (!isForm(actionResult.actions, Object)) throw Error('OOofofowwwwsoasaoo poorly implemented churn function...').mod({ actionResult, fn: fn.toString() });
+            /// =DEBUG}
+            Object.assign(furtherActions, actionResult.actions);
+          }
+          
+        }
+        
+        if (!progress) {
+          throw Error('Api: unable to make progress on churn').mod({
+            remaining,
+            cause: errs,
+            partiallyChurnedValues: values
+          });
+        }
+        Object.assign(remaining, furtherActions);
+        
+      }
+      
+      return values;
+      
+    };
+    
+    let { ConfySet, ConfyVal, ConfyNullable } = (() => {
+      
+      // !<ref> !<lnk>
+      // !<rem>
+      // !<def>
+      
+      let Confy = form({ name: 'Confy', props: (forms, Form) => ({
+        
+        $getValue: (values, relChain, relOrAbsDive) => {
+          
+          let dive = token.dive(relOrAbsDive);
+          let [ cmp0, ...cmps ] = dive;
+          /// {DEBUG=
+          if (![ '[abs]', '[rel]' ].has(cmp0)) throw Error('Api: first dive component must be "[abs]" or "[rel]"');
+          /// =DEBUG}
+          
+          let absCmps = [];
+          for (let cmp of cmp0 === '[rel]' ? [ ...relChain, ...cmps ] : cmps)
+            absCmps[cmp !== '[par]' ? 'push' : 'pop'](cmp); // `absCmp.pop(cmp)` simply ignores `cmp`
+          
+          // Imagine a case where `values` looks like:
+          //    | {
+          //    |   'root.heap.netIdens.myNetIden': {
+          //    |     'details.email': 'myEmail'
+          //    |   }
+          //    | }
+          // And `relOrAbsDive` looks like:
+          //    | "[abs].root.heap.netIdens.myNetIden.detail.email"
+          // (or generally any case where a mixture of dive-keys and actual
+          // references need to be traversed in order to find the value)
+          // TODO: This can be implemented more efficiently; still a search
+          // against the whole `values` Object, for each key in the current
+          // subset of `value` check if each key is a prefix of
+          // `relOrAbsDive`, and for each which is, recurse on that key!
+          // BETTER TODO: simply always store `values` in "diveKeysResolved"
+          // format????
+          values = values.diveKeysResolved(); // Creates new value (no in-place modification)
+          
+          let { found, val } = token.diveOn(absCmps, values);
+          if (found) return val;
+          
+          throw Error(
+            (absCmps.join('.') === cmps.join('.'))
+              ? `Api: conf path "${relChain.join('.')}" requires missing chain "${absCmps.join('.')}"`
+              : `Api: conf path "${relChain.join('.')}" requires missing chain "${absCmps.join('.')}" (provided as "${dive.join('.')}")`
+          ).mod({ rel: relChain.join('.') });
+            
+        },
+        
+        init() {},
+        resolve({ conf, chain, getValue /* (relOrAbsDive) => someResolvedValue */ }) {
+          throw Error('Not implemented');
+        },
+        getAction(conf, chain=['root']) {
+          return values => {
+            
+            let getValue = Form.getValue.bound(values, chain);
+            
+            if (isForm(conf, String) && conf.hasHead('!<ref>'))
+              conf = getValue(conf.slice('!<ref>'.length).trim());
+            
+            return this.resolve({ conf, chain, getValue });
+            
+          };
+        }
+        
+      })});
+      let ConfySet = form({ name: 'ConfySet', has: { Confy }, props: (forms, Form) => ({
+        init({ kids={}, all=null, headOp=null, tailOp=null, ...args }={}) {
+          Object.assign(this, { kids: Object.plain(kids), all, headOp, tailOp });
+        },
+        resolve({ conf, chain, getValue }) {
+          
+          // We'll have problems if the parent needs its children resolved
+          // first; the parent would throw an Error saying something like
+          // "a.b.c requires a.b.c.d", which short-circuits before "a.b.c.d"
+          // is returned as a further Action, meaning "a.b.c.d" will never
+          // be initialized (results in churn failure)
+          
+          if (conf === '!<def>') conf = {};
+          let orig = conf;
+          
+          // Process `conf` before recursing (e.g. add some default items)
+          if (this.headOp) conf = this.headOp({ conf, chain, getValue });
+          
+          if (isForm(conf, String)) conf = conf.split(/[,+]/);
+          if (isForm(conf, Array)) conf = conf.toObj((v, i) => [ i, v ]);
+          if (!isForm(conf, Object)) throw Error(`Api: "${chain.join('.')}" expects value resolving to Object; got ${getFormName(conf)}`).mod({ value: orig });
+          
+          // Pass the '!<def>' value for every Kid
+          conf = { ...{}.map.call(this.kids, v => '!<def>'), ...conf };
+          
+          let actions = {};
+          for (let [ k, v ] of conf) {
+            if (v === '!<rem>') continue;
+            let kid = this.kids[k] ?? this.all;
+            let kidChain = [ ...chain, k ];
+            actions[kidChain.join('.')] = kid
+              ? kid.getAction(v, kidChain)
+              : () => Error(`Api: "${chain.join('.')}" has no Kid to handle "${k}"`).propagate({ conf });
+          }
+          
+          // Processing afterwards looks a bit tricky - we add another
+          // pending Action for the parent alongside all the Kid Actions -
+          // this one will be able to reference values resulting from Kid
+          // Actions! Note that this additional Action for the parent never
+          // produces any further Actions!
+          if (this.tailOp) actions[chain.join('.')] = values => tailOp({ conf, chain, getValue });
+          
+          // Note that `result` can be overwritten by `tailOp`, and also by
+          // merging in the results from all Kids
+          return { result: conf, actions };
+        }
+      })});
+      let ConfyVal = form({ name: 'ConfyVal', has: { Confy }, props: (forms, Form) => ({
+        
+        $settlers: Object.plain({
+          bln: { target: Boolean, tries: [
+            [ Number, v => !!v ],
+            [ String, v => {
+              if ([ 'yes', 'true', 't', 'y' ].has(v.lower())) return true;
+              if ([ 'no', 'false', 'f', 'n' ].has(v.lower())) return false;
+              throw Error(`Api: string doesn't resolve to Boolean: "${v}"`);
+            }]
+          ]},
+          str: { target: String, tries: [] },
+          num: { target: Number, tries: [
+            [ String, v => {
+              let num = parseInt(v, 10);
+              let str = num.toString();
+              if (v !== str && v !== '+' + str) throw Error(`Api: "${chain.join('.')}" string doesn't resolve to number: "${v}"`);
+              return num;
+            }]
+          ]},
+          arr: { target: Array, tries: [
+            [ String, v => {
+              let [ delim=null ] = v.match(/[,+$]/);
+              return delim ? v.split(delim).map(v => v.trim() || skip) : [ v ];
+            }],
+            [ Object, v => v.toArr(v => v) ]
+          ]}
+        }),
+        $rejectDefault: ({ chain }) => { throw Error(`Api: "${chain.join('.')}" was not provided a value and does not support a default value`); },
+        
+        init({ def=Form.rejectDefault, nullable=def===null, settle=null, fn=null, ...args }={}) {
+          
+          // - `def` is the default value or a synchronous Function giving a
+          //   default value if the Confy receives "!<def>"
+          // - `settle` is { target: Form, tries: [ [ Form1, fn1 ], [ Form2, fn2 ], ... ] }
+          //   The settle "tries" must resolve the incoming value to the
+          //   settle "target"; the only exception is if the incoming value
+          //   is null and `nullable` is set to true
+          // - `fn` arbitrarily rejects or transforms the given value; `fn`
+          //   gets the final say after all logic has finished!
+          
+          if (isForm(settle, String)) {
+            if (!Form.settlers[settle]) throw Error(`Api: invalid settle String "${settle}"`);
+            settle = Form.settlers[settle];
+          }
+          if (settle && !isForm(settle, Object)) throw Error(`Api: when provided "settle" must resolve to Array; got ${getFormName(settle)}`);
+          if (!hasForm(def, Function)) def = Function.createStub(def);
+          
+          Object.assign(this, { def, settle, fn, nullable });
+          
+        },
+        async resolve({ conf, chain, getValue }) {
+          
+          if (conf === '!<def>') conf = this.def({ conf, chain, getValue });
+          
+          if (this.settle) {
+            let orig = conf;
+            let { target, tries } = this.settle;
+            for (let [ Form, fn ] of tries) if (isForm(conf, Form)) conf = fn(conf);
+            
+            let valid = (conf === null && this.nullable) || isForm(conf, target);
+            if (!valid) throw Error(`Api: "${chain.join('.')}" couldn't resolve value to ${target.name}`).mod({ value: orig, conf });
+          }
+          
+          if (this.fn) {
+            try { conf = await this.fn(conf, { getValue }); } catch (err) {
+              if (!err.message.hasHead('Api: ')) err.message = `Api: "${chain.join('.')}" ${err.message}`;
+              throw err;
+            }
+          }
+          
+          return { result: conf };
+        }
+        
+      })});
+      let ConfyNullable = form({ name: 'ConfyNullable', has: { Confy }, props: (forms, Form) => ({
+        init(confy) { Object.assign(this, { confy }); },
+        resolve({ conf, chain, getValue }) {
+          if (conf === '!<def>') return { result: null };
+          if (conf === null) return { result: null };
+          if (isForm(conf, Object) && conf.empty()) return { result: null };
+          return { result: null, actions: { [chain.join('.')]: this.confy.getAction(conf, chain) }};
+        }
+      })});
+      
+      return { ConfySet, ConfyVal, ConfyNullable };
+      
+    })();
+    
+    let confyRoot = (() => {
+      
+      // TODO: This misses semantics; e.g. "999.999.000.900"
+      let ipRegex = niceRegex(String.baseline(`
+        | ^
+        |  [0-9]{1,3}
+        |            (?:             ){3}
+        |               [.][0-9]{1,3}
+        |                                $
+      `));
+      let protocolRegex = niceRegex(String.baseline(`
+        | ^                                             $
+        | ^([a-zA-Z]+)                                  $
+        | ^           (?:           )?                  $
+        | ^              [:]([0-9]+)                    $
+        | ^                           (?:             )?$
+        | ^                              [<]([^>]*)[>]  $
+      `));
+      
+      let confyRoot = ConfySet();
+      confyRoot.kids.heap = ConfyVal({ def: null }); // Accept arbitrary values
+      confyRoot.kids.confKeeps = ConfySet({
+        // Add in the default "def.js" Conf Keep
+        headOp: ({ conf }) => ({ mill: '/[file:mill]/conf/def.js', ...conf }),
+        all: ConfyVal({ settle: 'str' })
+      });
+      
+      let confyEnv = confyRoot.kids.environment = ConfySet();
+      let confyGlb = confyRoot.kids.global = ConfySet();
+      let confyDep = confyRoot.kids.deploy = ConfyNullable(ConfySet({ all: ConfySet() }));
+      
+      confyGlb.kids.subcon = onto(ConfySet({
+        headOp: ({ chain, conf, getValue }) => {
+          let isRootSc = /^root[.]global[.]subcon$/.test(chain.join('.'));
+          let params = isRootSc ? { chatter: 1, therapy: 0 } : getValue('[rel].[par].params');
+          return { params }.merge(conf);
+        },
+        kids: {
+          params: ConfySet({
+            kids: {
+              chatter: ConfyVal({ settle: 'bln' }),
+              therapy: ConfyVal({ settle: 'bln' })
+            },
+            all: ConfyVal() // Accept aribtrary values
+          })
+        }
+      }), confy => confy.all = confy);
+      confyGlb.kids.bearing = ConfyVal({ settle: 'str', def: 'above', fn: bearing => {
+        if (![ 'above', 'below', 'between' ].has(bearing)) throw Error('requires value from enum: [ "above", "below", "between" ]');
+        return bearing;
+      }});
+      confyGlb.kids.maturity = ConfyVal({ settle: 'str', def: 'alpha', fn: maturity => {
+        if (![ 'dev', 'beta', 'alpha' ].has(maturity)) throw Error('requires value from enum: [ "dev", "beta", "alpha" ]');
+        return maturity;
+      }});
+      confyGlb.kids.features = ConfySet({
+        kids: {
+          wrapBelowCode: ConfyVal({ settle: 'bln', def: false }),
+          loadtest: ConfyVal({ settle: 'bln', def: false }),
+        },
+        all: ConfyVal({ fn: feature => {
+          if (![ Boolean, Number, String ].any(F => isForm(feature, F)))
+            throw Error(`doesn't allow value of type "${getFormName(feature)}"`);
+          return feature;
+        }})
+      });
+      
+      // Environment values include:
+      // - "device": metadata about this device running Hut
+      // - "shell": info related to executing shell utilities
+      // - "dnsNetAddrs": hosts to use for resolving dns queries
+      confyEnv.kids.device = ConfySet({ kids: {
+        platform: ConfyVal({ settle: 'str', def: () => require('os').platform() }),
+        operatingSystem: ConfyVal({ settle: 'str', def: () => require('os').version() }),
+        numCpus: ConfyVal({ settle: 'num', def: () => require('os').cpus().length })
+      }});
+      confyEnv.kids.shell = ConfySet({ kids: {
+        openssl: ConfyVal({ settle: 'str', def: 'openssl' })
+      }});
+      confyEnv.kids.dnsNetAddrs = ConfyVal({ settle: 'arr', def: '1.1.1.1+1.0.0.1', fn: dnsNetAddrs => {
+        
+        if (dnsNetAddrs.length < 2) throw Error('requires minimum 2 dns values');
+        for (let na of dnsNetAddrs)
+          if (!ipRegex.test(na))
+            throw Error(`requires valid network addresses; got "${na}"`);
+        return dnsNetAddrs;
+        
+      }});
+      
+      // Make some reusable Confy instances:
+      let confyNetIden = ConfySet({ kids: {
+        name: ConfyVal({ settle: 'str', fn: (name, chain) => {
+          if (!/^[a-z][a-zA-Z]*$/.test(name)) throw Error(`requires a String of alphabetic characters beginning with a lowercase character`);
+          return name;
+        }}),
+        keep: ConfyVal({ settle: 'str', def: null }),
+        secureBits: ConfyVal({ settle: 'num', fn: (bits, chain) => {
+          if (!bits.isInteger()) throw Error(`requires an integer`);
+          if (bits < 0) throw Error(`requires a value >= 0`);
+          return bits;
+        }}),
+        email: ConfyVal({ settle: 'str', fn: email => {
+          email = email.trim();
+          if (!/^[^@]+[@][^.]+[.][^.]/.test(email)) throw Error(`must be a valid email`);
+          return email;
+        }}),
+        password: ConfyVal({ settle: 'str', def: null }),
+        certificateType: ConfyVal({ settle: 'str', def: null }),
+        details: ConfySet({
+          kids: {
+            geo: ConfyVal({ settle: 'str', fn: geo => {
+              let pcs = geo.split('.');
+              while (pcs.length < 6) pcs.push('?');
+              return pcs.slice(0, 6).join('.');
+            }}),
+            org: ConfyVal({ settle: 'str', fn: org => {
+              let pcs = org.split('.');
+              while (pcs.length < 6) pcs.push('?');
+              return pcs.slice(0, 6).join('.');
+            }}),
+          },
+          all: ConfyVal({ settle: 'str' }) // Arbitrary String values
+        })
+      }});
+      let confyHost = ConfySet({ kids: {
+        netIden: confyNetIden,
+        netAddr: ConfyVal({ settle: 'str', def: '!<auto>', fn: async (netAddr, { getValue }) => {
+          
+          // 'localhost'
+          // '127.0.0.1'
+          // '211.122.42.7'
+          // '!<auto>'
+          
+          if (netAddr === '!<auto>') {
+            
+            // Autodetect the best NetworkAddress to use for this machine
+            
+            let dnsNetAddrs = getValue('[abs].root.environment.dnsNetAddrs');
+            let dnsResolver = new (require('dns').promises.Resolver)();
+            dnsResolver.setServers(dnsNetAddrs); // Use DNS servers defined in Conf
+            
+            let ips = require('os').networkInterfaces()
+              .toArr(v => v).flat()                       // Flat list of all interfaces
+              .map(v => v.internal ? skip : v.address);   // Remove internal interfaces
+            
+            let potentialHosts = (await Promise.all(ips.map(async ip => {
+              
+              ip = ip.split('.').map(v => parseInt(v, 10));
+              
+              // TODO: support ipv6!
+              if (ip.count() !== 4 || ip.find(v => !isForm(v, Number)).found) return skip;
+              
+              let type = (() => {
+                
+                // Reserved:
+                // 0.0.0.0 -> 0.255.255.255
+                if (ip[0] === 0) return 'reserved';
+                
+                // Loopback:
+                // 127.0.0.0 -> 127.255.255.255
+                if (ip[0] === 127) return 'loopback';
+                
+                // Private; any of:
+                // 10.0.0.0 -> 10.255.255.255,
+                // 172.16.0.0 -> 172.31.255.255,
+                // 192.168.0.0 -> 192.168.255.255
+                if (ip[0] === 10) return 'private'
+                if (ip[0] === 172 && ip[1] >= 16 && ip[1] <= 31) return 'private';
+                if (ip[0] === 192 && ip[1] === 168) return 'private';
+                
+                // Any other address is public
+                return 'external';
+                
+              })();
+              
+              // Reserved hosts are ignored entirely
+              if (type === 'reserved') return skip;
+              
+              // Loopback hosts are the least powerful
+              if (type === 'loopback') return { type, rank: 0, ip, addr: null };
+              
+              // Next-best is private; available on local network. Note
+              // that class C ips (whose first component is >= 192) are
+              // preferable to class B ips (below that range)
+              if (type === 'private' && ip[0] <= 191) return { type, rank: 1, ip, addr: null };
+              if (type === 'private' && ip[0] >= 192) return { type, rank: 2, ip, addr: null };
+              
+              // Remaining types will be "external"; within "external"
+              // there are three different ranks (from worst to best:)
+              // - Non-reversible
+              // - Reversible but lacking A-record
+              // - Reversible with A-record present (globally addressable)
+              try {
+                
+                // Reverse `ip` into any related hostnames
+                let addrs = await dnsResolver.reverse(ip.map(n => n.toString(10)).join('.'));
+                
+                // Only consider hostnames with available A records
+                return Promise.all(addrs.map(async addr => {
+                  
+                  // If an A record is found this is the most powerful
+                  // address possible (globally addressable)
+                  try {
+                    await dnsResolver.resolve(addr, 'A');
+                    return { type: 'public', rank: 5, ip, addr };
+                  } catch (err) {
+                    // Reversable ips without A records are one level down
+                    // from globally addressable results
+                    return { type: 'publicNoHost', rank: 4, ip, addr };
+                  }
+                  
+                }));
+                
+              } catch (err) {
+                
+                // The address is external but not reversible
+                return { type: 'external', rank: 3, ip, addr: null };
+                
+              }
+              
+            }))).flat();
+            
+            let bestRank = Math.max(...potentialHosts.map(v => v.rank));
+            let bestHosts = potentialHosts.map(v => v.rank === bestRank ? (v.addr || v.ip.join('.')) : skip);
+            
+            netAddr = bestHosts.length ? bestHosts[0] : 'localhost';
+            
+          }
+          
+          if (netAddr !== 'localhost' && !ipRegex.test(netAddr))
+            throw Error(`requires valid network address; got "${netAddr}"`);
+          
+          return netAddr;
+          
+        }}),
+        heartbeatMs: ConfyVal({ settle: 'num', def: 20 * 1000, fn: heartbeatMs => {
+          if (!heartbeatMs.isInteger()) throw Error('requires an integer').mod({ value: heartbeatMs });
+          if (heartbeatMs < 1000) throw Error('requires a heartbeat slower than 1hz').mod({ value: heartbeatMs });
+          return heartbeatMs;
+        }}),
+        protocols: ConfySet({ all: ConfySet({
+          
+          // The list of protocols may look like:
+          // '+http:111<comp1,comp2>+ws:222<comp3,comp4>'
+          // (note the leading "+" indicates to delimit using "+" before
+          // delimiting using anything else - especially "," in this case)
+          
+          // A single protocol may look like:
+          // 'http'
+          // 'http:80<gzip+deflate>'
+          // 'http<gzip>'
+          // 'http:80'
+          // { protocol: 'http', port: 80, compression: 'gzip+deflate' }
+          // { protocol: 'http', port: 80, compression: [ 'gzip', 'deflate' ] }
+          // Note that "port" can also be left `null` - it takes an annoying
+          // amount of context to pick a default port because we need to know
+          // about the protocol but also the NetworkIdentity (which isn't
+          // readily referenced from here)
+          
+          headOp: ({ conf: protocol }) => {
+            
+            if (isForm(protocol, String)) {
+              let match = protocol.match(protocolRegex);
+              if (match) {
+                let [ , name, port='!<def>', compression='!<def>' ] = match;
+                protocol = { name, port, compression };
+              }
+            }
+            
+            return protocol;
+            
+          },
+          kids: {
+            name: ConfyVal({ settle: 'str' }),
+            port: ConfyVal({ settle: 'num',
+              def: ({ conf, chain, getValue }) => {
+                
+                // [par]:             { name, port, compression }
+                // [par].[par]:       { 0: { name, port, compression }, 1: { name, port, compression }, ... }
+                // [par].[par].[par]: { netIden: { ... }, netAddr: '...', protocols: { 0: { name, port, compression }, ... } }
+                
+                let protocol = getValue('[rel].[par].name');
+                let secureBits = getValue('[rel].[par].[par].[par].netIden.secureBits');
+                let term = `${secureBits > 0 ? 'secure' : 'unsafe'} ${protocol}`;
+                
+                let def = Object.plain({
+                  'secure http': 443,
+                  'unsafe http': 80,
+                  'secure ftp': 22,
+                  'unsafe ftp': 21,
+                  'secure ws': 443,
+                  'unsafe ws': 80,
+                })[term];
+                if (!def) throw Error(`Api: "${chain.join('.')}" can't determine a default port for ${term}`);
+                
+                return def;
+                
+              },
+              fn: port => {
+                
+                if (!port.isInteger()) throw Error('requires an integer').mod({ value: port });
+                if (port <= 0) throw Error('requires a value >= 0').mod({ value: port });
+                return port;
+                
+              }
+            }),
+            compression: ConfyVal({ settle: 'arr', def: [], fn: compression => {
+              if (compression.some(v => !isForm(v, String))) throw Error('requires Array of Strings').mod({ value: compression });
+              return compression;
+            }})
+          }
+          
+        })}),
+      }});
+      
+      // Deploy values include:
+      // - "host": hosting info for this deployment
+      confyDep.confy.all.kids.host = confyHost;
+      confyDep.confy.all.kids.loft = ConfySet({
+        headOp: ({ conf }) => {
+          
+          // 'c2.chess2 /[file:mill]/bank/cw0'
+          // 'c2.chess2'
+          // { prefix: 'c2', room: 'chess2', bank: '[file:mill].bank.cw0' }
+          
+          if (isForm(conf, String)) {
+            let match = val.trim().match(/^([a-zA-Z0-9]+)[.]([a-zA-Z0-9]+)(?:[ ]+(.*))?$/);
+            if (match) {
+              let [ , prefix, room, keep=null ] = match;
+              conf = { prefix, room, keep };
+            }
+          }
+          
+          return conf;
+          
+        },
+        kids: {
+          uid: ConfyVal({ settle: 'str', def: () => Math.random().toString(36).slice(2, 8), fn: uid => {
+            if (!/^[a-zA-Z0-9]+$/.test(uid)) throw Error('requires alphanumeric string').mod({ value: uid });
+            return uid;
+          }}),
+          prefix: ConfyVal({ settle: 'str', fn: prefix => {
+            if (!/^[a-z][a-z0-9]*$/.test(prefix)) throw Error(`requires lowercase alphanumeric string beginning with alphabetic character`).mod({ value: prefix });
+            return prefix;
+          }}),
+          name: ConfyVal({ settle: 'str' }),
+          keep: ConfyVal({ settle: 'str', def: null }),
+          therapy: ConfyNullable(ConfySet({
+            keep: ConfyVal({ settle: 'str' }), // Default to some Keep relative to the Loft keep??
+          }))
+        },
+      });
+      
+      return confyRoot;
+      
+    })();
+    
+    let extendConf = async (cf, { tolerateErrors=false }) => {
+      
+      // Modifies `global.conf.raw` in-place
+      
+      let values;
+      
+      try {
+        global.conf.raw.merge(cf.diveKeysResolved());
+        values = await churn({ root: confyRoot.getAction(global.conf.raw, [ 'root' ]) });
+      } catch (err) {
+        if (!tolerateErrors) throw err;
+        if (!/unable to make progress on churn/.test(err.message)) throw err.mod(msg => `Unexpected error while churning: ${msg}`);
+        values = err.partiallyChurnedValues;
+      }
+      
+      global.conf.raw = values.diveKeysResolved().root;
+      
+    };
+    
+    await (async () => {
+      
+      await extendConf(rawConf, { tolerateErrors: true });
+      let { confKeeps: rawConfKeeps={} } = global.conf.raw;
+      
+      if (!rawConfKeeps.empty()) {
+        
+        let confKeeps = await Promise.all(rawConfKeeps.map(async (confKeepDiveToken, term) => {
+          
+          let confKeep = global.keep(confKeepDiveToken);
+          
+          let content = null;
+          try {
+            content = await confKeep.getContent('utf8');
+            content = content.replace(/[;\s]+$/, ''); // Remove tailing whitespace and semicolons
+            return await eval(`(${content})`);
+          } catch (err) {
+            err.propagate({ term, confKeep: confKeep.desc(), content });
+          }
+          
+        }));
+        
+        // Apply all KeepConfs (don't parallelize - apply them in order!)
+        for (let [ confKeepKey, confKeep ] of confKeeps) await extendConf(confKeep, { tolerateErrors: true });
+        
+      }
+      
+      // Always finally merge the UserConf (it overrides any KeepConf)
+      try { await extendConf(rawConf, { tolerateErrors: false }); } catch (err) {
+        if (!/unable to make progress on churn/.test(err.message)) throw err.mod(msg => `Unexpected error while churning: ${msg}`);
+        gsc([ 'Invalid configuration:', ...err.cause.map(err => `- ${err.message}`) ].join('\n'));
+        process.exitHard();
+      }
+      
+    })();
+    
+    // Now overwrite `global.conf` to be a new Function; maintain the
+    // same old `global.conf.raw` value
+    
+    global.conf = Object.assign((diveToken, def='TODOhijklmno') => {
+      
+      let v = token.diveOn(diveToken, global.conf.raw, def).val;
+      if (v === 'TODOhijklmno') throw Error(`Api: bad conf dive token`).mod({ diveToken });
+      return v;
+      
+    }, global.conf);
+    global.subconOpts = sc => {
+      
+      let ptr = { root: global.conf.raw.global.subcon };
+      let params = {};
+      for (let pc of [ 'root', ...token.dive(sc.term) ]) {
+        if (!ptr.has(pc)) break;
+        ptr = ptr[pc];
+        params.merge(ptr.params);
+      }
+      return params;
+      
+    };
+    
     // Show any logs that accumulated before `subconOutput` was ready
     let pending = global.bufferedLogs;
     global.bufferedLogs = null;
     for (let args of pending) global.subconOutput(...args);
     
-    global.subconOpts = sc => {
-      return global.conf(token.dive(sc.term).join('.kids.'));
-    };
-    
-  })();
-  
-  // Enable `global.conf`
-  // - requires `global.keep`
-  // - requires `global.subconOutput`
-  await (async () => {
-    
-    let t = getMs();
-    
-    let globalConf = await resolveConf(rawConf);
-    global.conf = (diveToken, def=null) => token.diveOn(globalConf, conf, def).val;
-    
-    /*
-    // Additional Conf value sanitization and defaulting:
-    
-    // Provide defaults for Ports
-    for (let [ , protocol ] of conf.deploy.host.protocols) {
-      
-      if (protocol.port !== null) continue;
-      
-      let netIden = conf.deploy.host.netIden;
-      
-      if ([ 'http' ].includes(protocol.protocol))
-        protocol.port = (netIden.secureBits > 0) ? 443 : 80;
-      
-      if ([ 'ws', 'sokt' ].includes(protocol.protocol))
-        protocol.port = (netIden.secureBits > 0) ? 443 : 80;
-      
-    }
-    */
-    
-    setupSc(`Configuration processed after ${(getMs() - t).toFixed(2)}ms`, globalConf);
+    setupSc(`Configuration processed after ${(getMs() - t).toFixed(2)}ms`, global.conf.raw);
     
   })();
   
@@ -1313,9 +1003,9 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     // values for bearing-specific features! (They should always be
     // passed when calling `getCompiledCode` from a particular context!)
     let defaultFeatures = {
-      debug:  conf('deploy.maturity') === 'dev',
-      assert: conf('deploy.maturity') === 'dev',
-      ...conf('deploy.features')
+      debug:  conf('global.maturity') === 'dev',
+      assert: conf('global.maturity') === 'dev',
+      ...conf('global.features')
     };
     let getCompiledCode = async (keep, features=Object.stub) => {
       
@@ -1507,7 +1197,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       }
       
       // Embed `offsets` within `lines` for BELOW or setup
-      if (conf('deploy.maturity') === 'dev' && [ 'below', 'setup' ].has(bearing)) {
+      if (conf('global.maturity') === 'dev' && [ 'below', 'setup' ].has(bearing)) {
         
         let headInd = 0;
         let tailInd = lines.length - 1;
@@ -1609,7 +1299,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     };
     global.getRooms = (names, { shorten=true }={}) => {
       
-      let bearing = conf('deploy.bearing');
+      let bearing = conf('global.bearing');
       let err = Error('trace');
       return thenAll(names.toObj(name => {
         
@@ -1787,7 +1477,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       // but didn't reference any existing BelowHut - this is only valid
       // for "dev" maturity
       if (!hid) hid = aboveHut.makeBelowUid()
-      else if (global.conf('deploy.maturity') !== 'dev') throw Error(`Api: invalid "hid"`);
+      else if (global.conf('global.maturity') !== 'dev') throw Error(`Api: invalid "hid"`);
       
       // If we're lax simply return a new Hut with the provided Hut Id
       return aboveHut.makeBelowHut(hid).hid;

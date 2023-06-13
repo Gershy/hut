@@ -20,7 +20,7 @@ global.rooms['chess2'] = async chess2Keep => {
   ]);
   let { TmpAny, Chooser, SetSrc, MemSrc, TimerSrc, Hinterland, HtmlBrowserHabitat } = rooms;
   
-  let isDev = conf('deploy.maturity') === 'dev';
+  let isDev = conf('global.maturity') === 'dev';
   let pieceStyle = 'classic';
   let layoutStyle = 'classic';
   let moveMs = (isDev ? 12 : 60) * 1000;

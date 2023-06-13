@@ -3,7 +3,7 @@
 require('../../room/setup/clearing/clearing.js');
 
 // Requires "dev" maturity because needs to supply own hut id
-if (conf('deploy.maturity') !== 'dev') throw Error(`Api: "loadtest" feature requires "deploy.maturity" to be "dev"`);
+if (conf('global.maturity') !== 'dev') throw Error(`Api: "loadtest" feature requires "global.maturity" to be "dev"`);
 
 let cp = require('child_process');
 let path = require('path');

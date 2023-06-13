@@ -159,11 +159,6 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     if (!this.fp.contains(fp)) throw Error(`Fp ${fp.desc()} is outside ${this.desc()}`);
     if (fp.cmps.any(cmp => cmp === '~')) throw Error(`${fp.desc()} includes "~" component`);
   },
-  getCollidedLocks(locks) {
-    
-    
-    
-  },
   locksCollide(lock0, lock1) {
     
     // Order `lock0` and `lock1` by their "type" properties
@@ -219,7 +214,6 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     // Collect all pre-existing locks that collide with any of the locks
     // provided for this operation (once all collected Promises have
     // resolved we will be guaranteed we have a safely locked context!)
-    //let collLocks = this.getCollidedLocks(locks);
     let collLocks = [];
     for (let lk0 of this.locks)
       for (let lk1 of locks)
@@ -233,6 +227,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
       lock.prm.then(() => { mmm('filesysLock', -1); this.locks.rem(lock); });
     }
     
+    // Initialize the stack Error before any `await` gets called
     let err = Error('');
     
     // Wait for all collisions to resolve...

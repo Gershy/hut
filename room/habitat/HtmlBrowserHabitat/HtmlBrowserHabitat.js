@@ -10,7 +10,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
     
     /// {ABOVE=
     let { multiUserSim=null } = moreOpts;
-    if (multiUserSim === null) multiUserSim = conf('deploy.maturity') === 'dev';
+    if (multiUserSim === null) multiUserSim = conf('global.maturity') === 'dev';
     /// =ABOVE}
     
     Object.assign(this, {

@@ -486,6 +486,8 @@ Object.assign(global, {
     
     $all: (prms, mapFn=null) => {
       
+      if (prms.empty()) return prms.map(Function.stub);
+      
       if (mapFn) prms = prms.map(mapFn);
       
       if (isForm(prms, Array)) return C['Promise.all'](prms).then(a => a.toArr(v => v)); // Remove any `skip` results
@@ -875,7 +877,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   },
   uri: ({ path='', query }) => {
     
-    let maturity = conf('deploy.maturity');
+    let maturity = conf('global.maturity');
     
     let cacheBust = null;
     

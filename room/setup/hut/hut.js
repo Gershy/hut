@@ -288,8 +288,8 @@ global.rooms['setup.hut'] = async () => {
         aboveHid: this.hid,
         subcon: subconConf(conf('subcon')),
         deploy: {
-          maturity: conf('deploy.maturity'),
-          features: conf('deploy.features'),
+          maturity: conf('global.maturity'),
+          features: conf('global.features'),
           host: {
             netIden: { secureBits: conf('deploy.host.netIden.secureBits') },
             netAddr: conf('deploy.host.netAddr'),
