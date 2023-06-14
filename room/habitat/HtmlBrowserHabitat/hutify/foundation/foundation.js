@@ -124,7 +124,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     console.log(...args.map(a => isForm(a?.desc, Function) ? a.desc() : a));
     
   };
-  global.subconOpts = sc => {
+  global.subconParams = sc => {
     
     return {
       output: { inline: 0, therapist: 0 },

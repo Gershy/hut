@@ -486,8 +486,6 @@ Object.assign(global, {
     
     $all: (prms, mapFn=null) => {
       
-      if (prms.empty()) return prms.map(Function.stub);
-      
       if (mapFn) prms = prms.map(mapFn);
       
       if (isForm(prms, Array)) return C['Promise.all'](prms).then(a => a.toArr(v => v)); // Remove any `skip` results
@@ -853,18 +851,18 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   // Subcon debug
   subcon: (diveToken) => {
     //let dive = token.dive(diveToken);
-    let sc = (...args) => subconOutput(sc, ...args);
-    C.def(sc, 'conf', { writable: true, value: null });
+    let sc = (...args) => global.subconOutput(sc, ...args);
     return Object.assign(sc, {
       term: diveToken,
       kid: dt2 => global.subcon([ ...token.dive(diveToken), ...token.dive(dt2) ]),
-      get conf() {
-        C.def(sc, 'conf', { value: subconOpts(sc) });
-        return sc.conf;
+      cachedConf: null,
+      getConf() {
+        if (!sc.cachedConf) sc.cachedConf = subconParams(sc);
+        return sc.cachedConf;
       }
     });
   },
-  subconOpts: sc => ({}),
+  subconParams: sc => ({}),
   subconOutput: (sc, ...args) => console.log(`\nSubcon "${sc.term}": ${global.formatAnyValue(args)}`),
   
   // Urls

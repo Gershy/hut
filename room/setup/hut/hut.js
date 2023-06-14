@@ -235,7 +235,7 @@ global.rooms['setup.hut'] = async () => {
     // to their AboveHut (which would be globally accessible for any
     // BelowHut)
     
-    init({ recMan, ...args }) {
+    init({ recMan, deployConf=null, ...args }) {
       
       /// {DEBUG=
       if (!recMan) recMan = args?.type?.manager;
@@ -256,6 +256,7 @@ global.rooms['setup.hut'] = async () => {
       
       Object.assign(this, {
         
+        deployConf,
         belowHuts: Map(/* belowHutHid => BelowHut(...) */),
         
         /// {ABOVE=
@@ -286,18 +287,23 @@ global.rooms['setup.hut'] = async () => {
         // logic than `AboveHut.prototype`?
         
         aboveHid: this.hid,
-        subcon: subconConf(conf('subcon')),
-        deploy: {
+        
+        global: {
+          subcon: conf('global.subcon'),
+          bearing: 'below',
           maturity: conf('global.maturity'),
           features: conf('global.features'),
+        },
+        
+        deploy: {
+          uid: this.deployConf.uid,
           host: {
-            netIden: { secureBits: conf('deploy.host.netIden.secureBits') },
-            netAddr: conf('deploy.host.netAddr'),
-            heartbeatMs: conf('deploy.host.heartbeatMs'),
-            protocols: conf('deploy.host.protocols')
+            netIden: this.deployConf.host.netIden.slice([ 'secureBits' ]),
+            netAddr: this.deployConf.host.netAddr,
+            heartbeatMs: this.deployConf.host.heartbeatMs,
+            protocols: this.deployConf.host.protocols
           },
-          uid: conf('deploy.uid'),
-          loft: conf('deploy.loft')
+          loft: this.deployConf.loft
         }
         
       };

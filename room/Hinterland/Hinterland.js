@@ -164,14 +164,14 @@ global.rooms['Hinterland'] = async () => {
       
       /// {DEBUG=
       let sampleSc = subcon('subcon.record.sample');
-      if (sampleSc.conf.output.inline && sampleSc.conf.ms) (async () => {
+      if (sampleSc.getConf().chatter && sampleSc.getConf().ms) (async () => {
         
         let rank = rec => rec.uid.hasHead('!') ? -1 : 0;
         let rankType = (a, b) => a.type.name.localeCompare(b.type.name);
         let rankUid = (a, b) => a.uid.localeCompare(b.uid);
         
         let TimerSrc = await getRoom('logic.TimerSrc');
-        TimerSrc({ num: Infinity, ms: sampleSc.conf.ms }).route(() => {
+        TimerSrc({ num: Infinity, ms: sampleSc.getConf().ms }).route(() => {
           
           let ts = getMs();
           let results = [ ...rec.iterateAll() ]
