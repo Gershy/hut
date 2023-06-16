@@ -9,9 +9,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   if (!getKey) throw Error(String.baseline(`
     | Must provide "getKey":
     | It must be a Function like: ({ query }) => key
-    | 
     | - "query" is an Object representing the http path query
-    | 
     | - "key" is the session identifier String for the given request
   `));
   
@@ -303,6 +301,10 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         
         let key = opts.getKey({ query });
         let session = makeSoktSession(key, req, socket, buff);
+        
+        gsc(`OPEN ${session.desc()}`);
+        session.endWith(() => gsc(`SHUT ${session.desc()}`));
+        
         tmp.endWith(session, 'tmp');
         
         tmp.src.send(session);

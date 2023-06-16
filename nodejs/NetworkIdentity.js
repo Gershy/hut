@@ -220,7 +220,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   }),
   
   $subcon: Object.plain({
-    server: subcon('netIden.serverManager'),
+    server: subcon('netIden.server'),
     sign: subcon('netIden.sign'),
     acme: subcon('netIden.acme')
   }),
@@ -823,7 +823,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       let sgn = null; // Will look like `{ prv, csr, crt, invalidate }`
       if      (this.certificateType === 'selfSign')   sgn = await this.getSgnSelfSigned();
       else if (this.certificateType.hasHead('acme/')) sgn = await this.getSgnAcme();
-      else                                    throw Error(`Unknown crt acquisition method: "${this.certificateType}"`);
+      else                                            throw Error(`Unknown crt acquisition method: "${this.certificateType}"`);
       
       let deets = await this.getOsslDetails({ crt: sgn.crt });
       Form.subcon.sign('DEETS', deets);
@@ -1243,15 +1243,12 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   
   openPort(port, servers, security=null) {
     
-    Form.subcon.server(`NetworkIdentity opening port ${port} (${servers.count()} server(s))`);
-    
     /// {ASSERT=
     if (isForm(port, String)) port = parseInt(port, 10);
     for (let s of servers) if (s.port !== port) throw Error(`Claim to be opening port ${port} but supplied port ${s.port}`);
     /// =ASSERT}
     
     let prms = servers.toObj(server => [ server.protocol, Promise.later() ]);
-    
     for (let server of servers)
       server.serverOpen(server.secure ? security : null, prms)
         .then(() => prms[server.protocol].resolve(server))
@@ -1261,8 +1258,6 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
   },
   shutPort(port, servers, security=null) {
-    
-    Form.subcon.server(`NetworkIdentity shutting port ${port} (${servers.count()} server(s))`);
     
     /// {ASSERT=
     if (isForm(port, String)) port = parseInt(port, 10);
@@ -1274,7 +1269,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   },
 
   addServer(server) { this.servers.add(server); },
-  runOnNetwork() {
+  async runOnNetwork() {
     
     // TODO: (?) Certify every NetworkAddress in `this.servers`
     
@@ -1282,7 +1277,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
     // Try to redirect http->https if port 80 isn't otherwise used
     // TODO: A NetworkIdentity can't know if *another* NetworkIdentity
-    // is occupying a port
+    // is occupying a port (well, could detect EPORTINUSE or whatever)
     
     let httpsServer = this.servers.find(server => server.secure && server.protocol === 'http').val;
     let port80Server = this.servers.find(server => server.port === 80);
@@ -1312,7 +1307,9 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     // the same NetworkAddress, ensure no two Servers on the same port
     // have the same protocol
     let portServers = this.servers.categorize(server => server.port.toString(10));
-    let ports = portServers.toArr((v, k) => parseInt(k, 10));
+    /// {DEBUG=
+    if (portServers.empty()) throw Error('No servers available');
+    /// =DEBUG}
     
     /// {DEBUG=
     for (let [ port, servers ] of portServers) {
@@ -1326,20 +1323,26 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     /// =DEBUG}
     
     sc(''
-      + `NetworkIdentity hosting Open! (${this.secureBits ? 'secure' : 'unsafe'})\n`
+      + `Opening the following (${this.secureBits ? 'secure' : 'unsafe'}) hosts:\n`
       + portServers.toArr((servers, port) => {
-          return `- port ${port}:\n` + servers.map((s, n) => `  ${n + 1}: ${s.protocol}://${s.netAddr}`).join('\n')
-        })
+          return `Port ${port}:\n` + servers.map(s => `  - ${s.protocol}://${s.netAddr}:${port}`).join('\n')
+        }).join('\n')
     );
+    
+    tmp.endWith(() => sc(''
+      + `Shutting the following (${this.secureBits ? 'secure' : 'unsafe'}) hosts:\n`
+      + portServers.toArr((servers, port) => {
+          return `Port ${port}:\n` + servers.map(s => `  - ${s.protocol}://${s.netAddr}:${port}`).join('\n')
+        }).join('\n')
+    ));
     
     if (!this.secureBits) {
       
-      let prm = Promise.all(portServers.map((servers, port) => this.openPort(port, servers, null)));
-      tmp.endWith(() => prm
-        .then(() => Promise.all(portServers.map( (servers, port) => this.shutPort(port, servers) )))
-        .fail(err => sc(`Failed to end Server`, err))
-      );
-        
+      for (let [ port, servers ] of portServers)
+        this.openPort(port, servers, null).then(() => {
+          tmp.endWith(() => this.shutPort(port, servers));
+        });
+      
     } else {
       
       (async () => {
@@ -1365,9 +1368,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
           //   which is just less than 25 days; if we need to wait more
           //   than 25 days we'll call do multiple `setTimeout` calls in
           //   series until we've waited long enough
-          while (true) {
-            
-            if (tmp.off()) break;
+          while (tmp.onn()) {
             
             let msRemaining = sgn.validity.expiryMs - Date.now();
             if (msRemaining < 0) break;
@@ -1394,11 +1395,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
           
         }
         
-        sc(`NetworkIdentity hosting Shut! (${this.secureBits ? 'secure' : 'unsafe'})`, {
-          portServers: portServers.map(servers => servers.map(s => s.desc()))
-        });
-        await Promise.all(portServers.map((servers, port) => this.shutPort(port, servers)))
-          .fail(err => sc(`Failed to end Server`, err));
+        tmp.end();
         
       })();
       

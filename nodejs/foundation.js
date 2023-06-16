@@ -12,6 +12,9 @@ Error.prepareStackTrace = (err, callSites) => {
     
     let file = cs.getFileName();
     if (!file || file.hasHead('node:')) return skip;
+    
+    //Object.getOwnPropertyNames(Object.getPrototypeOf(cs)),
+    
     return {
       type: 'line',
       fnName: cs.getFunctionName(),
@@ -31,17 +34,19 @@ Error.prepareStackTrace = (err, callSites) => {
   // https://nodejs.org/api/process.html#signal-events
   let origExit = process.exit;
   process.exitHard = process.exit;
-  process.exit = (...args) => {
-    gsc(Error('Process explicitly exited').desc());
-    return process.exitHard(...args);
+  process.exit = code => {
+    // TODO: HEEERE who is making us exit? (Ending activateTmp)
+    gsc(Error(`Process explicitly exited (${code})`));
+    process.explicitExit = true;
+    return process.exitHard(code);
   };
   
   // NOTE: Trying to catch SIGKILL or SIGSTOP crashes posix!
   // https://github.com/nodejs/node-v0.x-archive/issues/6339
   let evts = 'hup,int,pipe,quit,term,tstp,break'.split(',');
   let haltEvts = Set('int,term,quit'.split(','));
-  for (let evt of evts) process.on(`SIG${evt.upper()}`, (...args) => {
-    gsc(`Process event: "${evt}"`, args);
+  for (let evt of evts) process.on(`sig${evt}`.upper(), (...args) => {
+    gsc(`Received event: "${evt}"`, args);
     haltEvts.has(evt) && process.exit(isForm(args[1], Number) ? args[1] : -1);
   });
   
@@ -52,7 +57,7 @@ Error.prepareStackTrace = (err, callSites) => {
   };
   process.on('uncaughtException', onErr);
   process.on('unhandledRejection', onErr);
-  process.on('exit', code => gsc(`Hut terminated (code: ${code})`));
+  process.on('exit', code => process.explicitExit || gsc(`Hut terminated (code: ${code})`));
   
 })();
 
@@ -101,7 +106,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     
     // Make `global.subconOutput` immediately available (but any log
     // invocations will only show up after configuration is complete)
-    global.subconOutput = (...args) => global.subconOutput.buffered.push(args);
+    global.subconOutput = (...args) => global.subconOutput.buffered.push(args); // Buffer everything
     global.subconOutput.buffered = [];
     
     // Define `global.formatAnyValue`
@@ -255,6 +260,19 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
             ).mod({ rel: relChain.join('.') });
               
           },
+          $wrapFn: async ({ conf, orig=null, chain }, fn) => {
+            
+            try { return await fn(); } catch (err) {
+              
+              err.propagate(msg => ({
+                msg: msg.hasHead('Api: ') ? msg : `Api: "${chain.join('.')}" ${msg}`,
+                value: conf,
+                ...(orig && { origValue: orig })
+              }));
+              
+            }
+            
+          },
           
           init() {},
           resolve({ conf, chain, getValue /* (relOrAbsDive) => someResolvedValue */ }) {
@@ -267,20 +285,10 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
               let orig = conf;
               let isRef = isForm(conf, String) && conf.hasHead('!<ref>');
               
-              try {
-                
+              return Form.wrapFn({ conf, orig: isRef ? orig : null, chain }, () => {
                 if (isRef) conf = getValue(conf.slice('!<ref>'.length).trim());
-                return await this.resolve({ conf, chain, getValue });
-                
-              } catch (err) {
-                
-                err.propagate(msg => ({
-                  msg: msg.hasHead('Api: ') ? msg : `Api: "${chain.join('.')}" ${msg}`,
-                  value: conf,
-                  ...(isRef && { originalRef: orig })
-                }));
-                
-              }
+                return this.resolve({ conf, chain, getValue });
+              });
               
             };
           }
@@ -326,7 +334,8 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
             // this one will be able to reference values resulting from Kid
             // Actions! Note that this additional Action for the parent never
             // produces any further Actions!
-            if (this.tailOp) actions[chain.join('.')] = values => tailOp({ conf, chain, getValue });
+            if (this.tailOp) actions[chain.join('.')] = values =>
+              Form.wrapFn({ conf, chain }, () => this.tailOp({ conf, chain, getValue }));
             
             // Note that `result` can be overwritten by `tailOp`, and also by
             // merging in the results from all Kids
@@ -361,7 +370,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
               [ Object, v => v.toArr(v => v) ]
             ]}
           }),
-          $rejectDefault: ({ chain }) => { throw Error('was not provided a value (no default supported)'); },
+          $rejectDefault: ({ chain }) => { throw Error('requires a value'); },
           
           init({ def=Form.rejectDefault, nullable=def===null, settle=null, fn=null, ...args }={}) {
             
@@ -549,7 +558,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
               all: ConfyVal({ settle: 'str' }) // Arbitrary String values
             })
           }}),
-          netAddr: ConfyVal({ settle: 'str', def: '!<auto>', fn: async (netAddr, { getValue }) => {
+          netAddr: ConfyVal({ settle: 'str', def: 'localhost', fn: async (netAddr, { getValue }) => {
             
             // 'localhost'
             // '127.0.0.1'
@@ -663,81 +672,89 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
             if (heartbeatMs < 1000) throw Error('requires a heartbeat slower than 1hz').mod({ value: heartbeatMs });
             return heartbeatMs;
           }}),
-          protocols: ConfySet({ all: ConfySet({
-            
-            // The list of protocols may look like:
-            // '+http:111<comp1,comp2>+ws:222<comp3,comp4>'
-            // (note the leading "+" indicates to delimit using "+" before
-            // delimiting using anything else - especially "," in this case)
-            
-            // A single protocol may look like:
-            // 'http'
-            // 'http:80<gzip+deflate>'
-            // 'http<gzip>'
-            // 'http:80'
-            // { protocol: 'http', port: 80, compression: 'gzip+deflate' }
-            // { protocol: 'http', port: 80, compression: [ 'gzip', 'deflate' ] }
-            // Note that "port" can also be left `null` - it takes an annoying
-            // amount of context to pick a default port because we need to know
-            // about the protocol but also the NetworkIdentity (which isn't
-            // readily referenced from here)
-            
-            headOp: ({ conf: protocol }) => {
+          protocols: ConfySet({
+            tailOp: ({ chain, conf: protocols }) => {
               
-              if (isForm(protocol, String)) {
-                let match = protocol.match(protocolRegex);
-                if (match) {
-                  let [ , name, port='!<def>', compression='!<def>' ] = match;
-                  protocol = { name, port, compression };
-                }
-              }
+              if (isForm(protocols, Object) && protocols.empty())
+                throw Error(`requires at least 1 protocol`);
               
-              if (isForm(protocol, Object) && protocol.isEmpty()) throw Error('requires at least 1 protocol');
-              
-              return protocol;
+              return protocols;
               
             },
-            kids: {
-              name: ConfyVal({ settle: 'str' }),
-              port: ConfyVal({ settle: 'num',
-                def: ({ conf, chain, getValue }) => {
-                  
-                  // [par]:             { name, port, compression }
-                  // [par].[par]:       { 0: { name, port, compression }, 1: { name, port, compression }, ... }
-                  // [par].[par].[par]: { netIden: { ... }, netAddr: '...', protocols: { 0: { name, port, compression }, ... } }
-                  
-                  let protocol = getValue('[rel].[par].name');
-                  let secureBits = getValue('[rel].[par].[par].[par].netIden.secureBits');
-                  let term = `${secureBits > 0 ? 'secure' : 'unsafe'} ${protocol}`;
-                  
-                  let def = Object.plain({
-                    'secure http': 443,
-                    'unsafe http': 80,
-                    'secure ftp': 22,
-                    'unsafe ftp': 21,
-                    'secure ws': 443,
-                    'unsafe ws': 80,
-                  })[term];
-                  if (!def) throw Error(`has no default port for "${term}"`);
-                  
-                  return def;
-                  
-                },
-                fn: port => {
-                  
-                  if (!port.isInteger()) throw Error('requires an integer').mod({ value: port });
-                  if (port <= 0) throw Error('requires a value >= 0').mod({ value: port });
-                  return port;
-                  
+            all: ConfySet({
+              
+              // The list of protocols may look like:
+              // '+http:111<comp1,comp2>+ws:222<comp3,comp4>'
+              // (note the leading "+" indicates to delimit using "+" before
+              // delimiting using anything else - especially "," in this case)
+              
+              // A single protocol may look like:
+              // 'http'
+              // 'http:80<gzip+deflate>'
+              // 'http<gzip>'
+              // 'http:80'
+              // { protocol: 'http', port: 80, compression: 'gzip+deflate' }
+              // { protocol: 'http', port: 80, compression: [ 'gzip', 'deflate' ] }
+              // Note that "port" can also be left `null` - it takes an annoying
+              // amount of context to pick a default port because we need to know
+              // about the protocol but also the NetworkIdentity (which isn't
+              // readily referenced from here)
+              
+              headOp: ({ conf: protocol }) => {
+                
+                if (isForm(protocol, String)) {
+                  let match = protocol.match(protocolRegex);
+                  if (match) {
+                    let [ , name, port='!<def>', compression='!<def>' ] = match;
+                    protocol = { name, port, compression };
+                  }
                 }
-              }),
-              compression: ConfyVal({ settle: 'arr', def: [], fn: compression => {
-                if (compression.some(v => !isForm(v, String))) throw Error('requires Array of Strings').mod({ value: compression });
-                return compression;
-              }})
-            }
-            
-          })}),
+                
+                return protocol;
+                
+              },
+              kids: {
+                name: ConfyVal({ settle: 'str' }),
+                port: ConfyVal({ settle: 'num',
+                  def: ({ conf, chain, getValue }) => {
+                    
+                    // [par]:             { name, port, compression }
+                    // [par].[par]:       { 0: { name, port, compression }, 1: { name, port, compression }, ... }
+                    // [par].[par].[par]: { netIden: { ... }, netAddr: '...', protocols: { 0: { name, port, compression }, ... } }
+                    
+                    let protocol = getValue('[rel].[par].name');
+                    let secureBits = getValue('[rel].[par].[par].[par].netIden.secureBits');
+                    let term = `${secureBits > 0 ? 'secure' : 'unsafe'} ${protocol}`;
+                    
+                    let def = Object.plain({
+                      'secure http': 443,
+                      'unsafe http': 80,
+                      'secure ftp': 22,
+                      'unsafe ftp': 21,
+                      'secure ws': 443,
+                      'unsafe ws': 80,
+                    })[term];
+                    if (!def) throw Error(`has no default port for "${term}"`);
+                    
+                    return def;
+                    
+                  },
+                  fn: port => {
+                    
+                    if (!port.isInteger()) throw Error('requires an integer').mod({ value: port });
+                    if (port <= 0) throw Error('requires a value >= 0').mod({ value: port });
+                    return port;
+                    
+                  }
+                }),
+                compression: ConfyVal({ settle: 'arr', def: [], fn: compression => {
+                  if (compression.some(v => !isForm(v, String))) throw Error('requires Array of Strings').mod({ value: compression });
+                  return compression;
+                }})
+              }
+              
+            })
+          }),
         }});
         confyDepKids.loft = ConfySet({
           headOp: ({ conf }) => {
@@ -748,10 +765,13 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
             return conf;
           },
           kids: {
-            prefix: ConfyVal({ settle: 'str', fn: pfx => {
-              if (!/^[a-z][a-z0-9]{0,4}$/.test(pfx)) throw Error('requires lowercase alphanumeric string beginning with alphabetic character and max 5 chars');
-              return pfx;
-            }}),
+            prefix: ConfyVal({ settle: 'str',
+              def: ({ getValue }) => getValue('[rel].[par].name').slice(0, 2),
+              fn: pfx => {
+                if (!/^[a-z][a-z0-9]{0,4}$/.test(pfx)) throw Error('requires lowercase alphanumeric string beginning with alphabetic character and max 5 chars');
+                return pfx;
+              }
+            }),
             name: ConfyVal({ settle: 'str', fn: name => {
               if (!/^[a-z][a-zA-Z0-9]*$/.test(name)) throw Error('requires alphanumeric string beginning with lowercase alphabetic character');
               return name;
@@ -769,8 +789,6 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         
         // Apply the "uid", "host", and "keep" Deploy kids for Therapy
         Object.assign(confyGlb.kids.therapy.confy.kids, { ...confyDepKids }.slice([ 'uid', 'host', 'keep' ]));
-        
-        console.log({ ggg: confyGlb.kids.therapy });
         
         return confyRoot;
         
@@ -866,7 +884,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
             content = content.replace(/[;\s]+$/, ''); // Remove tailing whitespace and semicolons
             return await eval(`(${content})`);
           } catch (err) {
-            err.propagate({ term, confKeep: confKeep.desc(), content });
+            err.propagate(msg => ({ msg: `Failed reading config from Keep: ${msg}`, term, confKeep: confKeep.desc(), content }));
           }
           
         }));
@@ -904,7 +922,6 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         
         let ptr = { root: conf('global.subcon') };
         let params = {};
-        
         for (let pc of [ 'root', ...token.dive(sc.term) ]) {
           if (!ptr[pc]) break;
           ptr = ptr[pc];
@@ -919,7 +936,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       // calling subcons from deeper stack depths)
       let { buffered } = global.subconOutput;
       global.subcon.relevantTraceIndex = 2;
-      global.subconOutput = (sc, ...args) => {
+      global.subconOutput = (sc, ...args) => { // Stdout; check "chatter" then format and output
         
         /// {DEBUG=
         let trace = Error('trace').getInfo().trace;
@@ -928,7 +945,9 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         thenAll(args.map(arg => isForm(arg, Function) ? arg(sc) : arg), args => {
           
           let { chatter=true, therapy=false, format } = global.subconParams(sc);
-          if (sc.term === 'gsc') chatter = true;
+          
+          // Force `chatter === true` for select subcons
+          if ([ 'gsc', 'warning' ].has(sc.term)) chatter = true;
           if (!chatter) return;
           
           // Format args if formatter is available
@@ -1004,7 +1023,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           
           let { buffered } = global.subconOutput;
           global.subconOutput.buffered = null;
-          global.subconOutput = (sc, ...args) => console.log('\n' + [
+          global.subconOutput = (sc, ...args) => console.log('\n' + [ // Panic output
             `SUBCON: "${sc.term}"`,
             ...args.map(a => {
               if (isForm(a, Function)) a = a();
@@ -1013,10 +1032,10 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
             })
           ].join('\n').indent('[panic] '));
           
-          global.subconOutput(gsc, 'Dumping logs...');
+          global.subconOutput(gsc, 'Failed to initialize; panic! Dumping logs...');
           for (let args of buffered) global.subconOutput(...args);
           
-          global.subconOutput(gsc, err.mod(msg => `${msg} (Failed to initialize; panic!)`));
+          global.subconOutput(gsc, err);
           
         }
         
@@ -1255,7 +1274,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         
       }
       
-      if (conf('deploy.features.wrapBelowCode') ?? false) {
+      if (conf('global.features.wrapBelowCode') ?? false) {
         
         // TODO: This feature should be implemented via compilation
         // (i.e. no `if (...) { ... }` but rather {WRAP/BELOWCODE=
@@ -1436,34 +1455,37 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
   { // Enhance subcon output using Record and Bank
     
     let therapyConf = conf('global.therapy');
-    
-    let { record, WeakBank=null, KeepBank=null } = await global.getRooms([
-      'record',
-      `record.bank.${therapyConf.keep ? 'KeepBank' : 'WeakBank'}`
-    ]);
-    
-    let bank = therapyConf.keep
-      ? KeepBank({ subcon: null, keep: global.keep(therapyConf.keep) })
-      : WeakBank({ subcon: null });
-    
-    let therapyRecMan = record.Manager({ bank });
-    
-    // Stack depth for subcon invocations has gotten deeper!
-    global.subcon.relevantTraceIndex = 3;
-    
-    let subconWriteStdout = global.subconOutput;
-    global.subconOutput = (sc, ...args) => {
+    if (therapyConf) {
       
-      subconWriteStdout(sc, ...args, 'YIKES IMPLEMENT THERAPY SUBCON');
+      let { record, WeakBank=null, KeepBank=null } = await global.getRooms([
+        'record',
+        `record.bank.${therapyConf.keep ? 'KeepBank' : 'WeakBank'}`
+      ]);
       
-    };
+      let bank = therapyConf.keep
+        ? KeepBank({ subcon: null, keep: global.keep(therapyConf.keep) })
+        : WeakBank({ subcon: null });
+      
+      let therapyRecMan = record.Manager({ bank });
+      
+      // Stack depth for subcon invocations has gotten deeper!
+      global.subcon.relevantTraceIndex = 3;
+      
+      let subconWriteStdout = global.subconOutput;
+      global.subconOutput = (sc, ...args) => { // Stdout enhanced with therapy output
+        
+        subconWriteStdout(sc, ...args, 'YIKES IMPLEMENT THERAPY SUBCON');
+        
+      };
+      
+    }
     
   };
   
   { // RUN DAT
     
     let activateTmp = Tmp();
-    process.on('exit', () => activateTmp.end());
+    process.on('exit', (...args) => activateTmp.end());
     
     // Clear data from previous runs
     await Promise.all([
@@ -1531,12 +1553,12 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         // (or "nepAddr")? This would probably be an attribute located at
         // "deploy.loft.host.protocols[n]", meaning not every server under
         // "deploy.loft.host" must use the same NetworkAddress
-        let { protocol, port, compression, ...opts } = protocolOpts;
+        let { name: protocol, port, compression, ...opts } = protocolOpts;
         
         if ([ 'http' ].includes(protocol)) return require('./httpServer.js')({
           
           secure: netIden.secureBits > 0,
-          subcon: global.subcon('server.http.raw'),
+          subcon: global.subcon('transport.raw.http'),
           errSubcon: global.subcon('warning'),
           netAddr, port, heartbeatMs, compression, ...opts,
           getKeyedMessage: ({ headers, path, query, fragment, cookie: cookieObj, body }) => {
@@ -1600,7 +1622,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         if ([ 'ws', 'sokt' ].includes(protocol)) return require('./soktServer.js')({
           
           secure: netIden.secureBits > 0,
-          subcon: global.subcon('server.sokt.raw'),
+          subcon: global.subcon('transport.raw.sokt'),
           errSubcon: global.subcon('warning'),
           netAddr, port, heartbeatMs, compression, ...opts,
           getKey: ({ query  }) => getSessionKey(query)
@@ -1616,7 +1638,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         loadtest = await require('./loadtest/loadtest.js')({
           aboveHut,
           netIden,
-          instancesKeep: keep('[file:mill].loadtest'),
+          instancesKeep: global.keep('[file:mill].loadtest'),
           getServerSessionKey: getSessionKey
         });
         servers.push(loadtest.server);
@@ -1626,7 +1648,6 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       // so that Sessions are put in contact with the Hut
       for (let server of servers) {
         netIden.addServer(server);
-        aboveHut.addServerInfo({ ...server }.slice([ 'secure', 'protocol', 'netAddr', 'port' ]));
         server.src.route((session) => {
           
           // TODO: Does this `session` have a reputation??
@@ -1685,7 +1706,8 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         });
         activateTmp.endWith(server);
       }
-      activateTmp.endWith(netIden.runOnNetwork());
+      
+      activateTmp.endWith(await netIden.runOnNetwork());
       
       let loft = await getRoom(loftConf.name);
       let loftTmp = await loft.open({ hereHut: aboveHut, netIden });

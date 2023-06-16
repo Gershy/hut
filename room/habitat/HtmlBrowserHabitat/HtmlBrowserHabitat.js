@@ -146,9 +146,8 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       try         { room = token.dive(msg?.room); }
       catch (err) { throw Error(`Api: invalid room name`).mod({ room: msg.room }); }
       
-      try {
-        reply(await getCompiledKeep('below', room));
-      } catch (err) {
+      try { reply(await getCompiledKeep('below', room)); } catch (err) {
+        gsc(err.mod(msg => `Failed to get compiled keep: ${msg}`));
         reply(`'use strict';global.rooms['${msg.room}']=()=>{throw Error('Api: no room named "${msg.room}"');}`);
       }
       

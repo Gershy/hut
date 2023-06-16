@@ -37,7 +37,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   
   if (!isForm(compression, Array)) throw Error(`Api: compression should be Array; got ${getFormName(compression)}`);
   
-  let { subcon=Function.stub, errSubcon=Function.stub } = opts;
+  let { subcon=gsc, errSubcon=subcon('warning') } = opts;
   let { doCaching=true } = opts;
   let { getKeyedMessage } = opts;
   let { getCacheSecs=v=>(60 * 60 * 24 * 5) } = opts; // Cache for 5 days by default
@@ -75,7 +75,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
     });
     
-    // Always end anon Sessions eventually
+    // For sanity ensure to always end anon Sessions eventually
     if (session.key === null) setTimeout(() => session.end(), 10000);
     
     // Trying to send a Message with the Session either uses a queued
@@ -283,8 +283,6 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     if (tmp.off()) return;
     if (tmp.server) return;
     
-    let sessions = Map();
-    
     mmm('servers', +1);
     
     tmp.closing = false;
@@ -346,9 +344,9 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         
       }
       
-      if (subcon.enabled) {
+      if (subcon.params().chatter) {
         
-        if ([ 'synced', 'error' ].has(subcon.mode)) {
+        if ([ 'synced', 'error' ].has(scParams.params().mode)) {
           
           res.explicitBody = null;
           
@@ -454,6 +452,8 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         
       } else if (isForm(keyedMsg.key, String)) {                     // Reuse or create an identity Session
         
+        let { sessions } = tmp;
+        
         session = sessions.get(keyedMsg.key);
         if (!session) {
           session = makeHttpSession(keyedMsg.key, req);
@@ -530,14 +530,22 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     });
     
     // Wait for the server to start listening
+    let err = Error('');
     await Promise((rsv, rjc) => {
       tmp.server.once('listening', rsv);
-      tmp.server.once('error', rjc);
+      tmp.server.once('error', cause => {
+        cause.suppress();
+        rjc(err.mod({ msg: 'Failed to open server', cause }));
+      });
       tmp.server.listen(port, netAddr);
     });
-        
+    
   };
   let serverShut = async () => {
+    
+    let sessions = [ ...tmp.sessions.values() ];
+    tmp.sessions = Map();
+    for (let s of sessions) s.end();
     
     let server = tmp.server;
     if (!server) return;
@@ -545,10 +553,18 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     
     tmp.closing = true;
     for (let socket of tmp.sockets || []) socket.destroy();
-    tmp.sockets = null;
+    tmp.sockets = Set.stub;
     
     mmm('servers', -1);
-    await Promise((rsv, rjc) => server.close(err => err ? rjc(err) : rsv()));
+    let err = Error('');
+    await Promise((rsv, rjc) => server.close(cause => {
+      if (cause) {
+        cause.suppress();
+        rjc(err.mod({ msg: 'Failed to shut server', cause }));
+      } else {
+        rsv();
+      }
+    }));
     
   };
   
@@ -557,6 +573,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     secure, protocol: 'http', netAddr, port,
     serverOpen, serverShut,
     intercepts: [],
+    sessions: Map(),
     subcon, // soktServer.js may use this for output
     src: Src(), // Sends `session` Objects
     server: null,

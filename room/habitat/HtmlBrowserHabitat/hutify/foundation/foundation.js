@@ -57,7 +57,12 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     // Don't modify SyntaxErrors - they only show proper
     // stack information when they're logged natively
     if (err?.constructor?.name?.hasHead('Syntax')) return;
-    gsc(`Uncaught ${getFormName(err)}:\n${err?.desc()}`);
+    
+    if (err?.desc)
+      gsc(`Uncaught ${getFormName(err)}:\n${err?.desc?.()}`);
+    else
+      gsc(`Uncaught ${getFormName(err)}`, err);
+    
     // TODO: Refresh!! Or better yet - reset foundation (more complex)
     evt.preventDefault();
     
@@ -101,19 +106,8 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   };
   global.subconOutput = (sc, ...args) => {
     
-    let ptr = { kids: { root: conf('subcon') } };
-    let inheritedConf = {};
-    
-    for (let pc of [ 'root', ...token.dive(sc.term) ]) {
-      ptr = ptr.kids?.[pc];
-      if (!ptr) break;
-      
-      inheritedConf.merge(ptr);
-      delete inheritedConf.kids;
-    }
-    
-    let { output={ inline: false, therapist: false } } = inheritedConf;
-    if (!output.inline) return;
+    let { chatter=true } = global.subconParams(sc);
+    if (!chatter) return;
     
     args = args.map(arg => isForm(arg, Function) ? arg() : arg).sift();
     if (!args.length) return;
@@ -124,19 +118,11 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     console.log(...args.map(a => isForm(a?.desc, Function) ? a.desc() : a));
     
   };
-  global.subconParams = sc => {
-    
-    return {
-      output: { inline: 0, therapist: 0 },
-      ...global.conf(token.dive(sc.term).join('.kids.'))
-    };
-    
-  };
   global.getRooms = (names, { shorten=true, ...opts }={}) => {
     
     let err = Error('trace');
     return thenAll(names.toObj(name => {
-
+      
       /// {DEBUG=
       if (!name) throw err.mod({ msg: `A name was null` });
       /// =DEBUG}
@@ -235,7 +221,6 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   document.cookie = 'hut=' + global.btoa(valToJson({ hid: belowHid }));
   
   // Enable `global.real`
-  gsc('OWAWAaasaggggg');
   await (async () => {
     
     let TextNode = document.createTextNode('').constructor;
@@ -350,7 +335,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     // TODO: Maybe something like localstorage could allow BELOW to
     // work with KeepBank? (Would be blazing-fast client-side!!)
     'record.bank.WeakBank',
-    global.conf('deploy.loft')
+    global.conf('deploy.loft.name')
   ]);
   
   let bank = WeakBank({ subcon: global.subcon('bank') });
@@ -385,7 +370,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   };
   await Promise.all(protocols.map(async protocolObj => {
     
-    let { protocol, port, ...opts } = protocolObj;
+    let { name: protocol, port, ...opts } = protocolObj;
     let protocolServer = await global.getRoom(`${hutifyPath}.protocol.${protocol}`);
     let server = protocolServer.createServer({ hut: belowHut, netIden, netProc: `${netAddr}:${port}`, ...opts });
     foundationTmp.endWith(server);

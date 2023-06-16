@@ -9,9 +9,9 @@ global.rooms['logic.TimerSrc'] = () => {
       // early as possible for accuracy
       this.initMs = this.lastMs = this.markMs = markMs;
       
-      if (!isForm(num, Number)) throw Error(`"num" must be a Number`);
-      if (!num.isInteger()) throw Error(`"num" must be an integer`);
-      if (num < 0) throw Error(`"num" must be >= 0`);
+      if (!isForm(num, Number)) throw Error(`"num" must be a Number`).mod({ num });
+      if (!num.isInteger() && num !== Infinity) throw Error(`"num" must be an integer`).mod({ num });
+      if (num < 0) throw Error(`"num" must be >= 0`).mod({ num });
       
       forms.Endable.init.call(this);
       forms.Src.init.call(this);

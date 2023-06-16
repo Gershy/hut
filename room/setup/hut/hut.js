@@ -264,7 +264,6 @@ global.rooms['setup.hut'] = async () => {
         ownedHutRh,
         bankedPrm,
         preloadRooms: Set(),
-        serverInfos: [],
         enabledKeeps: Map(),
         belowConf: null,
         /// =ABOVE}
@@ -292,7 +291,7 @@ global.rooms['setup.hut'] = async () => {
           subcon: conf('global.subcon'),
           bearing: 'below',
           maturity: conf('global.maturity'),
-          features: conf('global.features'),
+          //features: conf('global.features'),
         },
         
         deploy: {
@@ -310,7 +309,6 @@ global.rooms['setup.hut'] = async () => {
       
       denumerate(this, 'ownedHutRh');
       denumerate(this, 'preloadRooms');
-      denumerate(this, 'serverInfos');
       denumerate(this, 'enabledKeeps');
       denumerate(this, 'belowConf');
       
@@ -389,15 +387,6 @@ global.rooms['setup.hut'] = async () => {
       
       return this.belowConf;
       
-    },
-    addServerInfo({ secure, protocol, netAddr, port }) {
-      
-      // AboveHuts don't reference any Servers (they are completely
-      // decoupled), but when connecting a Server to an AboveHut it's
-      // recommended to call `addServerInfo` to inform the AboveHut it's
-      // being served in a particular manner
-      this.serverInfos.push({ secure, protocol, netAddr, port });
-       
     },
     addPreloadRooms(deps) { for (let dep of deps) this.preloadRooms.add(dep); },
     enableKeep(term, keep) {
@@ -905,8 +894,9 @@ global.rooms['setup.hut'] = async () => {
     
     cleanup() {
       
-      forms.Hut.cleanup.call(this); // Eventually calls Record.prototype.cleanup
+      forms.Hut.cleanup.call(this); // Applies Record.prototype.cleanup
       
+      clearTimeout(this.heartbeatTimeout);
       let roads = [ ...this.roads.values() ];
       this.roads = Map.stub;
       for (let r of roads) r.end();

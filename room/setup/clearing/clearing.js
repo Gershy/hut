@@ -6,6 +6,7 @@
 let mustDefaultRooms = !global?.rooms;
 if (!global)          throw Error(`"global" must be available`);
 if (mustDefaultRooms) global.rooms = Object.create(null);
+if (!global.mmm)      global.mmm = () => {};
 /// =ASSERT}
 
 Object.assign(global, {
@@ -22,7 +23,8 @@ Object.assign(global, {
     /// {DEBUG=
     dbgCntMap: {},
     /// =DEBUG}
-    'Promise.all': Promise.all.bind(Promise)
+    'Promise.all': Promise.all.bind(Promise),
+    'Error.prototype.toString': Error.prototype.toString
   }),
   skip: undefined
 });
@@ -126,14 +128,14 @@ Object.assign(global, {
       }
       return this;
     },
-    diveKeysResolved() {
+    diveKeysResolved(chain=[]) {
       let result = {};
       for (let [ k, v ] of this) {
         let dive = token.dive(k);
         let last = dive.pop();
         let ptr = result;
-        for (let cmp of dive) ptr = ptr.has(cmp) ? ptr[cmp] : (ptr[cmp] = {});
-        ptr[last] = isForm(v, Object) ? v.diveKeysResolved() : v;
+        for (let cmp of dive) ptr = (ptr.has(cmp) && ptr[cmp] != null) ? ptr[cmp] : (ptr[cmp] = {});
+        ptr[last] = isForm(v, Object) ? v.diveKeysResolved([ ...chain, ...dive, last ]) : v;
       }
       return result;
     },
@@ -286,7 +288,7 @@ Object.assign(global, {
     
     char() { return String.fromCharCode(this); },
     each(fn) { for (let i = 0; i < this; i++) fn(i); },
-    toArr(fn) { let arr = new Array(this); for (let i = 0; i < this; i++) arr[i] = fn(i); return arr; },
+    toArr(fn) { let arr = new Array(this || 0); for (let i = 0; i < this; i++) arr[i] = fn(i); return arr; },
     toObj(fn) { // Iterator: n => [ key, val ]
       let ret = [];
       for (let i = 0; i < this; i++) { let v = fn(i); if (v !== skip) ret.push(v); }
@@ -306,6 +308,8 @@ Object.assign(global, {
       
       let base = chrs.count();
       if (base === 1 && padLen) throw Error(`Can't pad when using base-1 encoding`);
+      
+      if (this !== this) return (base === 1) ? '' : chrs[0].repeat(Math.max(padLen, 1));
       
       let n = this.valueOf();
       let amt = 1;
@@ -328,7 +332,7 @@ Object.assign(global, {
       return seq.join('').padHead(padLen, chrs[0]);
       
     },
-    isInteger() { return this === this | 0; },
+    isInteger() { return this === Math.round(this); }, // No bitwise shortcut - it disrupts Infinity
     * [Symbol.iterator]() { for (let i = 0; i < this; i++) yield i; },
     * bits() { let n = this >= 0 ? this : -this; while (n) { yield n & 1; n = n >> 1; } },
     
@@ -379,7 +383,7 @@ Object.assign(global, {
       let traceHeadInd = stack.indexOf('>>>HUTTRACE>>>');
       let traceTailInd = stack.indexOf('<<<HUTTRACE<<<');
       
-      if (traceHeadInd < 0 || traceTailInd < 0) return { preamble: '<unknown>', stack: [] };
+      if (traceHeadInd < 0 || traceTailInd < 0) return { preamble: '<unknown>', trace: [] };
       let preamble = stack.slice(0, traceHeadInd).trim();
       let trace = JSON.parse(stack.slice(traceHeadInd + '>>>HUTTRACE>>>'.length, traceTailInd));
       
@@ -855,14 +859,30 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     return Object.assign(sc, {
       term: diveToken,
       kid: dt2 => global.subcon([ ...token.dive(diveToken), ...token.dive(dt2) ]),
-      cachedConf: null,
-      getConf() {
-        if (!sc.cachedConf) sc.cachedConf = subconParams(sc);
-        return sc.cachedConf;
+      cachedParams: null,
+      params() {
+        if (!sc.cachedParams) {
+          sc.cachedParams = subconParams(sc);
+          setTimeout(() => sc.cachedParams = null, 5000);
+        }
+        return sc.cachedParams;
       }
     });
   },
-  subconParams: sc => ({}),
+  subconParams: sc => {
+    
+    let subconConf = global.conf('global.subcon');
+    if (!subconConf) return { chatter: true, therapy: false };
+    let ptr = { root: subconConf };
+    let params = {};
+    for (let pc of [ 'root', ...token.dive(sc.term) ]) {
+      if (!ptr[pc]) break;
+      ptr = ptr[pc];
+      params.merge(ptr.params ?? {});
+    }
+    return params;
+    
+  },
   subconOutput: (sc, ...args) => console.log(`\nSubcon "${sc.term}": ${global.formatAnyValue(args)}`),
   
   // Urls
@@ -960,7 +980,6 @@ Object.assign(global, global.rooms['setup.clearing'] = {
 
 /// {ASSERT=
 if (!global.gsc)      global.gsc = subcon('gsc'); // "global subcon"
-if (!global.mmm)      global.mmm = Function.stub;
 if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
 /// =ASSERT}
 

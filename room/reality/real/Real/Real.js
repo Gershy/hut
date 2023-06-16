@@ -186,9 +186,7 @@ global.rooms['reality.real.Real'] = () => form({ name: 'Real', has: { Tmp }, pro
         throw Error(`Api: facet collision`).mod({
           facet,
           real: real.desc(),
-          /// {DEBUG=
           cause: [ holder.trace, this.trace ],
-          /// =DEBUG}
           holder0: holder.desc(),
           holder1: this.desc()
         });

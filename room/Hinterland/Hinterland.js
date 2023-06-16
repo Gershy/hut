@@ -164,14 +164,14 @@ global.rooms['Hinterland'] = async () => {
       
       /// {DEBUG=
       let sampleSc = subcon('subcon.record.sample');
-      if (sampleSc.getConf().chatter && sampleSc.getConf().ms) (async () => {
+      if (sampleSc.params().chatter && sampleSc.params().ms) (async () => {
         
         let rank = rec => rec.uid.hasHead('!') ? -1 : 0;
         let rankType = (a, b) => a.type.name.localeCompare(b.type.name);
         let rankUid = (a, b) => a.uid.localeCompare(b.uid);
         
         let TimerSrc = await getRoom('logic.TimerSrc');
-        TimerSrc({ num: Infinity, ms: sampleSc.getConf().ms }).route(() => {
+        TimerSrc({ num: Infinity, ms: sampleSc.params().ms }).route(() => {
           
           let ts = getMs();
           let results = [ ...rec.iterateAll() ]
@@ -227,6 +227,7 @@ global.rooms['Hinterland'] = async () => {
           // Don't act unless we know that `lofterRh` won't Send - this
           // is known when `lofterRh.ready()` resolves, and
           // `makeLofterAct` hasn't yet been Ended by `dep`
+          dep(() => makeLofterAct = { act: Function.stub });
           then(lofterRh.ready(), () => makeLofterAct.act());
           /// =BELOW}
           

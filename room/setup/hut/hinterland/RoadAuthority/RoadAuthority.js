@@ -59,6 +59,7 @@ global.rooms['setup.hut.hinterland.RoadAuthority'] = async () => {
       let belowHut = null;
       if      (belowHutOrHid === null)        belowHut = aboveHut.makeBelowHut(aboveHut.makeBelowUid());
       else if (isForm(belowHutOrHid, String)) belowHut = aboveHut.belowHuts.get(belowHutOrHid);
+      
       if (!isForm(belowHut, BelowHut)) return { result: 'belowHutUnavailable' };
       
       let road = this.roads.get(belowHut);

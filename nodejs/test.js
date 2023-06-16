@@ -81,6 +81,29 @@ module.exports = async () => {
       }
       
     },
+    async m => { // Exotic numbers (NaN, (+-)Infinity)
+      
+      if (!(Infinity).isInteger()) throw Error('Infinity should be an int');
+      if ((NaN).isInteger()) throw Error('NaN should not be int');
+      
+      // ... test Infinity.(toObj|toArr|each); expect a memory err? NAH.
+      
+      let nanArr = (NaN).toArr(v => v);
+      if (!isForm(nanArr, Array)) throw Error('NaN.toArr should be []');
+      if (!nanArr.empty()) throw Error('NaN.toArr should be []');
+      
+      let nanObj = (NaN).toObj(v => v);
+      if (!isForm(nanObj, Object)) throw Error('NaN.toObj should be {}');
+      if (!nanObj.empty()) throw Error('NaN.toObj should be {}');
+      
+      let cnt = 0;
+      (NaN).each(() => cnt++);
+      if (cnt !== 0) throw Error('NaN.each should execute 0 times');
+      
+      let spread = [ ...NaN ];
+      if (!spread.empty()) throw Error('[ ...NaN ] should be []');
+      
+    },
     
     async m => { // String.prototype.cut
       

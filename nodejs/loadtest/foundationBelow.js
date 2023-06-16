@@ -22,16 +22,9 @@ let setupFoundation = async (name, conf) => {
   (async () => {
     global.subconOutput = (sc, ...args) => thenAll(args.map(v => hasForm(v, Function) ? v() : v), args => {
       
-      let ptr = global.conf('subcon');
-      let dive = token.dive(sc.term);
-      let fullCf = {};
-      while (ptr) {
-        let { kids, ...cf } = ptr;
-        fullCf.merge(cf);
-        ptr = kids?.[dive.shift()];
-      }
+      let { chatter=true } = global.subconParams(sc);
+      if (!chatter) return;
       
-      if (!fullCf.output.inline) return;
       process.send({ scope: 'foundation', msg: { type: 'subcon', subconArgs: [ sc.term, ...args ] } });
       
     });
@@ -213,7 +206,7 @@ let makeIpcServer = ({ aboveHut, belowHut, procConnectedToAbove }) => {
     // TODO: Maybe something like localstorage could allow BELOW to
     // work with KeepBank? (Would be blazing-fast client-side!!)
     'record.bank.WeakBank',
-    global.conf('deploy.loft')
+    global.conf('deploy.loft.name')
   ]);
   
   let { hid: belowHid, aboveHid, deploy: { uid, host } } = global.conf();

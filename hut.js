@@ -72,7 +72,7 @@ require('./nodejs/foundation.js')({ hutFp: __dirname, conf: (() => { // Parse co
         // represent key-value pairs with eval'd values
         let isEval = arg.has(':=');
         let [ k, v=null ] = arg.cut(isEval ? ':=' : '=');
-        if (v === null) [ k, v ] = [ 'deploy.loft.def', k ];
+        if (v === null) [ k, v ] = [ 'deploy.loft.0.name', k ];
         
         arg = { [k]: isEval ? eval(`(${v})`) : v };
         
