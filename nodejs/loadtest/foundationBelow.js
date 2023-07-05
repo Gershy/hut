@@ -212,7 +212,7 @@ let makeIpcServer = ({ aboveHut, belowHut, procConnectedToAbove }) => {
   let { hid: belowHid, aboveHid, deploy: { uid, host } } = global.conf();
   let { heartbeatMs } = host;
   
-  let bank = WeakBank({ subcon: global.subcon('bank') });
+  let bank = WeakBank({ sc: global.subcon('bank') });
   let recMan = record.Manager({ bank });
   
   let aboveHut = hut.AboveHut({ hid: aboveHid, isHere: false, recMan, heartbeatMs });
@@ -228,7 +228,7 @@ let makeIpcServer = ({ aboveHut, belowHut, procConnectedToAbove }) => {
   });
   
   let loft = loftObj.toArr(v => v)[0];
-  await loft.open({ hereHut: belowHut, rec: aboveHut });
+  await loft.open({ sc: global.subcon('loft'), hereHut: belowHut, rec: aboveHut });
   
   process.send({ scope: 'foundation', msg: 'ready' });
   

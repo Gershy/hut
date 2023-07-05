@@ -1,4 +1,45 @@
-global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: async evt => {
+Error.prepareStackTrace = (err, callSites) => {
+  
+  if (isForm(err, SyntaxError)) return;
+  
+  let trace = callSites.map(cs => {
+    
+    // https://v8.dev/docs/stack-trace-api
+    let row = cs.getLineNumber();
+    let col = cs.getColumnNumber();
+    
+    // Get `cs.getFileName()`; if nullish there are 2 possibilities:
+    // 1. This error is from an `eval` (check `cs.getEvalOrigin`)
+    // 2. This error is unrelated to any line (e.g. Promise.all index)
+    let rawFileName = cs.getFileName();
+    
+    // Option 1; check eval origin (note that we'll want to overwrite
+    // `row` and `col`, as their un-overwritten values will be their
+    // index within the `eval`'d String, whereas the index of where
+    // `eval` was called is *much* more useful for debugging!
+    if (!rawFileName) {
+      let evalOrig = cs.getEvalOrigin();
+      let match = [ , rawFileName=null, row, col ] = (evalOrig ?? '').match(/(https?:[/][/].+):([0-9]+):([0-9]+)/) ?? [];
+      row = parseInt(row, 10); col = parseInt(col, 10);
+    }
+    
+    // We'll get to option 2 if `rawFileName` still (potentially even
+    // after having checked for an eval origin) doesn't indicate a
+    // room; in that case, `keepTerm` takes on a nullish value!
+    let match = rawFileName?.match(/\broom=([^?&/]*)/);
+    let keepTerm = match ? (match[1] ?? null) : null;
+    
+    return keepTerm
+      ? { type: 'line', fnName: cs.getFunctionName(), keepTerm, row, col }
+      : { type: 'info', info: cs.toString() };
+    
+  });
+  return `${err.message}>>>HUTTRACE>>>${valToJson(trace)}<<<HUTTRACE<<<`;
+  
+};
+let hutifyPath = 'habitat.HtmlBrowserHabitat.hutify';
+
+global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   
   // We're going to be stingy with this code; the smaller+faster this
   // file is, the better the user experience! Note this file
@@ -8,55 +49,13 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   // Room with `getRoom`, as the logic for doing so only gets defined
   // after this Room has been initialized!)
   
-  let hutifyPath = 'habitat.HtmlBrowserHabitat.hutify';
-  
-  Error.prepareStackTrace = (err, callSites) => {
-    
-    if (err?.constructor === SyntaxError) return;
-    
-    let trace = callSites.map(cs => {
-      
-      // https://v8.dev/docs/stack-trace-api
-      let row = cs.getLineNumber();
-      let col = cs.getColumnNumber();
-      
-      // Get `cs.getFileName()`; if nullish there are 2 possibilities:
-      // 1. This error is from an `eval` (check `cs.getEvalOrigin`)
-      // 2. This error is unrelated to any line (e.g. Promise.all index)
-      let rawFileName = cs.getFileName();
-      
-      // Option 1; check eval origin (note that we'll want to overwrite
-      // `row` and `col`, as their un-overwritten values will be their
-      // index within the `eval`'d String, whereas the index of where
-      // `eval` was called is *much* more useful for debugging!
-      if (!rawFileName) {
-        let evalOrig = cs.getEvalOrigin();
-        let match = [ , rawFileName=null, row, col ] = (evalOrig ?? '').match(/(https?:[/][/].+):([0-9]+):([0-9]+)/) ?? [];
-        [ row, col ] = [ row, col ].map(v => parseInt(v, 10));
-      }
-      
-      // We'll get to option 2 if `rawFileName` still (potentially even
-      // after having checked for an eval origin) doesn't indicate a
-      // room; in that case, `keepTerm` takes on a nullish value!
-      let match = rawFileName?.match(/\broom=([^?&/]*)/);
-      let keepTerm = match ? (match[1] ?? null) : null;
-      
-      return keepTerm
-        ? { type: 'line', fnName: cs.getFunctionName(), keepTerm, row, col }
-        : { type: 'info', info: cs.toString() };
-      
-    });
-    return `${err.message}>>>HUTTRACE>>>${valToJson(trace)}<<<HUTTRACE<<<`;
-    
-  };
-  
   let onErr = evt => {
     
     let err = evt.error ?? evt.reason;
     
     // Don't modify SyntaxErrors - they only show proper
     // stack information when they're logged natively
-    if (err?.constructor?.name?.hasHead('Syntax')) return;
+    if (isForm(err, SyntaxError)) return;
     
     if (err?.desc)
       gsc(`Uncaught ${getFormName(err)}:\n${err?.desc?.()}`);
@@ -171,7 +170,6 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     }));
     
   };
-  gsc('Configuration:', global.rawConf);
   
   /// {DEBUG=
   global.mapCmpToSrc = (file, row, col) => {
@@ -338,7 +336,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
     global.conf('deploy.loft.name')
   ]);
   
-  let bank = WeakBank({ subcon: global.subcon('bank') });
+  let bank = WeakBank({ sc: global.subcon('bank') });
   let recMan = record.Manager({ bank });
   
   let aboveHut = hut.AboveHut({ hid: aboveHid, isHere: false, recMan, heartbeatMs });
@@ -382,7 +380,7 @@ global.rooms[`habitat.HtmlBrowserHabitat.hutify.foundation`] = () => ({ init: as
   if (initComm) belowHut.actOnComm({ src: aboveHut, msg: initComm });
   
   let loft = loftObj.toArr(v => v)[0];
-  await loft.open({ hereHut: belowHut, rec: aboveHut });
+  await loft.open({ sc: global.subcon('loft'), hereHut: belowHut, rec: aboveHut });
   
   gsc(`Loft opened after ${(getMs() - performance.timeOrigin).toFixed(2)}ms`);
   

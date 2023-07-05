@@ -1,8 +1,8 @@
 global.rooms['record.bank.WeakBank'] = () => form({ name: 'WeakBank', has: { Endable }, props: (forms, Form) => ({
   
-  init() {
+  init({ sc=global.subcon('bank.keep') }) {
     forms.Endable.init.call(this);
-    Object.assign(this, { recs: Map(), nextUid: 0 });
+    Object.assign(this, { recs: Map(), nextUid: 0, sc });
   },
   getNextUid() { return this.nextUid++; },
   syncRec(rec) {
@@ -87,7 +87,7 @@ global.rooms['record.bank.WeakBank'] = () => form({ name: 'WeakBank', has: { End
         /// {ASSERT=
         if (!this.recs.has(newRec.uid)) throw Error(`Didn't synchronously index ${newRec.desc()}`).mod({ uid: newRec.uid, recs: this.recs });
         if (this.recs.get(newRec.uid) !== newRec) {
-          gsc(newRec, this.recs.get(newRec.uid));
+          this.sc(newRec, this.recs.get(newRec.uid));
           throw Error(`Incorrectly indexed ${newRec.desc()}`);
         }
         /// =ASSERT}

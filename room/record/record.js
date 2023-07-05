@@ -1,21 +1,23 @@
 global.rooms['record'] = async () => {
   
-  let rooms = await getRooms([
-    'logic.MemSrc',
-    'record.bank.WeakBank'
-  ]);
-  let { MemSrc, WeakBank } = rooms;
+  let MemSrc = await getRoom('logic.MemSrc');
   
   let Manager = form({ name: 'Manager', props: (forms, Form) => ({
     
     // TODO:
     // "Manager" -> "Archivist"
+    // "Manager" -> "Registrar"
+    // "Manager" -> "Auditor"
+    // "Manager" -> "Clerk"
     // "Manager" -> "Librarian" ("Record" -> "Book"??)
     // "Manager" -> "Curator"
     
-    init({ bank=WeakBank() }) {
+    init({ sc=subcon('manager'), bank }) {
       
       Object.assign(this, {
+        
+        sc,
+        recordSc: sc.kid('record'),
         
         recSearches: Set(/* functions which return either `Record(...)` or `null` */),
         bank,
@@ -64,6 +66,15 @@ global.rooms['record'] = async () => {
       return Tmp(() => delete this.formFns[typeName]);
     },
     addRecord(...args /* type, group, value, uid, volatile | { type, group, value, uid, volatile } */) {
+      
+      // `Manager(...).addRecord` is basically `Manager.getRecord(...)`
+      // but you need to supply `group`+`value`, and `uid` is optional
+      
+      // TODO: If caller supplied `group` and `value` but the `uid` is
+      // hot and a pre-existing Record is returned, should *validate*
+      // that the group is exactly the same, and should *consider*
+      // comparing the pre-existing value and value supplied to this
+      // `addRecord` call!
       
       let { type=null, group=Group(this, {}), value=null, uid: specifiedUid=null, volatile=false } =
         (args.length === 1 && isForm(args[0], Object))
@@ -777,7 +788,7 @@ global.rooms['record'] = async () => {
       mmm('record', +1);
       this.endWith(() => mmm('record', -1));
       
-      subcon('record.instance')(() => `LIVE ${this.desc()} (banking...)`);
+      this.type.manager.recordSc(() => `INIT ${this.desc()}`);
       
       // Apply Banking
       let err = Error('');
@@ -837,18 +848,16 @@ global.rooms['record'] = async () => {
             
           }
           
-          subcon('record.instance')(() => `PROP ${this.desc()} (await sync...)`); // "propagate"
-          
+          this.type.manager.recordSc(() => `PROP ${this.desc()}`); // "propagate" to all Holders...
           await syncPrm;
-          
-          subcon('record.instance')(() => `SYNC ${this.desc()}`);
+          this.type.manager.recordSc(() => `SYNC ${this.desc()}`); // The Record was valid for every Holder!
           
         } catch (cause) {
           
           // Any Errors upon Banking / informing Holders result in the
           // Record Ending immediately
           
-          subcon('record.instance')(() => `FAIL ${this.desc()}`);
+          this.type.manager.recordSc(() => `FAIL ${this.desc()}`, err);
           
           try         { this.end(); }
           catch (err) { gsc(`Additional Error when ${this.desc()} failed to Bank`, err); }
@@ -1200,7 +1209,7 @@ global.rooms['record'] = async () => {
     end() { forms.Tmp.end.call(this); return this.endedPrm; },
     cleanup() {
       
-      subcon('record.instance')(() => `KILL ${this.desc()}`);
+      this.type.manager.recordSc(() => `FINI ${this.desc()}`);
       
       for (let endWithMemRoute of this.endWithMemRoutes) endWithMemRoute.end();
       

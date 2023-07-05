@@ -344,9 +344,10 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         
       }
       
-      if (subcon.params().chatter) {
+      let scParams = subcon.params();
+      if (scParams.chatter) {
         
-        if ([ 'synced', 'error' ].has(scParams.params().mode)) {
+        if ([ 'synced', 'error' ].has(scParams.mode)) {
           
           res.explicitBody = null;
           

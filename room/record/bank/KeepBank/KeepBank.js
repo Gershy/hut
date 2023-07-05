@@ -1,4 +1,4 @@
-global.rooms['record.bank.KeepBank'] = async foundation => {
+global.rooms['record.bank.KeepBank'] = async () => {
   
   return form({ name: 'KeepBank', has: { Endable }, props: (forms, Form) => ({
     
@@ -24,7 +24,7 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
       
     },
     
-    init({ keep, lockTimeoutMs=500, encoding='json', subcon=foundation.subcon('bank.keep'), ...args }) {
+    init({ keep, lockTimeoutMs=500, encoding='json', sc=global.subcon('bank.keep'), ...args }) {
       
       forms.Endable.init.call(this, args);
       Object.assign(this, {
@@ -40,7 +40,7 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
         
         nextUid: null,
         readyPrm: null,
-        subcon,
+        sc,
         
         // Even a Keep-based Bank occasionally requires "hot" references
         // to Records; a "hot" reference is simply a synchronously
@@ -102,7 +102,7 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
     getNextUid() {
       
       this.keep.access([ 'meta', 'next' ]).setContent((this.nextUid + 1).encodeStr(), 'utf8');
-      this.subcon(`KeepBank generated uid: ${(this.nextUid + 1).encodeStr(String.base62, 8)}`);
+      this.sc(`KeepBank generated uid: ${(this.nextUid + 1).encodeStr(String.base62, 8)}`);
       return this.nextUid++;
       
     },
@@ -122,11 +122,11 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
     },
     async syncRec(rec) {
       
-      this.subcon(`Holding ${rec.desc()}...`);
+      this.sc(`Holding ${rec.desc()}...`);
       
       // Immediately hold this `rec` reference. If `rec` is truly
       // volatile we'll only drop this reference when `rec` ends, but if
-      // it's non-volatile we'll wait for it to be stored in the bank
+      // it's non-volatile we'll wait for it to be stored in the Bank
       // before dropping the reference
       let endAvailFn = this.makeHot(rec);
       
@@ -140,18 +140,17 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
       // it should be immediately removed from `this.volatileRecs`
       try {
         
-        // Either load or do initial storing for `rec` depending on if it
-        // was seen before
+        // Load initially store `rec` depending on if it was seen before
         let meta = await this.keep.access([ 'rec', casedUid, 'm' ]).getContent(this.encoding);
         if (meta) {
           
           let val = await this.keep.access([ 'rec', casedUid, 'v' ]).getContent(this.encoding);
-          this.subcon(`${rec.desc()} has a preexisting value`, val);
+          this.sc(`${rec.desc()} has a preexisting value`, val);
           rec.setValue(val);
           
         } else {
           
-          this.subcon(`${rec.desc()} is being synced from scratch...`);
+          this.sc(`${rec.desc()} is being synced from scratch...`);
           
           // Store metadata
           await this.keep.access([ 'rec', casedUid, 'm' ]).setContent({
@@ -168,12 +167,12 @@ global.rooms['record.bank.KeepBank'] = async foundation => {
       rec.valueSrc.route(delta => {
         let value = rec.getValue();
         this.keep.access([ 'rec', casedUid, 'v' ]).setContent(value, this.encoding);
-        this.subcon(`Synced ${rec.desc()}.getValue():`, value);
+        this.sc(`Synced ${rec.desc()}.getValue():`, value);
       }, 'prm');
       
       rec.endWith(() => {
         rec.endedPrm = this.keep.access([ 'rec', casedUid ]).rem();
-        this.subcon(`Removed ${rec.desc()}`);
+        this.sc(`Removed ${rec.desc()}`);
       }, 'prm');
       
     },

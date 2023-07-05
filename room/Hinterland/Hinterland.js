@@ -137,7 +137,7 @@ global.rooms['Hinterland'] = async () => {
     },
     /// =LOADTEST}
     
-    async open({ hereHut, rec=hereHut }) {
+    async open({ sc, hereHut, rec=hereHut }) {
       
       let tmp = Tmp();
       
@@ -163,7 +163,7 @@ global.rooms['Hinterland'] = async () => {
       tmp.endWith(loftRh);
       
       /// {DEBUG=
-      let sampleSc = subcon('subcon.record.sample');
+      let sampleSc = sc.kid('recordSample');
       if (sampleSc.params().chatter && sampleSc.params().ms) (async () => {
         
         let rank = rec => rec.uid.hasHead('!') ? -1 : 0;

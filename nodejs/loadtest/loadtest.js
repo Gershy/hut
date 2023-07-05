@@ -7,7 +7,6 @@ if (conf('global.maturity') !== 'dev') throw Error(`Api: "loadtest" feature requ
 
 let cp = require('child_process');
 let path = require('path');
-let sc = subcon('loadtest');
 
 let randFlt = () => Math.random();
 let randInt = (min, max) => min + Math.floor(randFlt() * (max - min));
@@ -129,7 +128,7 @@ let makeServer = ({ getSessionKey }) => {
   
 };
 
-module.exports = async ({ aboveHut, netIden, instancesKeep, getServerSessionKey, loadtest={} }) => {
+module.exports = async ({ aboveHut, netIden, instancesKeep, getServerSessionKey, loadtest={}, sc }) => {
   
   // When run, we'll manage a series of child processes which pretend to
   // be BelowHuts performing random actions
@@ -151,8 +150,7 @@ module.exports = async ({ aboveHut, netIden, instancesKeep, getServerSessionKey,
       let instances = Set();
       let spawnInstance = () => {
         
-        let lifetimeSc = subcon('loadtest.subproc.lifetime');
-        
+        let lifetimeSc = sc.kid('subproc.lifetime');
         let name = Math.random().toString(36).slice(2, 10);
         let belowKeep = instancesKeep.access(name);
         let inst = InsulatedInstance({
@@ -177,12 +175,9 @@ module.exports = async ({ aboveHut, netIden, instancesKeep, getServerSessionKey,
         lifetimeSc(`ADD ${inst.desc()} (${instances.size} total)`);
         
         inst.endWith(() => {
-          
-          instances.rem(inst);
           lifetimeSc(`REM ${inst.desc()} (${instances.size} remaining)`);
-          
+          instances.rem(inst);
           belowKeep.rem();
-          
         });
         
       };

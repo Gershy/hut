@@ -1,5 +1,28 @@
 'use strict';
 
+// Make Errors better! (https://v8.dev/docs/stack-trace-api)
+Error.prepareStackTrace = (err, callSites) => {
+  
+  let trace = callSites.map(cs => {
+    
+    let file = cs.getFileName();
+    if (!file || file.hasHead('node:')) return skip;
+    
+    //Object.getOwnPropertyNames(Object.getPrototypeOf(cs)),
+    
+    return {
+      type: 'line',
+      fnName: cs.getFunctionName(),
+      keepTerm: [ '', '[file]', ...cs.getFileName().split(/[/\\]+/) ].join('/'),
+      row: cs.getLineNumber(),
+      col: cs.getColumnNumber()
+    };
+    
+  });
+  return `>>>HUTTRACE>>>${valToJson(trace)}<<<HUTTRACE<<<`;
+  
+};
+
 // Require clearing.js (it's under "rooms", but simply modifies global
 // state so it can be required directly)
 Object.assign(global, { rooms: Object.create(null) });

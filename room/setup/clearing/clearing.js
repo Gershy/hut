@@ -244,9 +244,9 @@ Object.assign(global, {
     
     $$: 'has:includes,hasHead:startsWith,hasTail:endsWith,padHead:padStart,padTail:padEnd,trimHead:trimStart,trimTail:trimEnd,upper:toUpperCase,lower:toLowerCase',
     
-    cut(delim, num=1) {
-      // `num` defines # of cuts (resulting array length is `num + 1`)
-      let split = this.split(delim, num < Infinity ? num  : skip);
+    cut(delim, cuts=1) { // e.g. `cuts === 1` produces Array of length 2
+      // `cuts` defines # of cuts (resulting array length is `num + 1`)
+      let split = this.split(delim, cuts < Infinity ? cuts : skip);
       let numDelimsSplit = split.length - 1;
       let lenConsumed = 0
         + split.reduce((a, s) => a + s.length, 0)
@@ -854,16 +854,15 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   
   // Subcon debug
   subcon: (diveToken) => {
-    //let dive = token.dive(diveToken);
     let sc = (...args) => global.subconOutput(sc, ...args);
     return Object.assign(sc, {
-      term: diveToken,
+      term: isForm(diveToken, String) ? diveToken : diveToken.join('.'),
       kid: dt2 => global.subcon([ ...token.dive(diveToken), ...token.dive(dt2) ]),
       cachedParams: null,
       params() {
         if (!sc.cachedParams) {
           sc.cachedParams = subconParams(sc);
-          setTimeout(() => sc.cachedParams = null, 5000);
+          setTimeout(() => sc.cachedParams = null, 15000);
         }
         return sc.cachedParams;
       }
@@ -884,6 +883,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     
   },
   subconOutput: (sc, ...args) => console.log(`\nSubcon "${sc.term}": ${global.formatAnyValue(args)}`),
+  subconStub: Object.assign(() => {}, { term: 'stub', kid: () => global.subconStub, params: () => ({}) }),
   
   // Urls
   uriRaw: ({ path='', cacheBust, query }) => {

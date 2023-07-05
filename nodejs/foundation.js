@@ -5,40 +5,16 @@ let util = require('util');
 let { rootTransaction: rootTrn, Filepath, FsKeep } = require('./filesys.js');
 let NetworkIdentity = require('./NetworkIdentity.js');
 
-// Make Errors better! (https://v8.dev/docs/stack-trace-api)
-Error.prepareStackTrace = (err, callSites) => {
-  
-  let trace = callSites.map(cs => {
-    
-    let file = cs.getFileName();
-    if (!file || file.hasHead('node:')) return skip;
-    
-    //Object.getOwnPropertyNames(Object.getPrototypeOf(cs)),
-    
-    return {
-      type: 'line',
-      fnName: cs.getFunctionName(),
-      keepTerm: [ '', '[file]', ...cs.getFileName().split(/[/\\]+/) ].join('/'),
-      row: cs.getLineNumber(),
-      col: cs.getColumnNumber()
-    };
-    
-  });
-  return `>>>HUTTRACE>>>${valToJson(trace)}<<<HUTTRACE<<<`;
-  
-};
-
 // Set up basic monitoring
 (() => {
   
   // https://nodejs.org/api/process.html#signal-events
   let origExit = process.exit;
-  process.exitHard = process.exit;
+  process.exitNow = process.exit;
   process.exit = code => {
-    // TODO: HEEERE who is making us exit? (Ending activateTmp)
     gsc(Error(`Process explicitly exited (${code})`));
     process.explicitExit = true;
-    return process.exitHard(code);
+    return process.exitNow(code);
   };
   
   // NOTE: Trying to catch SIGKILL or SIGSTOP crashes posix!
@@ -53,7 +29,7 @@ Error.prepareStackTrace = (err, callSites) => {
   let onErr = err => {
     if (err['~suppressed']) return; // Ignore suppressed errors
     gsc(`Uncaught ${getFormName(err)}:`, err.desc());
-    process.exitHard(1);
+    process.exitNow(1);
   };
   process.on('uncaughtException', onErr);
   process.on('unhandledRejection', onErr);
@@ -111,9 +87,6 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     
     // Define `global.formatAnyValue`
     global.formatAnyValue = (val, { colors=true, depth=10 }={}) => util.inspect(val, { colors, depth });
-    
-    // Define `global.subconParams` (note it depends on `global.conf`!)
-    global.subconParams = () => ({ chatter: true, therapy: false });
     
     // Make sure Errors are formatted properly by util.inspect
     Object.defineProperty(Error.prototype, Symbol.for('nodejs.util.inspect.custom'), {
@@ -773,7 +746,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
               }
             }),
             name: ConfyVal({ settle: 'str', fn: name => {
-              if (!/^[a-z][a-zA-Z0-9]*$/.test(name)) throw Error('requires alphanumeric string beginning with lowercase alphabetic character');
+              if (!/^[a-z][a-zA-Z0-9.]*$/.test(name)) throw Error('requires alphanumeric string beginning with lowercase alphabetic character');
               return name;
             }})
           }
@@ -917,20 +890,6 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       let horzDash = () => horzDashChars[Math.floor(Math.random() * horzDashChars.length)];
       let junction = () => junctionChars[Math.floor(Math.random() * junctionChars.length)];
       
-      // Now we can get real subcon opts from `global.conf`
-      global.subconParams = sc => {
-        
-        let ptr = { root: conf('global.subcon') };
-        let params = {};
-        for (let pc of [ 'root', ...token.dive(sc.term) ]) {
-          if (!ptr[pc]) break;
-          ptr = ptr[pc];
-          params.merge(ptr.params ?? {});
-        }
-        return params;
-        
-      };
-      
       // The index in the stack trace which is the callsite that invoked
       // the subcon call (gets overwritten later when therapy requires
       // calling subcons from deeper stack depths)
@@ -944,11 +903,10 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         
         thenAll(args.map(arg => isForm(arg, Function) ? arg(sc) : arg), args => {
           
-          let { chatter=true, therapy=false, format } = global.subconParams(sc);
+          let { chatter=true, therapy=false, format } = sc.params();
           
-          // Force `chatter === true` for select subcons
-          if ([ 'gsc', 'warning' ].has(sc.term)) chatter = true;
-          if (!chatter) return;
+          // Forced output for select subcons
+          if (!chatter && ![ 'gsc', 'warning' ].has(sc.term)) return;
           
           // Format args if formatter is available
           if (format) args = args.map(arg => format(arg, sc));
@@ -1039,7 +997,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           
         }
         
-        return process.exitHard(1);
+        return process.exitNow(1);
         
       });
     
@@ -1452,36 +1410,6 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     
   };
   
-  { // Enhance subcon output using Record and Bank
-    
-    let therapyConf = conf('global.therapy');
-    if (therapyConf) {
-      
-      let { record, WeakBank=null, KeepBank=null } = await global.getRooms([
-        'record',
-        `record.bank.${therapyConf.keep ? 'KeepBank' : 'WeakBank'}`
-      ]);
-      
-      let bank = therapyConf.keep
-        ? KeepBank({ subcon: null, keep: global.keep(therapyConf.keep) })
-        : WeakBank({ subcon: null });
-      
-      let therapyRecMan = record.Manager({ bank });
-      
-      // Stack depth for subcon invocations has gotten deeper!
-      global.subcon.relevantTraceIndex = 3;
-      
-      let subconWriteStdout = global.subconOutput;
-      global.subconOutput = (sc, ...args) => { // Stdout enhanced with therapy output
-        
-        subconWriteStdout(sc, ...args, 'YIKES IMPLEMENT THERAPY SUBCON');
-        
-      };
-      
-    }
-    
-  };
-  
   { // RUN DAT
     
     let activateTmp = Tmp();
@@ -1500,22 +1428,24 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     
     let runDeploy = async deployConf => {
       
-      let { uid, host, loft: loftConf, keep, therapy } = deployConf;
+      let { uid, host, loft: loftConf, keep } = deployConf;
       let { netIden: netIdenConf, netAddr, heartbeatMs, protocols } = host;
-      
       let { hut, record, WeakBank=null, KeepBank=null } = await global.getRooms([
         'setup.hut',
         'record',
         `record.bank.${keep ? 'KeepBank' : 'WeakBank'}`
       ]);
       
+      // Subcon for Deployment depends on whether it's Therapy
+      let deploySc = loftConf.name === 'therapy' ? global.subconStub : global.subcon([]);
+      
       // Initialize a Bank based on `keep`
       let bank = keep
-        ? KeepBank({ subcon: global.subcon('bank'), keep: global.keep(keep) })
-        : WeakBank({ subcon: global.subcon('bank') });
+        ? KeepBank({ sc: deploySc.kid('bank'), keep: global.keep(keep) })
+        : WeakBank({ sc: deploySc.kid('bank') });
       
       // Get an AboveHut with the appropriate config
-      let recMan = record.Manager({ bank });
+      let recMan = record.Manager({ bank, sc: deploySc.kid('manager') });
       let aboveHut = hut.AboveHut({ hid: uid, isHere: true, recMan, heartbeatMs, deployConf });
       activateTmp.endWith(aboveHut);
       
@@ -1634,14 +1564,111 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       });
       let loadtest = null;
       
-      if (conf('global.features.loadtest')) {
+      if (loftConf.name === 'therapy') {
+        
+        let subconWriteStdout = global.subconOutput;
+        
+        // We know the uid of the root Therapy Record; this means if it
+        // already exists we'll get a reference to it!
+        let therapyPrefix = loftConf.prefix;
+        let therapyRec = recMan.addRecord({
+          uid: '!root',
+          type: `${therapyPrefix}.therapy`,
+          value: { ms: getMs() }
+        });
+        
+        // Associate the Loft with the Therapy rec as soon as possible
+        let loftRh = aboveHut.relHandler({ type: 'th.loft', term: 'hut', limit: 1 });
+        activateTmp.endWith(loftRh);
+        loftRh.route(loftHrec => {
+          
+          recMan.addRecord({
+            uid: '!loftTherapy',
+            type: `${therapyPrefix}.loftTherapy`,
+            group: [ loftHrec.rec, therapyRec ],
+            value: { ms: getMs() }
+          });
+          
+        });
+        
+        global.subconOutput = (sc, ...args) => { // Stdout enhanced with therapy output
+          
+          args = args.map(arg => isForm(arg, Function) ? arg(sc) : arg);
+          
+          let { therapy=false } = sc.params();
+          if (therapy) (async () => {
+            
+            // TODO: It's important that nothing occurring within this
+            // function performs any therapy subcon... otherwise LOOP!
+            // Best way is probably to pass stub functions in place of
+            // loggers for every utility used by Therapy!
+            
+            try {
+              
+              // TODO: What exactly are the pre-existing constraints on
+              // `uid` values? KeepBank will stick uids into filenames
+              // so it's important to be certain
+              let ms = getMs();
+              let streamUid = `!stream@${sc.term.replace(/[.]/g, '@')}`;
+              
+              let streamRec = await recMan.addRecord({
+                uid: streamUid,
+                type: `${therapyPrefix}.stream`,
+                group: [ therapyRec ],
+                value: { ms, term: sc.term }
+              });
+              
+              let notionRec = await recMan.addRecord({
+                type: `${therapyPrefix}.notion`,
+                group: [ streamRec ],
+                value: { ms, args }
+              });
+              
+            } catch (err) {
+              
+              // TODO: How to deal with the error? Just want to log it
+              // with subcon, but if the error applies to all therapy
+              // logs then the log related to the error could also fail,
+              // leading to a nasty loop; the hack for now is to use a
+              // new instance of the "warning" subcon, and to overwrite
+              // its "cachedParams" (which should be a private property)
+              // with params disabling therapy - this is brittle; it
+              // breaks if:
+              // - `global.subcon` is refactored so it can return
+              //   references to pre-existing subcons
+              // - therapy subcon uses `global.subconParams(sc)` rather
+              //   than `sc.params()` to access params
+              // - maybe other ways too??
+              
+              let errSc = global.subcon('warning');
+              errSc.cachedParams = { ...errSc.params(), therapy: false };
+              
+              errSc(err.mod(msg => `Error recording therapy: ${msg}`), ...args);
+              
+            }
+            
+          })();
+          
+          subconWriteStdout(sc, ...args);
+          
+        };
+        
+        // Now stack depth for subcon invocations has gotten deeper!
+        global.subcon.relevantTraceIndex += 1;
+        
+      } else if (conf('global.features.loadtest')) {
+        
+        // Note loadtesting may not apply to the "therapy" deployment!
+        
         loadtest = await require('./loadtest/loadtest.js')({
           aboveHut,
           netIden,
           instancesKeep: global.keep('[file:mill].loadtest'),
-          getServerSessionKey: getSessionKey
+          getServerSessionKey: getSessionKey,
+          sc: global.subcon('loadtest')
         });
         servers.push(loadtest.server);
+        
       }
       
       // Each server gets managed by the NetworkIdentity, and is routed
@@ -1710,7 +1737,11 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       activateTmp.endWith(await netIden.runOnNetwork());
       
       let loft = await getRoom(loftConf.name);
-      let loftTmp = await loft.open({ hereHut: aboveHut, netIden });
+      let loftTmp = await loft.open({
+        sc: deploySc.kid(`loft.${loftConf.prefix}`),
+        hereHut: aboveHut,
+        netIden
+      });
       activateTmp.endWith(loftTmp);
       
       // Run load-testing if configured
@@ -1723,11 +1754,14 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     let deployConfs = [];
     if (therapyConf) deployConfs.push({
       uid: 'therapy',
+      host: null,
       loft: { prefix: 'th', name: 'therapy' },
+      keep: null,
       ...therapyConf,
     });
-    deployConfs.push(...global.conf('deploy').toArr(v => v));
-    for (let [ k, deployConf ] of global.conf('deploy')) await runDeploy(deployConf);
+    deployConfs.push(...(global.conf('deploy') ?? {}).toArr(v => v));
+    
+    await Promise.all(deployConfs.map(runDeploy));
     
   };
   
