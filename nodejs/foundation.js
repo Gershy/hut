@@ -990,7 +990,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
             })
           ].join('\n').indent('[panic] '));
           
-          global.subconOutput(gsc, 'Failed to initialize; panic! Dumping logs...');
+          global.subconOutput(gsc, 'Error during initialization; panic! Dumping logs...');
           for (let args of buffered) global.subconOutput(...args);
           
           global.subconOutput(gsc, err);
@@ -1610,14 +1610,12 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
               // so it's important to be certain
               let ms = getMs();
               let streamUid = `!stream@${sc.term.replace(/[.]/g, '@')}`;
-              
               let streamRec = await recMan.addRecord({
                 uid: streamUid,
                 type: `${therapyPrefix}.stream`,
                 group: [ therapyRec ],
                 value: { ms, term: sc.term }
               });
-              
               let notionRec = await recMan.addRecord({
                 type: `${therapyPrefix}.notion`,
                 group: [ streamRec ],
@@ -1767,4 +1765,8 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
   
 };
 
+// TODO: Only need to assign the regex props so that tests can reference
+// and test them - should instead avoid exporting these props; rather
+// trigger their effects in tests (e.g. test compiling a variety of
+// sources) and verify if the results are expected 
 Object.assign(module.exports, { captureLineCommentRegex, captureInlineBlockCommentRegex });

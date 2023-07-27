@@ -85,7 +85,7 @@ global.rooms['record'] = async () => {
         
         if (!type) throw Error(`No Type provided`);
         
-        if ([ Object, Array ].has(group?.constructor)) group = this.getGroup(group);
+        if ([ Object, Array ].any(Cls => isForm(group, Cls))) group = this.getGroup(group);
         /// {DEBUG=
         if (!isForm(group, Group)) throw Error(`Unexpected "group" value: "${getFormName(group)}"`);
         /// =DEBUG}
@@ -93,7 +93,9 @@ global.rooms['record'] = async () => {
         if (isForm(type, String)) {
           if (!type.has('.')) {
             let pfxs = Set(group.mems.toArr(mem => mem.type.getPrefix()));
+            /// {DEBUG=
             if (pfxs.size !== 1) throw Error(`Group prefixes are [${pfxs.toArr(v => v).join(',')}]; no default available`);
+            /// =DEBUG}
             type = `${[ ...pfxs ][0]}.${type}`;
           }
           type = this.getType(type);
@@ -159,13 +161,13 @@ global.rooms['record'] = async () => {
       // Note that the PLAN, IF RUN, IS RESPONSIBLE TO CHECK FOR `uid`
       // IN MEMORY! We can't perform the expensive in-memory check here
       // due to the non-trivial performance hit - often the Plan can
-      // avoid the in-memory check! (E.g., because a Selection includes
-      // an immediately-available "rec" property)
-      // Note the Plan doesn't need to wait for its returned Record's
-      // `bankedPrm` because the timeout to clear `uid` from the cache
-      // is only initiated after the `bankedPrm` resolves (so we're
-      // guaranteed that if `uid` hasn't entered the RecordTree [and
-      // hence become "in-memory"] it's still in the cache!)
+      // avoid the in-memory check - e.g., because a Selection includes
+      // an immediately-available "rec" property! Note the Plan doesn't
+      // need to wait for its returned Record's `bankedPrm` because the
+      // timeout to clear `uid` from the cache is only initiated after
+      // the `bankedPrm` resolves (so we're guaranteed that if `uid`
+      // hasn't entered the RecordTree [becoming "in-memory"] it's still
+      // in the cache!)
       
       if (this.recPrms[uid]) {
         
@@ -189,14 +191,13 @@ global.rooms['record'] = async () => {
           /// =DEBUG}
           
           // We only want to uncache `uid` after the Plan resolves to a
-          // Record AND the Record's `bankedPrm` resolves!
-          
-          // This avoids a sequence like:
+          // Record AND the Record's `bankedPrm` resolves! This avoids a
+          // sequence like:
           // 1. `uid` set in cache
           // 2. `recPlan()` resolves to some `rec`
           //    - But `rec` isn't Banked yet
           //    - Note the cache currently maps `uid` to `rec`
-          //    - Note that `rec` may remain banking indefinitely...
+          //    - Note there's no bound on how long `rec` may bank for
           // 3. Timeout causes `uid` to be removed from cache
           // 4. A new `getRecordFromCacheOrPlan` request for the same
           //    uid comes in
