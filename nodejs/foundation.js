@@ -1485,7 +1485,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         // "deploy.loft.host" must use the same NetworkAddress
         let { name: protocol, port, compression, ...opts } = protocolOpts;
         
-        if ([ 'http' ].includes(protocol)) return require('./httpServer.js')({
+        if ([ 'http' ].includes(protocol)) return require('./server/http.js')({
           
           secure: netIden.secureBits > 0,
           subcon: global.subcon('transport.raw.http'),
@@ -1549,7 +1549,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           }
           
         });
-        if ([ 'ws', 'sokt' ].includes(protocol)) return require('./soktServer.js')({
+        if ([ 'ws', 'sokt' ].includes(protocol)) return require('./server/sokt.js')({
           
           secure: netIden.secureBits > 0,
           subcon: global.subcon('transport.raw.sokt'),

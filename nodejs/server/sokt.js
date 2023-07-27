@@ -279,7 +279,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     } else {
       
       tmp.reusedServer = false;
-      tmp.httpServer = require('./httpServer.js')({
+      tmp.httpServer = require('./server/http.js')({
         secure, netAddr, port,
         compression,
         getKeyedMessage: () => ({ key: null, msg: null }),
