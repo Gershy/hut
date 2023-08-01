@@ -3,21 +3,24 @@
 
 global.rooms['setup.hut.hinterland.RoadAuthority'] = async () => {
   
-  let { hut: { AboveHut, BelowHut } } = await getRoom('setup.hut');
+  let { hut: { AboveHut, BelowHut } } = await getRooms([ 'setup.hut' ]);
   
-  return form({ name: 'RoadAuthority', has: { Src, Endable }, props: (forms, Form) => ({
+  return form({ name: 'RoadAuthority', props: (forms, Form) => ({
     
-    init({ aboveHut, secure, protocol, netProc, sc }) {
-      forms.Src.init.call(this);
+    init({ aboveHut, secure, protocol, netProc, compression=[], sc }) {
+      if (!sc) throw Error('Api: must provide "sc"');
+      let [ netAddr, port ] = netProc.split(':');
       Object.assign(this, {
         aboveHut,
-        secure, protocol, netProc,
+        secure, protocol, netProc, netAddr, port: parseInt(port, 10), compression,
         state: 'shut', statePrm: Promise.resolve(),
         roads: Map(/* BelowHut(...) => Road(...) */),
         sc
       });
     },
-    getProtocol() { return `${this.protocol}${this.secure ? 's' : ''`; },
+    getProtocol() { return `${this.protocol}${this.secure ? 's' : ''}`; },
+    getNetAddr() { return this.netProc.cut(':')[0]; },
+    getPort() { return this.netProc.cut(':')[1]; },
     desc() { return `${this.getProtocol()}://${this.netProc}`; },
     
     activate() {
@@ -63,21 +66,26 @@ global.rooms['setup.hut.hinterland.RoadAuthority'] = async () => {
       return { result: 'success' };
       
     },
+    createRoad(belowHut) { throw Error('Not implemented'); },
     
     $Road: form({ name: 'Road', has: { Tmp }, props: (forms, Form) => ({
       
       // Roads connect Huts within the Hinterland. Roads always connect
       // AboveHut <-> BelowHut. Yes, a Road is a "Session"!
       
-      init({ authority, netAddr, belowHut, sc }) {
+      init({ authority, belowHut }) {
         forms.Tmp.init.call(this);
-        Object.assign(this, { authority, netAddr, belowHut, sc });
+        Object.assign(this, { authority, belowHut });
       },
       desc() {
         let { authority } = this;
-        return `${getFormName(this)}(${authority.desc()} <-> ${this.netAddr})`;
+        let netAddr = belowHut.getKnownNetAddrs[0];
+        return `${getFormName(this)}(${authority.desc()} <-> ${netAddr} / ${this.belowHut.hid})`;
       },
-      tell() {
+      currentCost() {
+        throw Error('Not implemented');
+      },
+      tellAfar() {
         // NOTE: TELLING IS DONE BY A (Hut, Road) PAIR! HUTS MAY HAVE
         // MULTIPLE ROADS! The final transport operation is performed by
         // a Road, but the op needs to be initiated with the Hut, which

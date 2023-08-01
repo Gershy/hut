@@ -11,7 +11,7 @@ global.rooms['setup.hut'] = async () => {
       
       // Errors can occur when processing Comms from other Huts; when
       // this happens we ideally inform the other Hut of the Error, and
-      // if this isn't possible we ensure
+      // if this isn't possible we send the Error to subcon
       
       let msg = { command: 'error', type: 'failed', orig: comm.msg };
       let isExpectedError = err.message?.startsWith?.('Api: ') ?? false;
@@ -38,31 +38,9 @@ global.rooms['setup.hut'] = async () => {
       catch (err) { Form.handleCommError(handlerHut, comm, err); }
       
     },
-    
-    init({ isHere=false, hid, uid, heartbeatMs, ...recordProps }) {
+    $sendComm: ({ src, trg, road, reply, ms=getMs(), msg }) => {
       
-      if (!hid && !uid) throw Error(`Api: supply either "hid" or "uid" (they're synonyms)`);
-      if (!hid) hid = uid;
-      if (!uid) uid = hid;
-      if (uid !== hid) throw Error(`Api: "hid" and "uid" must have same value`);
-      
-      Object.assign(this, {
-        hid,
-        isHere, isAfar: !isHere,
-        commandHandlers: Object.plain(),
-        heartbeatMs
-      });
-      denumerate(this, 'commandHandlers');
-      
-      forms.Record.init.call(this, { uid, ...recordProps, volatile: true });
-      
-    },
-    desc() { return `${this.isHere ? 'Here' : 'Afar'}${forms.Record.desc.call(this)}`; },
-    
-    hear({ src, road, reply, ms=getMs(), msg }) { return src.tell({ trg: this, road, reply, ms, msg }); },
-    tell({ trg, road, reply, ms=getMs(), msg }) {
-      
-      // Causes `this` to tell `trg` a Message
+      // Causes `src` to tell `trg` a Message
       // Note that `ms` should typically be provided, and should
       // represent the high-precision time at which the tell occurred
       // Note that the action resulting from the Tell is implemented in
@@ -92,11 +70,10 @@ global.rooms['setup.hut'] = async () => {
       }
       if (!msg) return;
       
-      let src = this;
       /// {DEBUG=
       if (!src && road) throw Error(`Can't provide Road without SrcHut (who is on the other end of that Road??)`);
       if (!src && reply) throw Error(`Can't omit "src" and provide "reply" (who would receive that reply??)`);
-      if (src && src.aboveHut !== trg && trg.aboveHut !== src) {
+      if (src?.aboveHut !== trg && trg?.aboveHut !== src) {
         throw Error(String.baseline(`
           | Supplied unrelated Huts (neither is the other's parent)
           | Src: ${src?.desc?.() ?? null}
@@ -135,7 +112,7 @@ global.rooms['setup.hut'] = async () => {
       if (src.isAfar && trg.isHere) {
         
         if (!road) {
-          road = src.getRoadFor(trg);
+          road = src.getBestRoadFor(trg);
           if (!road) throw Error(`Supplied AfarSrcHut but omitted Road, and no Road could be automatically selected`);
         }
         
@@ -155,22 +132,45 @@ global.rooms['setup.hut'] = async () => {
         
         // Find the cheapest available Road if none provided
         if (!road) {
-          road = src.getRoadFor(trg);
+          road = src.getBestRoadFor(trg);
           if (!road) throw Error(`Couldn't determine a Road`);
         }
         
         // Send the Tell using the Road
-        return road.tell.send(msg);
+        return road.tellAfar(msg);
         
       }
       
       throw Error(`Couldn't communicate between Huts`);
       
     },
+    
+    init({ isHere=false, hid, uid, heartbeatMs, ...recordProps }) {
+      
+      if (!hid && !uid) throw Error(`Api: supply either "hid" or "uid" (they're synonyms)`);
+      if (!hid) hid = uid;
+      if (!uid) uid = hid;
+      if (uid !== hid) throw Error(`Api: "hid" and "uid" must have same value`);
+      
+      Object.assign(this, {
+        hid,
+        isHere, isAfar: !isHere,
+        commandHandlers: Object.plain(),
+        heartbeatMs
+      });
+      denumerate(this, 'commandHandlers');
+      
+      forms.Record.init.call(this, { uid, ...recordProps, volatile: true });
+      
+    },
+    desc() { return `${this.isHere ? 'Here' : 'Afar'}${forms.Record.desc.call(this)}`; },
+    
+    hear({ src, road, reply, ms=getMs(), msg }) { return Form.sendComm({ src, trg: this, road, reply, ms, msg }); },
+    tell({ trg, road, reply, ms=getMs(), msg }) { return Form.sendComm({ src: this, trg, road, reply, ms, msg }); },
     actOnComm(comm) { throw Error('Not implemented'); },
     
     getKnownNetAddrs() { throw Error('Not implemented'); },
-    getRoadFor(trg) { throw Error('Not implemented'); },
+    getBestRoadFor(trg) { throw Error('Not implemented'); },
     
     enableAction(command, fn) {
       
@@ -194,6 +194,7 @@ global.rooms['setup.hut'] = async () => {
       /// {DEBUG=
       if (this.commandHandlers[command]) throw Error(`Pre-existing command handler for "${command}"`);
       /// =DEBUG}
+      
       let tmp = Tmp({
         desc: () => `CommandSrc(${this.desc()} -> "${command}")`,
         cleanup: () => delete this.commandHandlers[command],
@@ -346,34 +347,77 @@ global.rooms['setup.hut'] = async () => {
       /// =ABOVE}
       
     },
-    getRoadFor(trg) { return trg.getRoadFor(this); },
-    makeBelowUid() {
-      return [ this.childUidCnt++, Math.floor(Math.random() * 62 ** 8) /* TODO: Use a stock random instance? */ ]
-        .map(v => v.encodeStr(String.base62, 8))
-        .join('');
-    },
-    makeBelowHut(hid) {
+    getBelowHut({ authority, trn, hid=null }) {
       
-      /// {DEBUG=
-      if (!hid) throw Error(`Api: must supply "hid" (maybe use ${getFormName(this)}(...).makeBelowUid()?)`);
-      if (this.belowHuts.has(hid)) throw Error(`Api: duplicate "hid"`).mod({ hid });
-      /// =DEBUG}
+      // Returns a BelowHut with a Road for the given Authority
+      // Even if an invalid `hid` is provided with non-dev maturity, a
+      // BelowHut is still returned whose `hid` is randomly generated;
+      // note that if `hid === "anon"`, a spoofed "anonymous" BelowHut
+      // is returned
       
-      let { manager } = this.type;
-      let type = manager.getType('hut.below');
-      let group = manager.getGroup([]);
-      let bh = BelowHut({
-        aboveHut: this, isHere: !this.isHere,
-        type, group, hid,
-        heartbeatMs: this.heartbeatMs
+      if (trn === 'anon') {
+        
+        let anonRoad = {
+          tellAfar: msg => { throw Error('OWwwowoaowoasss'); },
+          desc: () => `AnonRoad(${authority.desc()} <-> ${req.connection.remoteAddress} / !anon)`
+        };
+        let anonBelowHut = {
+          aboveHut: this,
+          hid: '!anon', isHere: false, isAfar: true,
+          desc: () => `AnonHut(...)`,
+          actOnComm: comm => this.doCommand(comm), // Only AboveHut can handle anon commands
+          roads: Map([ authority, anonRoad ])
+        };
+        return { belowHut: anonBelowHut, road: anonRoad };
+        
+      }
+      
+      // Get a BelowHut references; consider any provided `hid`, whether
+      // the `hid` has already been seen, and the deployment maturity
+      let belowHut = (() => {
+        
+        // TODO: Is the hid-refresh redirect necessary? What if the hid
+        // for the initial html request is simply ignored??
+        
+        if (hid && this.belowHuts.has(hid)) return this.belowHuts.get(hid);
+        
+        // Reject an explicit `hid` outside "dev" maturity
+        if (hid && global.conf('global.maturity') !== 'dev') hid = null;
+        
+        // Supply a default hid if the client didn't supply one
+        // TODO: Use a random instance?
+        if (!hid) hid = [ this.childUidCnt++, Math.floor(Math.random() * 62 ** 8) ]
+          .map(v => v.encodeStr(String.base62, 8))
+          .join('');
+        
+        // Actually initialize the BelowHut
+        let { manager } = this.type;
+        let type = manager.getType('hut.below');
+        let group = manager.getGroup([]);
+        let bh = BelowHut({ aboveHut: this, isHere: !this.isHere, type, group, hid });
+        
+        this.belowHuts.add(hid, bh);
+        bh.endWith(() => this.belowHuts.rem(hid));
+        
+        return bh;
+        
+      })();
+      
+      // Initialize a Road if necessary
+      let road = belowHut.roads.get(authority) ?? onto(authority.createRoad(belowHut), road => {
+        
+        belowHut.roads.set(authority, road);
+        road.endWith(() => {
+          belowHut.roads.rem(authority);
+          if (belowHut.roads.empty()) belowHut.end();
+        });
+        
       });
       
-      this.belowHuts.add(hid, bh);
-      bh.endWith(() => this.belowHuts.rem(hid));
-      
-      return bh;
+      return { belowHut, road };
       
     },
+
     actOnComm(comm) { comm.src.actOnComm(comm); }, // All Comms come from Below, so always delegate to BelowHut
     
     /// {ABOVE=
@@ -423,7 +467,6 @@ global.rooms['setup.hut'] = async () => {
       /// =BELOW}
       
       Object.assign(this, {
-        
         aboveHut,
         heartbeatTimeout: null,
         
@@ -439,7 +482,7 @@ global.rooms['setup.hut'] = async () => {
         loadtestActions: Set(),
         /// =LOADTEST}
         
-        roads: Map(/* Server(...) => Road/Session(...) */)
+        roads: Map(/* RoadAuthority(...) => Road(...) */)
       });
       
       for (let p of 'roads,aboveHut,heartbeatTimeout'.split(',')) denumerate(this, p);
@@ -539,7 +582,7 @@ global.rooms['setup.hut'] = async () => {
       if (this.roads.get(server) !== road) throw Error(`Api: duplicate road for "${server.desc()}"`);
       
     },
-    getRoadFor(trg) {
+    getBestRoadFor(trg) {
       
       /// {DEBUG=
       if (trg !== this.aboveHut) throw Error(`Can't tell ${trg.desc()} - can only tell ${this.aboveHut.desc()}!`);

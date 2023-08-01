@@ -1436,6 +1436,9 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         `record.bank.${keep ? 'KeepBank' : 'WeakBank'}`
       ]);
       
+      let netIden = NetworkIdentity(netIdenConf);
+      let secure = netIden.secureBits > 0;
+      
       // Subcon for Deployment depends on whether it's Therapy
       let deploySc = loftConf.name === 'therapy' ? global.subconStub : global.subcon([]);
       
@@ -1450,120 +1453,29 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       activateTmp.endWith(aboveHut);
       
       // Server management...
-      let getSessionKey = (payload) => {
+      let servers = await Promise.all(protocols.toArr(async protocolOpts => {
         
-        let { trn='anon', hid=null } = payload;
-        
-        // These can't be confined to DEBUG blocks - Server must always be
-        // wary of malformatted remote queries!
-        if (![ 'anon', 'sync', 'async' ].has(trn)) throw Error(`Api: invalid "trn"`).mod({ trn });
-        if (hid && !isForm(hid, String)) throw Error(`Api: invalid "hid"`).mod({ hid });
-        if (trn === 'anon') return null;
-        
-        // Try pre-existing Hut?
-        let belowHut = aboveHut.belowHuts.get(hid);
-        if (belowHut) return hid; // Note `belowHut.hid === hid`
-        
-        // Get an Hid to create a new Hut; if no `hid` was provided use a
-        // new, safely generated `hid`; otherwise an `hid` was provided
-        // but didn't reference any existing BelowHut - this is only valid
-        // for "dev" maturity
-        if (!hid) hid = aboveHut.makeBelowUid()
-        else if (global.conf('global.maturity') !== 'dev') throw Error(`Api: invalid "hid"`);
-        
-        // If we're lax simply return a new Hut with the provided Hut Id
-        return aboveHut.makeBelowHut(hid).hid;
-        
-      };
-      
-      let netIden = NetworkIdentity(netIdenConf);
-      let servers = protocols.toArr(protocolOpts => {
-        
-        // TODO: Abstract `${netAddr}:${port}` as a NetworkProcessAddress
-        // (or "nepAddr")? This would probably be an attribute located at
-        // "deploy.loft.host.protocols[n]", meaning not every server under
-        // "deploy.loft.host" must use the same NetworkAddress
         let { name: protocol, port, compression, ...opts } = protocolOpts;
         
-        if ([ 'http' ].includes(protocol)) return require('./server/http.js')({
-          
-          secure: netIden.secureBits > 0,
-          subcon: global.subcon('transport.raw.http'),
-          errSubcon: global.subcon('warning'),
-          netAddr, port, heartbeatMs, compression, ...opts,
-          getKeyedMessage: ({ headers, path, query, fragment, cookie: cookieObj, body }) => {
-            
-            body = (body === '') ? {} : jsonToVal(body);
-            if (!isForm(body, Object)) throw Error(`Http body must resolve to Object; got ${getFormName(body)}`);
-            
-            let cookie = Object.assign({}, ...cookieObj.toArr(val => {
-              let cookie = jsonToVal(Buffer.from(val, 'base64'));
-              if (!isForm(cookie, Object)) throw Error(`Cookie value must resolve to Object; got ${getFormName(cookie)}`);
-              return cookie;
-            }));
-            
-            let headerValue = {};
-            if (headers.has('hut')) {
-              let hutHeaders = isForm(headers.hut, Array) ? headers.hut : [ headers.hut ];
-              Object.assign(headerValue, ...hutHeaders.map(v => {
-                let obj = jsonToVal(Buffer.from(headerValue, 'base64'));
-                if (!isForm(obj, Object)) throw Error(`Header values must resolve to Objects; got ${getFormName(obj)}`);
-                return obj;
-              }));
-            }
-            
-            let command = path || 'hutify'; // Note `path` is a String with leading "/" removed
-            let msg = {
-              
-              command,
-              trn: 'anon', // Note that "trn" defaults to "sync" if the resolved command is still "hutify"
-              
-              // Include values from other sources
-              ...headerValue, ...cookie, ...body, ...query
-              
-            };
-            
-            // "hutify" command is always "sync"
-            if (msg.command === 'hutify') msg.trn = 'sync';
-            
-            if (!isForm(msg.trn, String)) throw Error(`Api: "trn" must be String`).mod({ http: {} });
-            if (![ 'anon', 'sync', 'async' ].has(msg.trn)) throw Error(`Api: invalid "trn" value`).mod({ http: {} });
-            if (!isForm(msg.command, String)) throw Error(`Api: "command" must be String`).mod({ http: {} });
-            
-            // Errors getting the session key should reset headers
-            try {
-              return { key: getSessionKey(msg), msg };
-            } catch (err) {
-              // TODO: Review when to redirect? Really only requests to
-              // load the main page should redirect... this will redirect
-              // requests for .js, .css, fetch requests, etc.
-              err.propagate({ http: {
-                code: 302,
-                headers: {
-                  'Set-Cookie': cookieObj.toArr((v, k) => `${k}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;`),
-                  'Location': '/'
-                }
-              }});
-            }
-            
-          }
-          
-        });
-        if ([ 'ws', 'sokt' ].includes(protocol)) return require('./server/sokt.js')({
-          
-          secure: netIden.secureBits > 0,
-          subcon: global.subcon('transport.raw.sokt'),
-          errSubcon: global.subcon('warning'),
-          netAddr, port, heartbeatMs, compression, ...opts,
-          getKey: ({ query  }) => getSessionKey(query)
-          
+        let roadAuthorityPrm = Object.plain({
+          http: () => require('./server/http.js').then(v => v.HttpRoadAuthority),
+          sokt: () => require('./server/sokt.js').then(v => v.SoktRoadAuthority),
+          ws:   () => require('./server/sokt.js').then(v => v.SoktRoadAuthority)
+        })[protocol]?.() ?? Error(`Unfamiliar protocol: ${protocol}`).propagate();
+        
+        let RoadAuthority = await roadAuthorityPrm;
+        
+        return RoadAuthority({
+          secure, netProc: `${netAddr}:${port}`, compression,
+          aboveHut,
+          sc: global.subcon(`road.${protocol}.raw`),
+          ...opts
         });
         
-        throw Error(`Unfamiliar protocol: ${protocol}`);
-        
-      });
-      let loadtest = null;
+      }));
       
+      // TODO: Drift! loadtest's server must inherit from RoadAuthority
+      let loadtest = null;
       if (loftConf.name === 'therapy') {
         
         let subconWriteStdout = global.subconOutput;
@@ -1656,7 +1568,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         
       } else if (conf('global.features.loadtest')) {
         
-        // Note loadtesting may not apply to the "therapy" deployment!
+        // Note loadtesting cannot apply to the "therapy" deployment!
         
         loadtest = await require('./loadtest/loadtest.js')({
           aboveHut,
@@ -1671,66 +1583,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       
       // Each server gets managed by the NetworkIdentity, and is routed
       // so that Sessions are put in contact with the Hut
-      for (let server of servers) {
-        netIden.addServer(server);
-        server.src.route((session) => {
-          
-          // TODO: Does this `session` have a reputation??
-          // let naRep = hut.netAddrReputation;
-          // let netAddrs = session.knownNetAddrs;
-          // let badNetAddr = netAddrs.find(na => naRep.get(na)?.window >= 1).val; // "window" refers to the reputational damage within some timeframe (as opposed to "total" reputational damage)
-          // let badRep = badNetAddr && naRep.get(badNetAddr);
-          // 
-          // if (badRep) {
-          //   this.subcon('warning')(`Reject ${session.desc()} @ ${netAddrs.toArr(v => v).join(' + ')}`, Set(badRep.strikes.map(v => v.reason)).toArr(v => v));
-          //   return session.end();
-          // }
-          
-          // Note Hid is always equal to Session key; this is the bridge
-          // between generic protocol serving and the Hut backend!
-          
-          let hid = session.key;
-          
-          // `session.key === null` indicates an anonymous Session; a
-          // single Tell will occur and it must be replied to with `reply`!
-          if (hid === null) return session.hear.route(({ replyable, ms=getMs(), msg }) => {
-            
-            // Spoof the BelowHut (there isn't any; it's Anon)
-            let anonHut = {
-              aboveHut,
-              isHere: false,
-              isAfar: true,
-              desc: () => `AnonHut(${session.netAddr})`,
-              actOnComm: (comm) => aboveHut.doCommand(comm) // Anon Comms always handled by AboveHut
-            };
-            hut.Hut.prototype.tell.call(anonHut, {
-              // Note that `hut.BelowHut.prototype.tell` would trigger
-              // heartbeat timeout functionality on the AnonHut, which
-              // isn't necessary because AnonHuts are completely ephemeral
-              trg: aboveHut,
-              road: session, reply: replyable(), ms,
-              msg
-            });
-            
-          }, 'prm');
-          
-          // There is an identity/BelowHut associated with this Session!
-          // We'll reference or create the BelowHut; note rejection of
-          // invalid Sessions happened earlier when determining the Hid
-          let belowHut = aboveHut.belowHuts.get(hid);
-          belowHut.seenOnRoad(server, session);
-          session.hear.route(({ replyable, ms=getMs(), msg }) => {
-            
-            if (msg.command === 'bp') return; // Don't propagate bank-poll commands to Hut
-            
-            let reply = (msg.trn === 'sync') ? replyable() : null; // `reply` only allowed for "sync" requests
-            belowHut.tell({ trg: aboveHut, road: session, reply, ms, msg });
-            
-          });
-          
-        });
-        activateTmp.endWith(server);
-      }
+      for (let server of servers) netIden.addServer(server);
       
       activateTmp.endWith(await netIden.runOnNetwork());
       

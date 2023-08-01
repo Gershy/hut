@@ -17,7 +17,7 @@
 // TODO: For `res.writeHead(...)`, consider Keep-Alive
 // e.g. 'Keep-Alive: timeout=5, max=100'
 
-require('../room/setup/clearing/clearing.js');
+require('../../room/setup/clearing/clearing.js');
 
 let zlib = require('zlib');
 let stream = require('stream');
@@ -33,296 +33,159 @@ let httpResponseCodes = Object.plain({
   500: 'Internal Server Error'
 });
 
-module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
+// TODO: Note this isn't being run - although it's the better approach!
+// As long as refactoring this, fix Comms!!
+//    | { hid: 'anHid', trn: 'someTrn', command: 'myCommand', ...args }
+// should become
+//    | { hid: '...', trn: '...', command: '...', args: { ... } }
+module.exports = (async () => {
   
-  if (!isForm(compression, Array)) throw Error(`Api: compression should be Array; got ${getFormName(compression)}`);
+  let RoadAuthority = await getRoom('setup.hut.hinterland.RoadAuthority');
+  let { Hut } = await getRoom('setup.hut');
   
-  let { subcon=gsc, errSubcon=subcon('warning') } = opts;
-  let { doCaching=true } = opts;
-  let { getKeyedMessage } = opts;
-  let { getCacheSecs=v=>(60 * 60 * 24 * 5) } = opts; // Cache for 5 days by default
-  if (!getKeyedMessage) throw Error(String.baseline(`
-    | Must provide "getKeyedMessage"
-    | It must be a function like: ({ headers, path, query, fragment, cookie, body }) => ({ key, msg })
-    | 
-    | - "headers" are http headers
-    | - "path" is the url path (excluding the "/" prefix)
-    | - "query" is an Object representing the query
-    | - "fragment" is the path fragment (excluding the "#" prefix)
-    | - "cookie" is an Object with cookie keys pointing to raw cookie values
-    | - "body" is the http body given as a String
-    | - "key" is the session identifier String for the given request
-    | - "msg" is the resulting payload
-    | 
-    | This function can also throw Errors - any Error thrown with an "http" property defines an Error that should propagate back to the client (e.g. to inform them of their misbehaviour).
-    | Any Errors lacking an "http" property are assumed to indicate client "confusion" (as distinct from "misbehaviour"), and will prompt the client to reset its state (e.g. clear headers), and reattempt the request.
-  `));
-  
-  let makeHttpSession = (key, req) => {
+  let HttpRoadAuthority = form({ name: 'HttpRoadAuthority', has: { RoadAuthority }, props: (forms, Form) => ({
     
-    let session = Tmp({
+    init({ doCaching=true, getCacheSecs=msg=>(60 * 60 * 24 * 5), ...args }) {
       
-      key,
-      desc: () => `HttpSession(http${secure ? 's' : ''}://${netAddr}:${port} / ${key})`,
-      currentCost: () => session.queueRes.length ? 0.5 : 0.75,
-      netAddr: req.connection.remoteAddress,
+      forms.RoadAuthority.init.call(this, { protocol: 'http', ...args });
+      Object.assign(this, { doCaching, getCacheSecs, intercepts: [] });
       
-      queueRes: [],
-      queueMsg: [],
+    },
+    
+    createRoad(belowHut) { return (0, Form.HttpRoad)({ authority: this, belowHut }); },
+    activate() {
+      // Run the server, make it call `hearComm` as necessary. Note that
+      // stupidly, the old above implementation passes the https cert
+      // data to `serverOpen`, not to the actual constructor!! This will
+      // need to change when using RoadAuthority!
       
-      hear: Src(),
-      tell: Src()
-      
-    });
-    
-    // For sanity ensure to always end anon Sessions eventually
-    if (session.key === null) setTimeout(() => session.end(), 10000);
-    
-    // Trying to send a Message with the Session either uses a queued
-    // Response Object to send the message immediately, or queues the
-    // Message, waiting for a Response to become available
-    session.tell.route(msg => {
-      let pkg = session.queueRes.shift();
-      if (pkg) { pkg.used = true; respond(pkg, msg); }
-      else     { session.queueMsg.push(msg); }
-    }, 'prm');
-    
-    session.endWith(() => {
-      for (let pkg of session.queueRes) { pkg.used = true; forceEnd(pkg.res, {}, 204); }
-      session.queueRes = Array.stub;
-      session.queueMsg = Array.stub;
-    });
-    
-    return session;
-    
-  };
-  let respond = async ({ headers: reqHeaders, res }, msg) => {
-    
-    // Translates arbitrary value `msg` into http content type and
-    // payload. This is one of the few times Errors may be handled
-    // without being thrown, as passing an Error as a message
-    // indicates the client has misused the http connection.
-    
-    if (msg === skip) return;
-    
-    // Resolve Errors to 400 responses
-    let code = 200;
-    if (hasForm(msg, Error)) {
-      code = 400;
-      let e = msg.has('e') ? msg.e : msg.message.replace(/^[a-zA-Z0-9]/g, '');
-      msg = { command: 'error', msg: msg.message, e };
-    }
-    
-    let keep = null;
-    if (hasForm(msg, Keep)) keep = msg;
-    
-    // These values determine headers
-    let mime;
-    let cache;
-    
-    if      (keep)                        { mime = await keep.getContentType();       cache = 'private'; } // TODO: Can we determine that some Keeps are public?
-    else if (msg === null)                { mime = 'application/json; charset=utf-8'; cache = null; msg = valToJson(msg); }
-    else if (hasForm(msg, Object, Array)) { mime = 'application/json; charset=utf-8'; cache = null; msg = valToJson(msg); }
-    else {
-      
-      // This is a non-json, non-Keep value. We assume it's a correct
-      // response for the given request, and therefore we'll simply
-      // pull the 1st most desirable requested response content-type
-      // from the list defined in the "Accept" header.
-      // Note an example "Accept" header may contain a value like:
-      // "text/html, application/xml;q=0.9, image/webp, */*;q=0.8"
-      // If we can't find a definitive content-type in this list (note
-      // non-definitive items may look like "*/*", "*/html", "text/*",
-      // etc) we'll simply use "application/octet-stream"
-      let accept = reqHeaders.accept ?? '*/*';
-      let [ t1='*', t2='*', modifiers=null ] = accept.split(',')[0].split(/[/;]/).map(v => v.trim() || skip);
-      mime = (t1 !== '*' && t2 !== '*') ? `${t1}/${t2}; charset=utf-8` : 'application/octet-stream';
-      msg = msg.toString(); // In case it's somehow a Boolean, Number, etc.
-      
-      // TODO: Should differentiate between private (user-specific) and
-      // public values - for example, is `msg` an html response which
-      // embeds the "sync" content for a specific user?? That had better
-      // not go in a public cache! For now all caching is being marked
-      // private, but it would be nice to enable public cache support!
-      cache = 'private';
-      
-    }
-    
-    /// {DEBUG=
-    if (!keep && ![ String, Buffer ].has(msg?.constructor)) throw Error(`Message must resolve to Keep, String, or Buffer`);
-    /// =DEBUG}
-    
-    // Only try to encode if the value isn't precompressed, there are
-    // compression options available, and either the message is known
-    // to be long enough to be worth compressing, or the message's
-    // length isn't known (it's streamed)
-    let encode = null;
-    let tryEncode = compression.length && (keep || msg.length > 75) && !precompressedMimes.has(mime);
-    if (tryEncode) {
-      
-      // If the payload isn't precompressed and compression options
-      // are available, try to select a viable compression encoding
-      // This takes the "Accept-Encoding" header into account:
-      //    | deflate, gzip;q=1.0, *;q=0.5
-      let encodings = reqHeaders['accept-encoding'] ?? [];
-      if (isForm(encodings, String)) encodings = encodings.split(',').map(v => v.trim() || skip);
-      
-      // Format `encodings` to look like:
-      //    | {
-      //    |   'deflate': [],
-      //    |   'gzip':    [ 'q=1.0' ],
-      //    |   '*':       [ 'q=0.5' ]
-      //    | }
-      encodings = encodings.toObj(enc => {
-        let [ name, ...modifiers ] = enc.split(';').map(v => v.trim() || skip);
-        return [ name, modifiers ];
-      });
-      
-      // Find a compression option supported by both us and the client
-      let validEncoding = null
-        || compression.find(v => encodings.has(v)).val
-        || (encodings.has('*') && compression[0]);
-      if (validEncoding) encode = compression[0];
-      
-    }
-    
-    // If `cache` set Cache-Control; `opts.doCaching` determines if the
-    // http resource either lasts for some time or immediately expires
-    // TODO: `cache` is always "private"! Consider how to propagate the
-    // information regarding the sensitivity of the given response data
-    // to this point in the code; overall we want to be able to do
-    // "public" caching!
-    // Cache revalidation (it's all about 304 responses): https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching#validation
-    let resHeaders = {
-      ...(encode ? { 'Content-Encoding': encode } : {}),
-      'Content-Type': mime,
-      'Cache-Control': (opts.doCaching && cache) ? `${cache}, max-age=${getCacheSecs(msg)}` : 'max-age=0'
-    };
-    
-    res.explicitBody = { body: keep ?? msg, encode }; // Use the "explicitBody" property to make values clearer in subcon
-    
-    let timeout = setTimeout(() => {
-      errSubcon(`Ending response destructively because response data was not ready in time`);
-      res.end();
-    }, 5000); // Stream needs to complete in 5000ms
-    
-    try {
-      
-      if (keep) {
+      let tmp = Tmp();
+      tmp.prm = (async () => {
+        let server = require(this.getProtocol()).createServer({ /* TODO */ });
         
-        res.writeHead(code, resHeaders);
+        let sockets = Set();
+        let reqFn = this.processIncomingHttp.bind(this);
+        let conFn = socket => {
+          sockets.add(socket);
+          socket.once('close', () => sockets.rem(socket));
+        };
         
-        let pipe = await keep.getTailPipe();
-        if (encode) {
+        server.on('connection', conFn);
+        server.on('request', reqFn);
+        tmp.endWith(() => {
+          // Fail requests after the server is ended
+          server.off('request', reqFn);
+          server.on('request', res => this.killRes({ res, code: 500, msg: 'Server ended' }));
           
-          let err = Error('trace');
-          let encoder = zlib[`create${encode[0].upper()}${encode.slice(1)}`](); // Transforms, e.g., "delate", "gzip" into "createDeflate", "createGzip"
-          await Promise( (g, b) => stream.pipeline(pipe, encoder, res, err => err ? b(err) : g()) )
-            .fail(cause => err.propagate({ cause, msg: `Failed to stream ${keep.desc()}`, encode }));
+          // Immediately destroy connecting sockets after server ends
+          server.off('connection', conFn);
+          server.on('connection', socket => socket.destroy());
           
-        } else {
+          // End all connected sockets
+          for (let socket of sockets) socket.destroy();
+        });
+        
+        let err = Error('');
+        await Promise((rsv, rjc) => {
+          server.once('listening', rsv);
+          server.once('error', cause => {
+            cause.suppress();
+            rjc(err.mod({ msg: 'Failed to open server', cause }));
+          });
+          server.listen(this.port, this.netAddr);
+        });
+        
+        return server;
+        
+      })();
+      
+      return tmp;
+      
+    },
+    receivedRequestSc(req, body) {
+      
+      // TODO: Drift! This needs testing
+      
+      let { chatter, mode } = this.sc.params();
+      if (!chatter) return;
+      
+      if (mode === 'synced') {
+        
+        res.explicitBody = null;
+        
+        let orig = res.end;
+        res.end = (...args) => {
           
-          pipe.pipe(res);
+          let { body: resBody='', encode='unencoded' } = res.explicitBody ?? { body: args[0] };
+          delete res.explicitBody;
           
-        }
+          this.sc({
+            type: 'synced',
+            req: {
+              version: req.httpVersion,
+              method: req.method,
+              url: req.url,
+              headers: req.headers.map(v => isForm(v, Array) ? v : [ v ]),
+              body
+            },
+            res: {
+              code: res.statusCode,
+              status: httpResponseCodes[res.statusCode] || `'Response ${data.code}`,
+              version: req.httpVersion, // TODO: Is this necessarily the right version?
+              headers: { ...res.getHeaders() }, // `res.getHeaders()` is a plain Object
+              encode,
+              body: resBody
+            }
+          });
+          
+          return orig.call(res, ...args);
+          
+        };
         
-        clearTimeout(timeout);
+      } else if (mode === 'immediate') {
         
-      } else {
+        this.sc({
+          type: 'immediate',
+          version: req.httpVersion,
+          method: req.method,
+          url: req.url,
+          headers: req.headers.map(v => isForm(v, Array) ? v : [ v ]),
+          body
+        });
         
-        // Encode if necessary
-        if (encode) msg = await Promise( (g, b) => zlib[encode](msg, (err, v) => err ? b(err) : g(v)) );
-        res.writeHead(code, { ...resHeaders, 'Content-Length': Buffer.byteLength(msg).toString(10) });
-        res.end(msg);
+        res.explicitBody = null;
+        
+        let orig = res.end;
+        res.end = (...args) => {
+          
+          let { body='', encode='unencoded' } = res.explicitBody ?? { body: args[0] };
+          delete res.explicitBody;
+          
+          this.sc({
+            type: 'res',
+            code: res.statusCode,
+            status: httpResponseCodes[res.statusCode] || `'Response ${data.code}`,
+            version: req.httpVersion, // TODO: Is this necessarily the right version?
+            headers: { ...res.getHeaders() }, // `res.getHeaders()` is a plain Object
+            encode,
+            body
+          });
+          
+          return orig.call(res, ...args);
+          
+        };
         
       }
-      
-    } catch (err) {
-      
-      err.suppress();
-      errSubcon(`Failed to respond with ${getFormName(keep ?? msg)}: ${keep ? keep.desc() : (msg?.slice?.(0, 100) ?? msg)}`, err);
-      forceEnd(res, {}, 400, 'Invalid request');
-      
-    } finally {
-      
-      clearTimeout(timeout);
-      
-    }
-    
-  };
-  let forceEnd = (res, headers={}, code=400, body=null) => {
-    
-    let errs = [];
-    try { res.writeHead(code, headers); } catch (err) { err.suppress(); errs.push(err); }
-    try { res.end(body ?? skip);        } catch (err) { err.suppress(); errs.push(err); }
-    
-    if (errs.empty()) return;
-    errSubcon(`Errors occurred trying to end response (with code ${code})`, ...errs.map(err => {
-      
-      // Short output for premature stream closes (these simply mean the
-      // response socket ended while the resource was streaming - so the
-      // response is already sent, anyways!)
-      if (err.code === 'ERR_STREAM_PREMATURE_CLOSE') return err.message;
-      return err;
-      
-    }));
-    
-  };
-  
-  let serverOpen = async (security=null, adjacentServerPrms={}) => {
-    
-    // - `security` is `{ prv, crt }` or `null`
-    // - `adjacentServerPrms` looks like `{ [protocolName]: Promise }`
-    //   where each Promise represents the opening of another Server on
-    //   the same port (resolves when the adjacent Server has begun
-    //   listening; resolves to that Server Object)
-    
-    if (secure && !security) throw Error(`Secure server https://${netAddr}:${port} requires "security" param`);
-    if (!secure && security) throw Error(`Unsafe server http://${netAddr}:${port} should not receive "security" param`);
-    
-    if (tmp.off()) return;
-    if (tmp.server) return;
-    
-    mmm('servers', +1);
-    
-    tmp.closing = false;
-    tmp.sockets = Set();
-    tmp.server = require(security ? 'https' : 'http').createServer({
-      
-      maxHeaderSize: 4096,      // Note: typical value is 16384 (2^14)
-      noDelay: true,            // Buffer multiple packets under the same header? (Disables Nagel's algorithm)
-      
-      ...(security ? {
         
-        requestCert: false,       // Don't verify client identities (allow public access)
-        rejectUnauthorized: true, // If "requestCert" is enabled, reject clients if their cert is invalid
-        
-        // These values securely identify our server ownership
-        key: security.prv,
-        cert: security.crt
-        
-      } : {})
-      
-    });
-    
-    tmp.server.on('connection', socket => {
-      if (tmp.closing) return socket.destroy();
-      tmp.sockets.add(socket);
-      socket.once('close', () => tmp.sockets.rem(socket));
-    });
-    tmp.server.on('request', async (req, res) => {
-      
-      // Note that only 1 of "upgrade" and "request" will be triggered
-      // for a given `req`!
+    },
+    async processIncomingHttp(req, res) {
       
       let ms = getMs();
       
-      // Consume http request body
-      let body = null;
-      {
+      let body = req.body = await (async () => {
         
         let bodyPrm = Promise.later();
-        let timeout = setTimeout(() => bodyPrm.reject(Error('Http payload too slow')), 2000);
+        let timeout = setTimeout(() => bodyPrm.reject(Error('Api: payload too slow')), 2000);
         let chunks = [];
         let len = 0;
         let dataFn = null;
@@ -330,98 +193,22 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         req.setEncoding('utf8');
         req.on('data', dataFn = chunk => {
           chunks.push(chunk);
-          if ((len += chunk.length) > 5000) bodyPrm.reject(Error('Http payload too large'));
+          if ((len += chunk.length) > 5000) bodyPrm.reject(Error('Api: payload too large'));
         });
         req.on('end', endFn = () => bodyPrm.resolve(chunks.join('')));
         
-        try { body = await bodyPrm; }
-        catch (err) { forceEnd(res, {}, 400, err.message); }
-        finally {
-          req.off('data', dataFn);
-          req.off('end', endFn);
-          clearTimeout(timeout);
-        }
+        try         { return await bodyPrm; }
+        catch (err) { this.killRes({ res, code: 400, msg: err.message }); }
+        finally     { req.off('data', dataFn); req.off('end', endFn); clearTimeout(timeout); }
         
-      }
+      })();
       
-      let scParams = subcon.params();
-      if (scParams.chatter) {
-        
-        if ([ 'synced', 'error' ].has(scParams.mode)) {
-          
-          res.explicitBody = null;
-          
-          let orig = res.end;
-          res.end = (...args) => {
-            
-            let { body: resBody='', encode='unencoded' } = res.explicitBody ?? { body: args[0] };
-            delete res.explicitBody;
-            
-            subcon({
-              type: 'synced',
-              req: {
-                version: req.httpVersion,
-                method: req.method,
-                url: req.url,
-                headers: req.headers.map(v => isForm(v, Array) ? v : [ v ]),
-                body
-              },
-              res: {
-                code: res.statusCode,
-                status: httpResponseCodes[res.statusCode] || `'Response ${data.code}`,
-                version: req.httpVersion, // TODO: Is this necessarily the right version?
-                headers: { ...res.getHeaders() }, // `res.getHeaders()` is a plain Object
-                encode,
-                body: resBody
-              }
-            });
-            
-            return orig.call(res, ...args);
-            
-          };
-          
-        } else {
-          
-          subcon({
-            type: 'req',
-            version: req.httpVersion,
-            method: req.method,
-            url: req.url,
-            headers: req.headers.map(v => isForm(v, Array) ? v : [ v ]),
-            body
-          });
-          
-          res.explicitBody = null;
-          
-          let orig = res.end;
-          res.end = (...args) => {
-            
-            let { body='', encode='unencoded' } = res.explicitBody ?? { body: args[0] };
-            delete res.explicitBody;
-            
-            subcon({
-              type: 'res',
-              code: res.statusCode,
-              status: httpResponseCodes[res.statusCode] || `'Response ${data.code}`,
-              version: req.httpVersion, // TODO: Is this necessarily the right version?
-              headers: { ...res.getHeaders() }, // `res.getHeaders()` is a plain Object
-              encode,
-              body
-            });
-            
-            return orig.call(res, ...args);
-            
-          };
-          
-        }
-        
-      }
+      this.receivedRequestSc(req, body);
       
-      if (tmp.closing) return forceEnd(res, {}, 500);
-      for (let intercept of tmp.intercepts) if (intercept(req.gain({ body }), res)) return;
+      for (let intercept of this.intercepts) if (intercept(req, res)) return;
       
-      let headers = req.headers;
-      let cookie = headers.cookie
+      let reqHeaders = req.headers;
+      let cookie = reqHeaders.cookie
         ?.split(';')
         ?.map(v => v.trim() || skip)
         ?.toObj(item => item.cut('=') /* Naturally produces [ key, value ] */)
@@ -433,243 +220,284 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       query = query ? query.slice(1).split('&').toObj(pc => [ ...pc.cut('='), true /* default key-only value to flag */ ]) : {};
       fragment = fragment.slice(1);
       
-      // Note `keyedMsg` must be `{ key, msg }`, where `key` is `null`
-      // (for anon) or a String identifying the session
-      let keyedMsg = null;
-      try { keyedMsg = await getKeyedMessage({ headers, path, query, fragment, cookie, body }); }
-      catch (err) {
-        errSubcon('Error getting http KeyedMessage', err);
-        let { code=400, headers={}, msg=err.message } = err.has('http') ? err.http : { msg: 'Bad Request' };
-        return forceEnd(res, headers, code, msg);
-      }
-      path = query = fragment = cookie = cookieKeys = body = null;
-      
-      let session = null;
-      if (keyedMsg.key === null) { // Make an anonymous Session
-        
-        session = makeHttpSession(null, req);
-        tmp.endWith(session, 'tmp');
-        tmp.src.send(session);
-        
-      } else if (isForm(keyedMsg.key, String)) {                     // Reuse or create an identity Session
-        
-        let { sessions } = tmp;
-        
-        session = sessions.get(keyedMsg.key);
-        if (!session) {
-          session = makeHttpSession(keyedMsg.key, req);
-          sessions.add(session.key, session);
-          session.endWith(() => sessions.rem(session.key));
-          tmp.src.send(session);
-        }
-        
-        if (session.netAddr !== req.connection.remoteAddress) {
-          errSubcon(() => `Session "${session.key}" uses NetworkAddress "${session.netAddr}" but also keyed by "${req.connection.remoteAddress}"`);
-          res.socket.destroy();
-          session.end(); // Session probably isn't safe to use anymore...
-          return;
-        }
-        
-      } else {
-        
-        throw Error(`Api: KeyedMessage key must be null or String; got ${keyedMsg.key}`);
-        
-      }
-      
-      if (session.off()) return res.socket.destroy(); // forceEnd(res, {}, 204);
-      
-      let replyPrm = null;
-      let replyable = () => {
-        let timeout = setTimeout(() => replyPrm.reject(Error('Timeout').mod({ keyedMsg })), 5 * 1000); // 5 sec is v generous
-        replyPrm = Promise.later();
-        replyPrm.then(() => clearTimeout(timeout));
-        replyPrm.fail(err => (session.end(), err.propagate()));
-        return msg => {
-          replyPrm.resolve();
-          respond({ keyedMsg, headers, res }, msg);
-          if (session.key === null) session.end(); // Anonymous Sessions end immediately after the 1st (only) reply
-        };
+      // - Compile the full `msg`
+      // - `msg.trn` defaults to "anon"
+      // - if `msg.command === 'hutify'`, `msg.trn` is set to "sync"
+      let msg = {
+        hid: null, command: path || 'hutify', trn: 'anon',
+        path, fragment,
+        ...query, ...cookie, ...body
       };
-      session.hear.send({ replyable, ms, msg: keyedMsg.msg });
+      if (msg.command === 'hutify') msg.trn = 'sync';
       
-      // Ensure anonymous Sessions called `replyable` synchronously
-      if (replyPrm === null && session.key === null) {
-        session.end();
-        throw Error('No intention to Reply to anonymous Session (failed to immediately call "replyable")').mod({ keyedMsg });
+      // These can't be confined to DEBUG blocks - Server must always be
+      // wary of malformatted remote queries!
+      let { hid=null, command, trn } = msg;
+      if (!/^(?:anon|sync|async)$/.test(trn))   return this.killRes({ res, code: 400, msg: 'invalid "trn"' });
+      if (hid === '')                           return this.killRes({ res, code: 400, msg: '"hid" may not be an empty string' });
+      if (hid !== null && !isForm(hid, String)) return this.killRes({ res, code: 400, msg: 'invalid "hid"' });
+      
+      let { belowHut, road } = this.aboveHut.getBelowHut({ authority: this, trn, hid });
+      if ([ 'anon', 'sync' ].has(trn)) { // "anon" and "sync" are simple to handle
+        
+        // `trn` is "sync" (or "anon", implying "sync") - the reply must
+        // correspond to the request; hangs until `reply` is called!
+        
+        /// {DEBUG= (I think you could argue this belongs under DEBUG)
+        let syncTimeout = setTimeout(() => {
+          this.sc(`Reply timed out... that's not good!`, { msg });
+          this.killRes({ res, code: 500, msg: 'We messed up and timed out... sorry!' });
+        }, 5 * 1000);
+        /// =DEBUG}
+        
+        return Hut.sendComm({
+          src: belowHut,
+          trg: this.aboveHut,
+          ms,
+          road,
+          reply: msg => {
+            /// {DEBUG=
+            clearTimeout(syncTimeout);
+            /// =DEBUG}
+            this.sendRes({ res, reqHeaders, msg });
+          },
+          msg
+        });
+        
       }
       
-      // If `replyable` was called allow the response to be delivered
-      // via the `reply` function!
-      if (replyPrm !== null) return;
+      if (road.off()) return res.socket.destroy();
       
-      // If we're here it means we need to handle a Request that won't
-      // receive a linked Reply - for Requests like this we'll either
-      // send a Tell that has been pending, or if there is no such Tell
-      // pending, we'll hold onto the Response to use it later!
-        
-      let msg = session.queueMsg.shift();
+      // If we made it here, this trn is "async" - the concept of
+      // "reply" breaks down here; the request and response are
+      // independent; there is no rush to respond via `res`!
+      this.aboveHut.hear({ src: belowHut, road, ms, msg });
       
       // If there's a pending Tell send it immediately using `res`!
-      if (msg) return respond({ keyedMsg, headers, res }, msg);
+      let pendingMsg = road.queueMsg.shift();
+      if (pendingMsg) return this.sendRes({ res, reqHeaders, msg: pendingMsg });
       
-      // Need to queue `res`, and unqueue it if it ends!
-      let pkg = { used: false, headers, res };
-      session.queueRes.add(pkg);
-      
-      // Note that `pkg.used` indicates `pkg` was already unqueued!
-      let abortFn = () => pkg.used || session.queueRes.rem(pkg);
+      // No immediate use for `res`; bank it! Note that if `res` closes
+      // for an unexpected reason, we need to unbank it (remove it from
+      // the queue). We use a "unqueued" flag to potentially
+      // avoid the O(n) remove operation, as the "close" event always
+      // fires, but often `res` will have already been unbanked!
+      road.queueRes.add(Object.assign(res, { unqueued: false, reqHeaders }));
+      let abortFn = () => res.unqueued || road.queueRes.rem(res);
       req.once('close', abortFn);
       res.once('close', abortFn);
       
-      // Don't hold too many Responses for this Session
-      while (session.queueRes.length > 1) { // TODO: Parameterize "maxBankedResponses"?
-        let pkg = session.queueRes.shift();
-        pkg.used = true;
-        forceEnd(pkg.res, {}, 204);
+      // Don't hold too many Responses for this BelowHut
+      while (road.queueRes.length > 1) { // TODO: Parameterize "maxBankedResponses"?
+        let res = Object.assign(road.queueRes.shift(), { unqueued: true });
+        this.killRes({ res, code: 204 });
       }
-      
-    });
-    
-    // Wait for the server to start listening
-    let err = Error('');
-    await Promise((rsv, rjc) => {
-      tmp.server.once('listening', rsv);
-      tmp.server.once('error', cause => {
-        cause.suppress();
-        rjc(err.mod({ msg: 'Failed to open server', cause }));
-      });
-      tmp.server.listen(port, netAddr);
-    });
-    
-  };
-  let serverShut = async () => {
-    
-    let sessions = [ ...tmp.sessions.values() ];
-    tmp.sessions = Map();
-    for (let s of sessions) s.end();
-    
-    let server = tmp.server;
-    if (!server) return;
-    tmp.server = null;
-    
-    tmp.closing = true;
-    for (let socket of tmp.sockets || []) socket.destroy();
-    tmp.sockets = Set.stub;
-    
-    mmm('servers', -1);
-    let err = Error('');
-    await Promise((rsv, rjc) => server.close(cause => {
-      if (cause) {
-        cause.suppress();
-        rjc(err.mod({ msg: 'Failed to shut server', cause }));
-      } else {
-        rsv();
-      }
-    }));
-    
-  };
-  
-  let tmp = Tmp({
-    desc: () => `http${secure ? 's' : ''}://${netAddr}:${port}`,
-    secure, protocol: 'http', netAddr, port,
-    serverOpen, serverShut,
-    intercepts: [],
-    sessions: Map(),
-    subcon, // soktServer.js may use this for output
-    src: Src(), // Sends `session` Objects
-    server: null,
-    closing: false,
-    sockets: null
-  });
-  tmp.endWith(() => serverShut());
-  return tmp;
-  
-};
-
-// TODO: Note this isn't being run - although it's the better approach!
-// As long as refactoring this, fix Comms!!
-//    | { hid: 'anHid', trn: 'someTrn', command: 'myCommand', ...args }
-// should become
-//    | { hid: '...', trn: '...', command: '...', args: { ... } }
-if (0) (async () => {
-  
-  let RoadAuthority = await getRoom('setup.hut.hinterland.RoadAuthority');
-  let HttpRoadAuthority = form({ name: 'HttpRoadAuthority', has: { RoadAuthority }, props: (forms, Form) => ({
-    
-    init({ ...args }) {
-      
-      forms.RoadAuthority.init.call(this, { protocol: 'http', ...args });
-      Object.assign(this, {
-        
-      });
       
     },
-    
-    activate() {
-      // Run the server, make it call `hearComm` as necessary. Note that
-      // stupidly, the old above implementation passes the https cert
-      // data to `serverOpen`, not to the actual constructor!! This will
-      // need to change when using RoadAuthority!
+    async sendRes({ res, reqHeaders, msg }) {
       
-      let tmp = Tmp();
-      tmp.serverPrm = (async () => {
+      // Translates arbitrary value `msg` into http content type and
+      // payload. This is one of the few times Errors may be handled
+      // without being thrown - passing an Error as `msg` indicates the
+      // client has misused the http connection!
+      
+      /// {ASSERT=
+      if (getFormName(res) !== 'ServerResponse') throw Error('HHJjggjjOoowww');
+      /// =ASSERT}
+      
+      if (msg === skip) return;
+      
+      // Resolve Errors to 400 responses
+      let code = 200;
+      if (hasForm(msg, Error)) {
+        code = 400;
+        let e = msg.has('e') ? msg.e : msg.message.replace(/^[a-zA-Z0-9]/g, '');
+        msg = { command: 'error', msg: msg.message, e };
+      }
+      
+      let keep = null;
+      if (hasForm(msg, Keep)) keep = msg;
+      
+      // These values determine headers
+      let mime;
+      let cache;
+      
+      if      (keep)                        { mime = await keep.getContentType();       cache = 'private'; } // TODO: Can we determine that some Keeps are public?
+      else if (msg === null)                { mime = 'application/json; charset=utf-8'; cache = null; msg = valToJson(msg); }
+      else if (hasForm(msg, Object, Array)) { mime = 'application/json; charset=utf-8'; cache = null; msg = valToJson(msg); }
+      else {
         
-        let serverOpts = {
+        // This is a non-json, non-Keep value. We assume it's a correct
+        // response for the given request, and therefore we'll simply
+        // pull the 1st most desirable requested response content-type
+        // from the list defined in the "Accept" header.
+        // Note an example "Accept" header may contain a value like:
+        // "text/html, application/xml;q=0.9, image/webp, */*;q=0.8"
+        // If we can't find a definitive content-type in this list (note
+        // non-definitive items may look like "*/*", "*/html", "text/*",
+        // etc) we'll simply use "application/octet-stream"
+        let accept = reqHeaders.accept ?? '*/*';
+        let [ t1='*', t2='*', modifiers=null ] = accept.split(',')[0].split(/[/;]/).map(v => v.trim() || skip);
+        mime = (t1 !== '*' && t2 !== '*') ? `${t1}/${t2}; charset=utf-8` : 'application/octet-stream';
+        msg = msg.toString(); // In case it's somehow a Boolean, Number, etc.
+        
+        // TODO: Should differentiate between private (user-specific) and
+        // public values - for example, is `msg` an html response which
+        // embeds the "sync" content for a specific user?? That had better
+        // not go in a public cache! For now all caching is being marked
+        // private, but it would be nice to enable public cache support!
+        cache = 'private';
+        
+      }
+      
+      /// {DEBUG=
+      if (!keep && ![ String, Buffer ].has(msg?.constructor)) throw Error(`Message must resolve to Keep, String, or Buffer`);
+      /// =DEBUG}
+      
+      // Only try to encode if the value isn't precompressed, there are
+      // compression options available, and either the message is known
+      // to be long enough to be worth compressing, or the message's
+      // length isn't known (it's streamed)
+      let encode = null;
+      let tryEncode = this.compression.length && (keep || msg.length > 75) && !precompressedMimes.has(mime);
+      if (tryEncode) {
+        
+        // If the payload isn't precompressed and compression options
+        // are available, try to select a viable compression encoding
+        // This takes the "Accept-Encoding" header into account:
+        //    | deflate, gzip;q=1.0, *;q=0.5
+        let encodings = reqHeaders['accept-encoding'] ?? [];
+        if (isForm(encodings, String)) encodings = encodings.split(',').map(v => v.trim() || skip);
+        
+        // Format `encodings` to look like:
+        //    | {
+        //    |   'deflate': [],
+        //    |   'gzip':    [ 'q=1.0' ],
+        //    |   '*':       [ 'q=0.5' ]
+        //    | }
+        encodings = encodings.toObj(enc => {
+          let [ name, ...modifiers ] = enc.split(';').map(v => v.trim() || skip);
+          return [ name, modifiers ];
+        });
+        
+        // Find a compression option supported by both us and the client
+        let validEncoding = null
+          || this.compression.find(v => encodings.has(v)).val
+          || (encodings.has('*') && this.compression[0]);
+        if (validEncoding) encode = this.compression[0];
+        
+      }
+      
+      // If `!!cache` use Cache-Control; `this.doCaching` determines if
+      // the http resource gets cached or immediately expires
+      // TODO: `cache` is always "private"! Consider how to propagate
+      // information regarding the sensitivity of the given response
+      // data to this point in the code; overall we want to be able to
+      // apply "public" caching!
+      // Cache revalidation (it's all about 304 responses): https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching#validation
+      let resHeaders = {
+        ...(encode ? { 'Content-Encoding': encode } : {}),
+        'Content-Type': mime,
+        'Cache-Control': (this.doCaching && cache) ? `${cache}, max-age=${this.getCacheSecs(msg)}` : 'max-age=0'
+      };
+      
+      res.explicitBody = { body: keep ?? msg, encode }; // Use the "explicitBody" property to make values clearer in subcon
+      
+      let timeout = setTimeout(() => {
+        this.sc(`Ending response destructively because response data was not ready in time`);
+        res.end();
+      }, 5000); // Stream needs to complete in 5000ms
+      
+      try {
+        
+        if (keep) {
           
-        };
-        let server = require(this.getProtocol()).createServer(serverOpts);
-        server.on('request', (req, res) => {
+          res.writeHead(code, resHeaders);
           
-          let ms = getMs();
-          
-          let msg = {
-            hid: null, command: 'hutify', trn: 'anon',
-            ...propsFromPath(),
-            ...propsFromQuery(),
-            ...propsFromFragment(),
-            ...propsFromCookie(),
-            ...propsFromBody()
-          };
-          let { hid=null, command, trn } = msg;
-          
-          // If command is "hutify" must use synchronous reply - or think
-          // of it this way: we deny a client's ability to do "hutify"
-          // asynchronously or anonymously!
-          if (command === 'hutify') trn = 'sync';
-          
-          let reply = msg => {
-            // TODO: reply using `res`; if `trn === 'sync'` ensure `reply`
-            // is called within time limit! If no reply within this time
-            // limit reply "503 Service Unavailable" (?) and do some high
-            // visibility subcon stuff
-          };
-          let { result } = this.hear(hid, req.connection.remoteAddress, ms, reply, msg);
-          
-          if (result === 'belowHutUnavailable') {
+          let pipe = await keep.getTailPipe();
+          if (encode) {
             
-            /* TODO: Clear cookies and redirect client */
-            
-          } else if (result === 'sucess') {
-            
-            // Yay! Nothing to do besides subcon
+            let err = Error('trace');
+            let encoder = zlib[`create${encode[0].upper()}${encode.slice(1)}`](); // Transforms, e.g., "delate", "gzip" into "createDeflate", "createGzip"
+            await Promise( (g, b) => stream.pipeline(pipe, encoder, res, err => err ? b(err) : g()) )
+              .fail(cause => err.propagate({ cause, msg: `Failed to stream ${keep.desc()}`, encode }));
             
           } else {
             
-            throw Error(`Unexpected result: "${result}"`);
+            pipe.pipe(res);
             
           }
           
-        });
+          clearTimeout(timeout);
+          
+        } else {
+          
+          // Encode if necessary
+          if (encode) msg = await Promise( (g, b) => zlib[encode](msg, (err, v) => err ? b(err) : g(v)) );
+          res.writeHead(code, { ...resHeaders, 'Content-Length': Buffer.byteLength(msg).toString(10) });
+          res.end(msg);
+          
+        }
         
-      })();
-      
-      return tmp;
+      } catch (err) {
+        
+        err.suppress();
+        this.sc(`Failed to respond with ${getFormName(keep ?? msg)}: ${keep ? keep.desc() : (msg?.slice?.(0, 100) ?? msg)}`, err);
+        this.killRes({ res, code: 400, msg: 'Network misbehaviour' });
+        
+      } finally {
+        
+        clearTimeout(timeout);
+        
+      }
       
     },
-    async doShut() {
-      throw Error('Plsshhss implement');
+    async killRes({ res, code, msg=null, resHeaders={} }) {
+      
+      let errs = [];
+      try { res.writeHead(code, resHeaders); } catch (err) { err.suppress(); errs.push(err); }
+      try { res.end(msg ?? skip);            } catch (err) { err.suppress(); errs.push(err); }
+      
+      if (errs.empty()) return;
+      this.sc(`Errors occurred trying to end response (with code ${code})`, ...errs.map(err => {
+        
+        // Short output for premature stream closes (these simply mean the
+        // response socket ended while the resource was streaming - so the
+        // response is already sent, anyways!)
+        if (err.code === 'ERR_STREAM_PREMATURE_CLOSE') return err.message;
+        return err;
+        
+      }));
+      
     },
     
+    $HttpRoad: form({ name: 'HttpRoad', has: { Road: RoadAuthority.Road }, props: (forms, Form) => ({
+      init(args) {
+        forms.Road.init.call(this, args);
+        Object.assign(this, { queueRes: [], queueMsg: [] });
+        
+        this.endWith(() => {
+          let resArr = this.queueRes;
+          this.queueRes = Array.stub;
+          this.queueMsg = Array.stub;
+          for (let res of resArr) {
+            res.unqueued = true;
+            this.authority.killRes({ res, code: 204 });
+          }
+        });
+      },
+      currentCost() { return this.queueRes.length ? 0.5 : 0.75; },
+      tellAfar(msg) {
+        let res = this.queueRes.shift();
+        if (!res) { this.queueMsg.push(msg); return; }
+        
+        pkg.unqueued = true;
+        this.authority.sendRes({ res, reqHeaders: res.reqHeaders, msg });
+      }
+    })})
+    
   })});
+  
+  return { HttpRoadAuthority };
   
 })();

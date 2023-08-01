@@ -367,7 +367,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   // Note that for sensitive keys the given Keep should be removable
   // media (like a USB key) for physical isolation
   
-  init({ name, details={}, keep=null, secureBits=2048, certificateType='selfSign', servers, getSessionKey, ...more }={}) {
+  init({ name, details={}, keep=null, secureBits=2048, certificateType='selfSign', servers=[], getSessionKey, ...more }={}) {
     
     // TODO: For the same Keep, certain details are expected to remain
     // consistent across runs; it's probably worth storing the initial
@@ -405,7 +405,8 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       // Misc
       subcon: Function.stub,
       
-      servers: []
+      // Servers managed under this NetworkIdentity
+      servers
       
     });
     
@@ -460,7 +461,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
   },
   
-  getNetworkAddresses() { return Set(this.servers.map(server => server.netAddr)).toArr(v => v); },
+  getNetworkAddresses() { return Set(this.servers.map(server => server.getNetAddr())).toArr(v => v); },
   runInShell(args, opts={}) {
     
     if (hasForm(opts, Function)) opts = { onInput: opts };
@@ -1241,35 +1242,29 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
   },
   
-  openPort(port, servers, security=null) {
+  activatePort(port, servers, security=null) {
+    
+    // Activates all Servers/RoadAuthorities configured to run on `port`
     
     /// {ASSERT=
     if (isForm(port, String)) port = parseInt(port, 10);
-    for (let s of servers) if (s.port !== port) throw Error(`Claim to be opening port ${port} but supplied port ${s.port}`);
+    for (let s of servers) {
+      if (s.port !== port) throw Error(`Claim to be opening port ${port} but supplied port ${s.port}`);
+    }
     /// =ASSERT}
     
-    let prms = servers.toObj(server => [ server.protocol, Promise.later() ]);
-    for (let server of servers)
-      server.serverOpen(server.secure ? security : null, prms)
-        .then(() => prms[server.protocol].resolve(server))
-        .fail(err => prms[server.protocol].reject(err));
+    let tmp = Tmp();
     
-    return Promise.all(prms);
+    let activateTmps = servers.map(server => server.activate());
+    for (let activateTmp of activateTmps) tmp.endWith(activateTmp);
+    tmp.prm = Promise.all(activateTmps.map(tmp => tmp.prm));
     
-  },
-  shutPort(port, servers, security=null) {
-    
-    /// {ASSERT=
-    if (isForm(port, String)) port = parseInt(port, 10);
-    for (let server of servers) if (server.port !== port) throw Error(`Claim to be opening port ${port} but supplied port ${server.port}`);
-    /// =ASSERT}
-    
-    return Promise.all(servers.map(server => server.serverShut()));
+    return tmp;
     
   },
-
+  
   addServer(server) { this.servers.add(server); },
-  async runOnNetwork() {
+  runOnNetwork() {
     
     // TODO: (?) Certify every NetworkAddress in `this.servers`
     
@@ -1338,28 +1333,48 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
     if (!this.secureBits) {
       
-      for (let [ port, servers ] of portServers)
-        this.openPort(port, servers, null).then(() => {
-          tmp.endWith(() => this.shutPort(port, servers));
-        });
+      let activeTmps = portServers.toArr((servers, port) => this.activatePort(port, servers, null));
+      for (let activeTmp of activeTmps) tmp.endWith(activeTmp);
+      tmp.prm = Promise.all(activeTmps.map(tmp => tmp.prm));
       
     } else {
       
+      tmp.prm = Promise.later();
+      
+      // Fire-and-forget this!
       (async () => {
+        
+        // `cycleTmp` represents the lifespan of servers running over
+        // multiple signing cycles; a signing cycle ends when the
+        // relevant signing info becomes outdated
+        let cycleTmp = Tmp.stub;
+        tmp.endWith(() => cycleTmp.end()); // Avoid `cycleTmp` reference - it gets reassigned!!
         
         while (tmp.onn()) {
           
+          // `refresh` indicates whether the signing info needed to be
+          // refreshed, because it was outdated - if `refresh === true`
+          // need to make sure that any services running with the
+          // previous `sgn` are restarted using the new `sgn`
           let { sgn, refresh } = await this.getSgnInfo();
           
-          await Promise.all(portServers.map(async (servers, port) => {
+          // If we refreshed it means all previously running servers are
+          // using outdated `sgn` info; need to shut all such servers!
+          if (refresh) cycleTmp.end();
+          
+          // If no cycle is active, begin a new one!
+          if (cycleTmp.off()) {
             
-            // If we refreshed it means all previously running servers
-            // are using outdated `sgn` info; need to shut each server
-            // before reopening it!
-            if (refresh) await this.shutPort(port, servers);
-            if (true)    await this.openPort(port, servers, sgn);
+            cycleTmp = Tmp();
             
-          }));
+            // Need to reactivate all ports if `cycleTmp` is Ended!
+            let activePortTmps = portServers.map((servers, port) => {
+              return this.activatePort(port, servers, sgn);
+            });
+            for (let activePortTmp of activePortTmps) cycleTmp.endWith(activePortTmp);
+            await Promise.all(activePortTmp.map(tmp => tmp.prm));
+            
+          }
           
           // Wait for the crt to expire; this is non-trivial because we
           // need to consider:
