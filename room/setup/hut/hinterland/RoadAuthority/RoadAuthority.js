@@ -3,12 +3,22 @@
 
 global.rooms['setup.hut.hinterland.RoadAuthority'] = async () => {
   
-  let { hut: { AboveHut, BelowHut } } = await getRooms([ 'setup.hut' ]);
-  
   return form({ name: 'RoadAuthority', props: (forms, Form) => ({
     
-    init({ aboveHut, secure, protocol, netProc, compression=[], sc }) {
+    // TODO: Define this in clearing.js? Or maybe even delete it, and
+    // work with duck-typing instead? (Or don't delete it but just never
+    // reference it??) If so may want to simplify some functionality
+    // e.g. parsing netAddr and port from netProc...
+    init({ aboveHut, secure, protocol, netProc, compression=[], sc=subcon(`roadAuth.${protocol}`) }) {
+      
+      /// {DEBUG=
+      if (!aboveHut) throw Error('Api: must provide "aboveHut"');
+      if (!isForm(secure, Boolean)) throw Error('Api: "secure" must be Boolean').mod({ secure });
+      if (!protocol) throw Error('Api: must provide "protocol"');
+      if (!netProc) throw Error('Api: must provide "netProc"');
       if (!sc) throw Error('Api: must provide "sc"');
+      /// =DEBUG}
+      
       let [ netAddr, port ] = netProc.split(':');
       Object.assign(this, {
         aboveHut,
@@ -17,6 +27,7 @@ global.rooms['setup.hut.hinterland.RoadAuthority'] = async () => {
         roads: Map(/* BelowHut(...) => Road(...) */),
         sc
       });
+      
     },
     getProtocol() { return `${this.protocol}${this.secure ? 's' : ''}`; },
     getNetAddr() { return this.netProc.cut(':')[0]; },
@@ -33,39 +44,6 @@ global.rooms['setup.hut.hinterland.RoadAuthority'] = async () => {
       // - commands being told by the AboveHut and heard by the BelowHut
       throw Error('Not implemented');
     },
-    
-    // TODO: There's potential to eliminate `BelowHut.seenOnRoad`...
-    hear(belowHutOrHid, netAddr, ms, reply, msg) {
-      
-      // Specify `belowHut` as either `BelowHut(...)`, the String Hid
-      // of a BelowHut, or `null`
-      // - Strings will be used to reference an existing BelowHut
-      // - `null` will be used to generate a brand new BelowHut
-      
-      // TODO: HEEERE - the plan rn is to pay off tech debt related to
-      // foundation and servers (nodejs + browser foundations and
-      // servers should inherit from common logic defined in setup/);
-      // then clean up Therapy-related stuff; then build out Therapy UI!
-      let { aboveHut } = this;
-      let belowHut = null;
-      if      (belowHutOrHid === null)        belowHut = aboveHut.makeBelowHut(aboveHut.makeBelowUid());
-      else if (isForm(belowHutOrHid, String)) belowHut = aboveHut.belowHuts.get(belowHutOrHid);
-      
-      if (!isForm(belowHut, BelowHut)) return { result: 'belowHutUnavailable' };
-      
-      let road = this.roads.get(belowHut);
-      if (!road) {
-        this.roads.add(belowHut, road = (0, Form.Road)({
-          authority: this, netAddr, belowHut, sc: this.sc.kid([ netAddr ])
-        }));
-        belowHut.endWith(() => this.roads.rem(belowHut));
-      }
-      
-      if (!reply) reply = msg => aboveHut.tell({ trg: belowHut, road, ms: getMs(), msg });
-      belowHut.tell({ trg: aboveHut, reply, ms, msg });
-      return { result: 'success' };
-      
-    },
     createRoad(belowHut) { throw Error('Not implemented'); },
     
     $Road: form({ name: 'Road', has: { Tmp }, props: (forms, Form) => ({
@@ -73,18 +51,16 @@ global.rooms['setup.hut.hinterland.RoadAuthority'] = async () => {
       // Roads connect Huts within the Hinterland. Roads always connect
       // AboveHut <-> BelowHut. Yes, a Road is a "Session"!
       
-      init({ authority, belowHut }) {
+      init({ roadAuth, belowHut }) {
         forms.Tmp.init.call(this);
-        Object.assign(this, { authority, belowHut });
+        Object.assign(this, { roadAuth, belowHut });
       },
       desc() {
-        let { authority } = this;
-        let netAddr = belowHut.getKnownNetAddrs[0];
-        return `${getFormName(this)}(${authority.desc()} <-> ${netAddr} / ${this.belowHut.hid})`;
+        // TODO: pass NetworkAddress to `aboveHut.getBelowHutAndRoad`
+        let netAddr = belowHut.getKnownNetAddrs()[0];
+        return `${getFormName(this)}(${this.roadAuth.desc()} <-> ${netAddr} / ${this.belowHut.hid})`;
       },
-      currentCost() {
-        throw Error('Not implemented');
-      },
+      currentCost() { throw Error('Not implemented'); },
       tellAfar() {
         // NOTE: TELLING IS DONE BY A (Hut, Road) PAIR! HUTS MAY HAVE
         // MULTIPLE ROADS! The final transport operation is performed by

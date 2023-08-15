@@ -115,7 +115,7 @@ require('./nodejs/foundation.js')({ hutFp: __dirname, conf: (() => { // Parse co
       | A commandline argument could not be processed. Note that any commandline argument beginning with "{" or quotes must represent a valid javascript value.
       | The following value was invalid:
       |   | 
-      |   | "${process.argv.slice(-1)[0]}"
+      |   | "${process.argv.at(-1)}"
       |   | 
       | Hut couldn't resolve any meaningful arguments based on this commandline input.
       | 

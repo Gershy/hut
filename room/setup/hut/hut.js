@@ -4,54 +4,21 @@ global.rooms['setup.hut'] = async () => {
   
   let Hut = form({ name: 'Hut', has: { Record }, props: (forms, Form) => ({
     
-    // Huts connect by Roads to other Huts, have the ability to Tell and
-    // Hear to/from other Huts, and can react to what they Hear
+    // Huts connect by Roads to other Huts, have the ability to Tell and Hear to/from other Huts,
+    // and can react to what they Hear
     
-    $handleCommError: (handlerHut, comm, err) => {
-      
-      // Errors can occur when processing Comms from other Huts; when
-      // this happens we ideally inform the other Hut of the Error, and
-      // if this isn't possible we send the Error to subcon
-      
-      let msg = { command: 'error', type: 'failed', orig: comm.msg };
-      let isExpectedError = err.message?.startsWith?.('Api: ') ?? false;
-      msg.detail = isExpectedError ? err.message : 'Logic error';
-      
-      /// {BELOW=
-      isExpectedError = false;
-      msg.detail = err.message;
-      /// =BELOW}
-      
-      // If the Error couldn't be communicated back or if the Error was
-      // unexpected, we need awareness of it
-      if (!isExpectedError) gsc(err.mod( m => ({ message: `${handlerHut.desc()} failed to handle Comm!\n${m}`, comm }) ));
-      
-      /// {ABOVE=
-      // Above should inform Below of the failure so Below can react
-      comm.reply?.(err.mod({ e: msg }));
-      /// =ABOVE}
-      
-    },
-    $commandHandlerWrapper: async (handlerHut, handlerTmp, comm) => {
-      
-      try         { await handlerTmp.fn(comm); }
-      catch (err) { Form.handleCommError(handlerHut, comm, err); }
-      
-    },
     $sendComm: ({ src, trg, road, reply, ms=getMs(), msg }) => {
       
       // Causes `src` to tell `trg` a Message
-      // Note that `ms` should typically be provided, and should
-      // represent the high-precision time at which the tell occurred
-      // Note that the action resulting from the Tell is implemented in
-      // `actOnComm`
-      // Note that `actOnComm` is always called with a `reply` function
+      // Note that `ms` should typically be provided, and should represent the high-precision time
+      // at which the tell occurred; note that the action resulting from the Tell is implemented in
+      // `processCommand`; note that `processCommand` is always called with a `reply` function
       // unless the Comm was Srcless (e.g. self-initiated)
       
       // How communication happens
       // | SrcHut  | TrgHut  | Road
       // |---------|---------|-----------------
-      // | Here    | Here    | Not needed - direct is possible
+      // | Here    | Here    | Not needed - they share a process
       // | Here    | Afar    | **Default to cheapest Road available**
       // | Afar    | Here    | REQUIRED - Afar must have used Road
       // | Afar    | Afar    | N/A - we cannot direct two AfarHuts!
@@ -73,13 +40,12 @@ global.rooms['setup.hut'] = async () => {
       /// {DEBUG=
       if (!src && road) throw Error(`Can't provide Road without SrcHut (who is on the other end of that Road??)`);
       if (!src && reply) throw Error(`Can't omit "src" and provide "reply" (who would receive that reply??)`);
-      if (src?.aboveHut !== trg && trg?.aboveHut !== src) {
+      if (src?.aboveHut !== trg && trg?.aboveHut !== src)
         throw Error(String.baseline(`
           | Supplied unrelated Huts (neither is the other's parent)
           | Src: ${src?.desc?.() ?? null}
           | Trg: ${trg?.desc?.() ?? null}
         `));
-      }
       /// =DEBUG}
       
       subcon('road.traffic')(() => ({
@@ -90,7 +56,7 @@ global.rooms['setup.hut'] = async () => {
       }));
       
       if (!src && trg.isAfar) throw Error(`Can't tell TrgAfarHut when SrcHut is null`);
-      if (!src) return trg.actOnComm({ src: null, road: null, reply: null, ms, msg });
+      if (!src) return trg.processCommand({ src: null, road: null, reply: null, ms, msg });
       
       if (src.isAfar && trg.isAfar) throw Error('Supplied two AfarHuts');
       
@@ -102,7 +68,7 @@ global.rooms['setup.hut'] = async () => {
         // so close you don't need to take a Road to pass between them
         if (road) throw Error(`Provided two HereHuts but also a Road`);
         if (!reply) reply = msg => trg.tell({ trg: src, road, reply: null, ms, msg });
-        return trg.actOnComm({ src, road, reply, ms, msg });
+        return trg.processCommand({ src, road, reply, ms, msg });
         
       }
       
@@ -117,7 +83,7 @@ global.rooms['setup.hut'] = async () => {
         }
         
         if (!reply) reply = msg => trg.tell({ trg: src, road, reply: null, ms, msg });
-        return trg.actOnComm({ src, road, reply, ms, msg });
+        return trg.processCommand({ src, road, reply, ms, msg });
         
       }
       
@@ -131,10 +97,7 @@ global.rooms['setup.hut'] = async () => {
         if (reply) throw Error(`Can't provide "reply" for HereHut -> AfarHut`);
         
         // Find the cheapest available Road if none provided
-        if (!road) {
-          road = src.getBestRoadFor(trg);
-          if (!road) throw Error(`Couldn't determine a Road`);
-        }
+        if (!road) road = src.getBestRoadFor(trg) ?? Error(`Couldn't determine a Road`).propagate();
         
         // Send the Tell using the Road
         return road.tellAfar(msg);
@@ -147,27 +110,33 @@ global.rooms['setup.hut'] = async () => {
     
     init({ isHere=false, hid, uid, heartbeatMs, ...recordProps }) {
       
+      /// {DEBUG=
       if (!hid && !uid) throw Error(`Api: supply either "hid" or "uid" (they're synonyms)`);
       if (!hid) hid = uid;
       if (!uid) uid = hid;
       if (uid !== hid) throw Error(`Api: "hid" and "uid" must have same value`);
+      if (!isForm(heartbeatMs, Number)) throw Error('Api: "heartbeatMs" must be Number');
+      /// =DEBUG}
       
       Object.assign(this, {
         hid,
         isHere, isAfar: !isHere,
-        commandHandlers: Object.plain(),
+        commandHandlers: Map(/* commandString -> Tmp({ desc, fn }) */),
         heartbeatMs
       });
       denumerate(this, 'commandHandlers');
       
       forms.Record.init.call(this, { uid, ...recordProps, volatile: true });
       
+      // TODO: "bp" is taking on new meaning - really it's just a "dummy" Comm - in the context of
+      // http, "dummy" can conveniently be used to denote "bank poll"
+      this.makeCommandHandler('bp', comm => { /* do nothing */ });
+      
     },
     desc() { return `${this.isHere ? 'Here' : 'Afar'}${forms.Record.desc.call(this)}`; },
     
     hear({ src, road, reply, ms=getMs(), msg }) { return Form.sendComm({ src, trg: this, road, reply, ms, msg }); },
     tell({ trg, road, reply, ms=getMs(), msg }) { return Form.sendComm({ src: this, trg, road, reply, ms, msg }); },
-    actOnComm(comm) { throw Error('Not implemented'); },
     
     getKnownNetAddrs() { throw Error('Not implemented'); },
     getBestRoadFor(trg) { throw Error('Not implemented'); },
@@ -192,36 +161,57 @@ global.rooms['setup.hut'] = async () => {
     },
     makeCommandHandler(command, fn) {
       /// {DEBUG=
-      if (this.commandHandlers[command]) throw Error(`Pre-existing command handler for "${command}"`);
+      if (this.commandHandlers.has(command)) throw Error(`Pre-existing command handler for "${command}"`);
       /// =DEBUG}
       
-      let tmp = Tmp({
-        desc: () => `CommandSrc(${this.desc()} -> "${command}")`,
-        cleanup: () => delete this.commandHandlers[command],
-        fn
-      });
-      this.commandHandlers[command] = Form.commandHandlerWrapper.bound(this, tmp);
+      let tmp = Tmp({ desc: () => `CommandSrc(${this.desc()} -> "${command}")`, fn });
+      this.commandHandlers.set(command, tmp);
+      tmp.endWith(() => this.commandHandlers.rem(command));
       return tmp;
     },
-    doCommand(comm, { critical=true }={}) {
+    runCommandHandler(comm) {
+      
+      // Tries to use an available handler to process `comm` - if no handler is available or `comm`
+      // produces errors, attempts to address the error appropriately (e.g. reply with info about
+      // the error, log the error to sc); note a Promise may be returned (if the handler is async)
       
       /// {DEBUG=
-      if (!isForm(comm?.msg?.command, String)) throw Error(`${this.desc()} given Comm without "command"`).mod({ comm });
+      if (!isForm(comm?.msg?.command, String)) throw Error(`Api: given Comm without "command"`).mod({ hut: this.desc(), comm });
       /// =DEBUG}
       
-      // Try to process the command
-      let ch = this.commandHandlers[comm.msg.command];
-      if (ch) { ch(comm); return true; } // That is fire-and-forget - I guess we tolerate that??
+      let run = () => {
+        let ch = this.commandHandlers.get(comm.msg.command);
+        if (!ch) throw Error(`Api: no handler for command "${comm.msg.command}"`).mod({ hut: this.desc(), comm });
+        return ch.fn(comm);
+      };
       
-      // If this is "non-critical" simply return `false`, indicating we
-      // couldn't fulfill the command (note a commom non-critical case
-      // is when a BelowHut tries to execute a command itself; this case
-      // is non-critical because even if it can't process the command it
-      // can still ask its AboveHut to process the command)
-      if (!critical) return false;
+      return safe(run, err => {
+        
+        // Errors can occur when processing Comms from other Huts; when this happens we ideally
+        // inform the other Hut of the Error, and if this isn't possible we send the Error to subcon
+        
+        gsc.kid('error')(err.mod(m => ({
+          message: `${this.desc()} failed to handle Comm!\n${m}`,
+          comm
+        })));
+        
+        /// {ABOVE=
+        // Above should inform Below of the Error
+        comm.reply?.({ command: 'error', msg: {
+          detail: err.message.startsWith('Api: ') ? err.message : 'Server error',
+          orig: comm.msg
+        }});
+        /// =ABOVE}
+        
+      });
       
-      // Failed to run critical command; reply with Error if possible...
-      Form.handleCommError(this, comm, Error(`Api: invalid command: "${comm.msg.command}"`));
+    },
+    processCommand(comm) {
+      
+      // Similar to runCommandHandler, but allows a Hut to delegate to some other Hut - overall,
+      // some Hut(...).runCommandHandler should wind up getting called!
+      
+      throw Error('Not implemented');
       
     }
     
@@ -347,7 +337,7 @@ global.rooms['setup.hut'] = async () => {
       /// =ABOVE}
       
     },
-    getBelowHut({ authority, trn, hid=null }) {
+    getBelowHutAndRoad({ roadAuth, trn, hid=null }) {
       
       // Returns a BelowHut with a Road for the given Authority
       // Even if an invalid `hid` is provided with non-dev maturity, a
@@ -355,24 +345,38 @@ global.rooms['setup.hut'] = async () => {
       // note that if `hid === "anon"`, a spoofed "anonymous" BelowHut
       // is returned
       
+      // TODO: Really, the BelowHut should be passed the RoadAuth - this
+      // indicates that a BelowHut always exists in the presence of at
+      // least one Road! The BelowHut is never exposed to any consuming
+      // code without a Road set on `BelowHut(...).roads`, but it does
+      // exist for some number of event-loop ticks, within the logic in
+      // this file, before having its Road set! (This was exposed by a
+      // bug where `heartbeatMs` was not being set, the `setTimeout` was
+      // firing after 0ms, and a "no Road available" bug appeared)
+      
+      /// {ABOVE=
       if (trn === 'anon') {
         
         let anonRoad = {
           tellAfar: msg => { throw Error('OWwwowoaowoasss'); },
-          desc: () => `AnonRoad(${authority.desc()} <-> ${req.connection.remoteAddress} / !anon)`
+          desc: () => `AnonRoad(${roadAuth.desc()} <-> ${req.connection.remoteAddress} / !anon)`
         };
         let anonBelowHut = {
           aboveHut: this,
           hid: '!anon', isHere: false, isAfar: true,
-          desc: () => `AnonHut(...)`,
-          actOnComm: comm => this.doCommand(comm), // Only AboveHut can handle anon commands
-          roads: Map([ authority, anonRoad ])
+          desc: () => `AnonHut(...)`, // TODO: Include NetworkAddress in desc (from roadAuth)
+          roads: Map([ roadAuth, anonRoad ]),
+          
+          // AnonBelowHuts can only trigger AboveHut handlers
+          runCommandHandler: comm => this.runCommandHandler(comm),
+          processCommand: comm => this.runCommandHandler(comm)
         };
         return { belowHut: anonBelowHut, road: anonRoad };
         
       }
+      /// =ABOVE}
       
-      // Get a BelowHut references; consider any provided `hid`, whether
+      // Get a BelowHut reference; consider any provided `hid`, whether
       // the `hid` has already been seen, and the deployment maturity
       let belowHut = (() => {
         
@@ -381,7 +385,10 @@ global.rooms['setup.hut'] = async () => {
         
         if (hid && this.belowHuts.has(hid)) return this.belowHuts.get(hid);
         
-        // Reject an explicit `hid` outside "dev" maturity
+        /// {ABOVE=
+        // Reject an explicit `hid` outside "dev" maturity - note that
+        // BELOW, the BelowHut represents the local environment and will
+        // always have its hid specified!
         if (hid && global.conf('global.maturity') !== 'dev') hid = null;
         
         // Supply a default hid if the client didn't supply one
@@ -389,26 +396,37 @@ global.rooms['setup.hut'] = async () => {
         if (!hid) hid = [ this.childUidCnt++, Math.floor(Math.random() * 62 ** 8) ]
           .map(v => v.encodeStr(String.base62, 8))
           .join('');
+        /// =ABOVE} {BELOW=
+        
+        /// {DEBUG=
+        if (!hid) throw Error('Api: must provide BelowHut hid BELOW');
+        /// =DEBUG}
+        
+        /// =BELOW}
         
         // Actually initialize the BelowHut
         let { manager } = this.type;
         let type = manager.getType('hut.below');
         let group = manager.getGroup([]);
-        let bh = BelowHut({ aboveHut: this, isHere: !this.isHere, type, group, hid });
+        let bh = BelowHut({ aboveHut: this, isHere: !this.isHere, type, group, hid, heartbeatMs: this.heartbeatMs });
+        
+        manager.addRecord('hut.owned', { above: this, below: bh }, { ms: getMs() });
         
         this.belowHuts.add(hid, bh);
-        bh.endWith(() => this.belowHuts.rem(hid));
+        bh.endWith(() => {
+          this.belowHuts.rem(hid);
+        });
         
         return bh;
         
       })();
       
       // Initialize a Road if necessary
-      let road = belowHut.roads.get(authority) ?? onto(authority.createRoad(belowHut), road => {
+      let road = belowHut.roads.get(roadAuth) ?? onto(roadAuth.createRoad(belowHut), road => {
         
-        belowHut.roads.set(authority, road);
+        belowHut.roads.set(roadAuth, road);
         road.endWith(() => {
-          belowHut.roads.rem(authority);
+          belowHut.roads.rem(roadAuth);
           if (belowHut.roads.empty()) belowHut.end();
         });
         
@@ -417,8 +435,15 @@ global.rooms['setup.hut'] = async () => {
       return { belowHut, road };
       
     },
-
-    actOnComm(comm) { comm.src.actOnComm(comm); }, // All Comms come from Below, so always delegate to BelowHut
+    
+    processCommand(comm) { return comm.src.processCommand(comm); }, // All Comms come from Below, so always delegate to BelowHut
+    getBestRoadFor(trg) {
+      /// {DEBUG=
+      if (!isForm(trg, BelowHut)) throw Error(`Api: trg is not a BelowHut`).mod({ trg });
+      if (trg.aboveHut !== this) throw Error('Api: provided BelowHut is not a KidHut');
+      /// =DEBUG}
+      return trg.getBestRoadFor(this);
+    },
     
     /// {ABOVE=
     getBelowConf() {
@@ -449,15 +474,24 @@ global.rooms['setup.hut'] = async () => {
       this.enabledKeeps.add(term, keep);
       return Tmp(() => this.enabledKeeps.rem(term));
       
-    }
+    },
     /// =ABOVE}
+    
+    cleanup() {
+      forms.Hut.cleanup.call(this);
+      let belowHuts = this.belowHuts.values();
+      this.belowHuts = Map.stub;
+      for (let bh of belowHuts) bh.end();
+    }
     
   })});
   let BelowHut = form({ name: 'BelowHut', has: { Hut }, props: (forms, Form) => ({
     
     init({ aboveHut, ...args }) {
       
+      /// {DEBUG=
       if (!aboveHut) throw Error(`Api: must supply "aboveHut"`);
+      /// =DEBUG}
       
       forms.Hut.init.call(this, args);
       
@@ -493,8 +527,6 @@ global.rooms['setup.hut'] = async () => {
       /// =BELOW}
       
       this.resetHeartbeatTimeout();
-      
-      this.makeCommandHandler('lubdub', comm => { /* Ignore */ });
       this.makeCommandHandler('error', comm => gsc(`${this.desc()} was informed of Error`, comm.msg));
       this.makeCommandHandler('multi', ({ src, msg: { list=null }, reply }) => {
         
@@ -502,7 +534,7 @@ global.rooms['setup.hut'] = async () => {
         
         let replies = [];
         let multiReply = msg => replies.push(msg);
-        for (let msg of list) this.actOnComm({ src, reply: multiReply, msg });
+        for (let msg of list) this.processCommand({ src, reply: multiReply, msg });
         
         // TODO: Or generate a multipart response??? That's cool too...
         if (multiReply.length) {
@@ -519,12 +551,14 @@ global.rooms['setup.hut'] = async () => {
         try {
           
           let { v: version, content } = msg;
+          /// {DEBUG=
           if (!isForm(version, Number)) throw Error('Invalid "version"');
           if (!version.isInteger()) throw Error('Invalid "version"');
           if (!isForm(content, Object)) throw Error('Invalid "content"');
           if (version < this.syncHearVersion) throw Error(`Duplicated sync (version: ${version}; current version: ${this.syncHearVersion})`);
+          /// =DEBUG}
           
-          // Add this newly arrived sync to the buffer
+          // Add this newly-arrived sync to the buffer
           this.bufferedSyncs.add(version, content); mmm('bufferSync', +1);
           
           // Now perform as many pending syncs as possible; these must
@@ -594,23 +628,30 @@ global.rooms['setup.hut'] = async () => {
         let cost = road.currentCost();
         if (cost < bestCost) [ bestCost, bestRoad ] = [ cost, road ];
       }
+      if (!bestRoad) throw Error('Api: no Road available').mod({ src: this.desc(), trg: trg.desc(), roads: this.roads.size });
       return bestRoad;
       
     },
     getKnownNetAddrs() {
       return Set(this.roads.toArr(road => road.netAddr)).toArr(Function.stub);
     },
-    actOnComm(comm) {
+    processCommand(comm) {
       
-      /// {DEBUG=
-      //if (comm?.src !== this) throw Error(`${this.desc()} was told to act on Comm intended for ${comm.src?.desc?.() ?? '<unknown>'}`).mod({ comm });
-      /// =DEBUG}
+      /// {ABOVE=
+      // Above, a BelowHut which processes a command has proven the remote is still alive
+      this.resetHeartbeatTimeout();
+      /// =ABOVE}
       
-      // Try to do Command for BelowHut
-      if (this.doCommand(comm, { critical: false })) return;
+      // Try to fulfill it ourself
+      if (this.commandHandlers.has(comm?.msg?.command)) return this.runCommandHandler(comm);
       
-      // If BelowHut couldn't do it, do critical attempt with AboveHut
-      this.aboveHut.doCommand(comm, { critical: true });
+      // Try to fulfill it via our AboveHut
+      let { aboveHut } = this;
+      if (aboveHut.commandHandlers.has(comm?.msg?.command)) return aboveHut.runCommandHandler(comm);
+      
+      // This will definitely fail as `this.commandHandlers.has(comm?.msg?.command) === false`; it
+      // will reuse error-handling logic defined in `Hut(...).runCommandHandler`
+      return this.runCommandHandler(comm);
       
     },
     enableAction(command, fn) {
@@ -673,6 +714,9 @@ global.rooms['setup.hut'] = async () => {
       if (!this.pendingSync.has(type)) throw Error(`Invalid type: ${type}`);
       /// =ASSERT}
       
+      // Don't bother if this BelowHut has ended!
+      if (this.off()) return;
+      
       let { add, upd, rem } = this.pendingSync;
       
       // add, rem: cancel out! No information on Record is sent
@@ -707,19 +751,24 @@ global.rooms['setup.hut'] = async () => {
         
       }
       
-      // Don't schedule a sync if one is already scheduled!
-      if (this.off() || this.throttleSyncPrm) return;
+      this.scheduleSync();
       
-      let err = Error('trace');
+    },
+    scheduleSync() {
+      
+      // Don't schedule a sync if one is already scheduled!
+      if (this.throttleSyncPrm) return;
+      
       let prm = this.throttleSyncPrm = soon(() => {
+        
+        // Hut may have ended between scheduling and executing sync
+        if (this.off()) return;
         
         // Can cancel scheduled sync by setting `this.throttleSyncPrm`
         // to any other value
         if (this.throttleSyncPrm !== prm) return;
-        this.throttleSyncPrm = null;
         
-        // Hut may have ended between scheduling and executing sync
-        if (this.off()) return;
+        this.throttleSyncPrm = null;
         
         let updateTell = this.consumePendingSync({ fromScratch: false });
         if (updateTell) this.aboveHut.tell({ trg: this, msg: updateTell });
@@ -831,12 +880,7 @@ global.rooms['setup.hut'] = async () => {
         // to indicate an "add" for every followed Record - essentially
         // this is "sync-from-scratch" behaviour!
         this.syncTellVersion = 0;
-        this.pendingSync = { add: {}, upd: {}, rem: {} };
-        let add = this.followedRecs.toObj(rec => [ rec.uid, rec ]);
-        for (let rec of this.followedRecs) add[rec.uid] = rec;
-        for (let rec of this.followedRecs) this.toSync('add', rec);
-        //let { add } = toSync = { add: {}, upd: {}, rem: {} };
-        //for (let rec of this.followedRecs) add[rec.uid] = rec;
+        this.pendingSync = { add: this.followedRecs.toObj(rec => [ rec.uid, rec ]), upd: {}, rem: {} };
         
       }
       
@@ -900,7 +944,11 @@ global.rooms['setup.hut'] = async () => {
       if (trg !== this.aboveHut) throw Error(`Can't tell ${trg.desc()} - can only tell ${this.aboveHut.desc()}!`);
       /// =DEBUG}
       
+      /// {BELOW=
+      // When Below Tells, it has reset the keepalive countdown
       this.resetHeartbeatTimeout();
+      /// =BELOW}
+      
       return forms.Hut.tell.call(this, { trg, ...args });
       
     },
@@ -923,7 +971,7 @@ global.rooms['setup.hut'] = async () => {
         
         /// {BELOW=
         // HereBelowHuts send heartbeats to be kept alive by Above
-        if (this.isHere) this.tell({ trg: this.aboveHut, msg: { command: 'lubdub' } });
+        if (this.isHere) this.tell({ trg: this.aboveHut, msg: { command: 'bp' } });
         /// =BELOW}
         
         /// {ABOVE=

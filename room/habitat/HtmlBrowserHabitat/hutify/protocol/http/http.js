@@ -1,70 +1,84 @@
-global.rooms['habitat.HtmlBrowserHabitat.hutify.protocol.http'] = () => ({ createServer: opts => {
-  
-  let { hut, netIden, netProc, compression } = opts;
-  
-  let server = Tmp({
-    protocol: 'http', netIden, netProc,
-    desc: () => `http${netIden.secureBits ? 's' : ''}://${netProc}`,
-    src: Src(),
-    currentCost: () => 0.5,
-    abort: new AbortController(),
-    activeReqs: 0
-  });
-  server.endWith(() => server.abort.abort(Error('Server closed')));
-  
-  // TODO: Think about how to clean this up so the logic which results
-  // in a refresh is clearer! Right now refreshes are ignored if the
-  // Foundation was explicitly ended for losing tab priority!
-  let session = (() => {
-    
-    let err = Error('');
-    
-    let session = Tmp({ key: '!above', currentCost: () => 0.625, tell: Src(), hear: Src() });
-    let route = session.tell.route(async msg => {
+global.rooms['habitat.HtmlBrowserHabitat.hutify.protocol.http'] =
+  () => getRoom('setup.hut.hinterland.RoadAuthority')
+    .then(RoadAuth => form({ name: 'BrowserHttpRoadAuthority', has: { RoadAuth }, props: (forms, Form) => ({
       
-      server.activeReqs++;
-      try {
+      init({ ...args }) {
+        forms.RoadAuth.init.call(this, { protocol: 'http', ...args });
+        Object.assign(this, {
+          abortController: null,
+          active: false
+        });
+      },
+      activate() {
         
-        let res = await fetch('/', {
-          method: 'post'.upper(),
-          headers: { 'Content-Type': 'application/json; charset=utf-8' },
-          body: valToJson({ trn: 'async', hid: hut.hid, command: 'bp', ...msg }), // TODO: Would be nice to wrap `msg` to avoid property collisions
-          signal: server.abort.signal,
-          redirect: 'error'
+        let tmp = Tmp();
+        
+        this.active = true;
+        this.abortController = new AbortController();
+        tmp.endWith(() => {
+          this.active = false;
+          this.abortController.abort();
+          this.abortController = null;
         });
         
-        if (res.status > 400) throw Error(`Bad request (${res.status})`);
+        return tmp;
         
-        // Process response as a Tell
-        let ms = this.getMs();
-        let data = (res.status === 204) ? null : await res.json();
-        if (data !== null) session.hear.send({ ms, reply: null, msg: data });
-        
-      } catch (cause) {
-        
-        route.end();
-        if (cause?.message.has('abort')) gsc(`Http fetch aborted (ignore; presumably unloading!)`);
-        else                             err.propagate({ cause, msg: 'Http failed (network problems or server down?)' });
-        
-      }
-      server.activeReqs--;
+      },
+      createRoad(belowHut) {
+        if (!this.active) throw Error('Api: inactive; unable to create road');
+        let road = (0, Form.BrowserHttpRoad)({ roadAuth: this, belowHut });
+        road.tellAfar(''); // Immediately bank a request
+        return road;
+      },
       
-      // Ensure at least 1 banked poll is always available
-      if (server.activeReqs < 1) this.soon().then(() => session.tell.send(''));
+      $BrowserHttpRoad: form({ name: 'BrowserHttpRoad', has: { Road: RoadAuth.Road }, props: (forms, Form) => ({
+        
+        $headerValueRegex: /^[\u0020-\u007e]*$/,
+        
+        init(args) {
+          forms.Road.init.call(this, args);
+          Object.assign(this, { activeReqs: 0 });
+        },
+        currentCost() { return 0.75; },
+        async tellAfar(msg) {
+          
+          if (!this.roadAuth.active) return;
+          
+          let err = Error('');
+          this.activeReqs++;
+          try {
+            
+            let netTell = valToJson({ trn: 'async', hid: this.belowHut.hid, command: 'bp', ...msg });
+            let stuffHeader = netTell.length < 100 && Form.headerValueRegex.test(netTell);
+            let res = await fetch('/', {
+              method: 'POST',
+              headers: stuffHeader
+                ? { 'Content-Type': 'application/json; charset=utf-8', 'X-Hut-Msg': netTell }
+                : { 'Content-Type': 'application/json; charset=utf-8' },
+              ...(stuffHeader || { body: netTell }),
+              signal: this.roadAuth.abortController.signal,
+              redirect: 'error'
+            });
+            
+            if (res.status >= 400) throw Error(`Bad request (${res.status})`).mod({ res });
+            
+            // Process response as a Tell
+            let ms = getMs();
+            let netHear = res.status === 204 ? null : await res.json();
+            if (netHear) this.belowHut.hear({ src: this.roadAuth.aboveHut, road: this, ms, msg: netHear });
+            
+          } catch (cause) {
+            // TODO: Retry logic!
+            let ignore = cause.message.has('abort') && !this.authority.active;
+            if (!ignore) err.propagate({ cause, msg: 'Http failed (maybe network problems, server down?)', netTell: msg });
+          }
+          this.activeReqs--;
+          
+          // Bank another poll
+          if (this.activeReqs < 1) this.tellAfar(null);
+          
+        }
+        
+      })})
       
-    });
-    session.endWith(route);
-    
-    // Immediately bank a request
-    session.tell.send('');
-    
-    return session;
-    
-  })();
-  
-  // Every Server immediately creates a Session with the AboveHut
-  soon(() => server.src.send(session));
-  
-  return server;
-  
-}});
+    })}));

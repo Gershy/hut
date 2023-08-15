@@ -99,6 +99,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
             </style>
             
             ${roomScript('setup.clearing', 'defer')}
+            ${roomScript('setup.hut.hinterland.RoadAuthority', 'defer')}
             ${roomScript('habitat.HtmlBrowserHabitat.hutify.foundation', 'defer')}
             ${protocolRooms.toArr(n => roomScript(n, 'defer')).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
             <script>

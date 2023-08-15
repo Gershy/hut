@@ -3,7 +3,8 @@
 // GOALS:
 // - Support functionality from FoundationNodejs BUT ALSO:
 // - Allow server destruction/restart (to allow live cert updates)
-// - Support sokt+http on the same port
+// - Support sokt+http on the same port - the sokt RoadAuthority can
+//   handle "upgrade" events coming from the http RoadAuthority's server
 
 // - There should always be a NetworkIdentity, secure or unsafe!
 // - NetworkIdentity should be provided list of all Servers, and then be
@@ -41,7 +42,6 @@ let httpResponseCodes = Object.plain({
 module.exports = (async () => {
   
   let RoadAuthority = await getRoom('setup.hut.hinterland.RoadAuthority');
-  let { Hut } = await getRoom('setup.hut');
   
   let HttpRoadAuthority = form({ name: 'HttpRoadAuthority', has: { RoadAuthority }, props: (forms, Form) => ({
     
@@ -52,19 +52,19 @@ module.exports = (async () => {
       
     },
     
-    createRoad(belowHut) { return (0, Form.HttpRoad)({ authority: this, belowHut }); },
     activate() {
-      // Run the server, make it call `hearComm` as necessary. Note that
-      // stupidly, the old above implementation passes the https cert
-      // data to `serverOpen`, not to the actual constructor!! This will
-      // need to change when using RoadAuthority!
+      
+      // Run the server, make it call `hearComm` as necessary. Note that the https cert data will
+      // need to be passed to `activate`, not the constructor, as the cert data can become
+      // invalidated with time
       
       let tmp = Tmp();
+      
       tmp.prm = (async () => {
         let server = require(this.getProtocol()).createServer({ /* TODO */ });
         
         let sockets = Set();
-        let reqFn = this.processIncomingHttp.bind(this);
+        let reqFn = this.processReq.bind(this);
         let conFn = socket => {
           sockets.add(socket);
           socket.once('close', () => sockets.rem(socket));
@@ -102,87 +102,17 @@ module.exports = (async () => {
       return tmp;
       
     },
-    receivedRequestSc(req, body) {
-      
-      // TODO: Drift! This needs testing
-      
-      let { chatter, mode } = this.sc.params();
-      if (!chatter) return;
-      
-      if (mode === 'synced') {
-        
-        res.explicitBody = null;
-        
-        let orig = res.end;
-        res.end = (...args) => {
-          
-          let { body: resBody='', encode='unencoded' } = res.explicitBody ?? { body: args[0] };
-          delete res.explicitBody;
-          
-          this.sc({
-            type: 'synced',
-            req: {
-              version: req.httpVersion,
-              method: req.method,
-              url: req.url,
-              headers: req.headers.map(v => isForm(v, Array) ? v : [ v ]),
-              body
-            },
-            res: {
-              code: res.statusCode,
-              status: httpResponseCodes[res.statusCode] || `'Response ${data.code}`,
-              version: req.httpVersion, // TODO: Is this necessarily the right version?
-              headers: { ...res.getHeaders() }, // `res.getHeaders()` is a plain Object
-              encode,
-              body: resBody
-            }
-          });
-          
-          return orig.call(res, ...args);
-          
-        };
-        
-      } else if (mode === 'immediate') {
-        
-        this.sc({
-          type: 'immediate',
-          version: req.httpVersion,
-          method: req.method,
-          url: req.url,
-          headers: req.headers.map(v => isForm(v, Array) ? v : [ v ]),
-          body
-        });
-        
-        res.explicitBody = null;
-        
-        let orig = res.end;
-        res.end = (...args) => {
-          
-          let { body='', encode='unencoded' } = res.explicitBody ?? { body: args[0] };
-          delete res.explicitBody;
-          
-          this.sc({
-            type: 'res',
-            code: res.statusCode,
-            status: httpResponseCodes[res.statusCode] || `'Response ${data.code}`,
-            version: req.httpVersion, // TODO: Is this necessarily the right version?
-            headers: { ...res.getHeaders() }, // `res.getHeaders()` is a plain Object
-            encode,
-            body
-          });
-          
-          return orig.call(res, ...args);
-          
-        };
-        
-      }
-        
-    },
-    async processIncomingHttp(req, res) {
+    async processReq(req, res) {
       
       let ms = getMs();
       
-      let body = req.body = await (async () => {
+      let reqHeaders = req.headers;
+      let stuffedHeader = reqHeaders['x-hut-msg'];
+      
+      let payload = reqHeaders['x-hut-msg'];
+      if (!payload && req.method === 'GET') {
+        
+        // Read the full http body
         
         let bodyPrm = Promise.later();
         let timeout = setTimeout(() => bodyPrm.reject(Error('Api: payload too slow')), 2000);
@@ -197,23 +127,25 @@ module.exports = (async () => {
         });
         req.on('end', endFn = () => bodyPrm.resolve(chunks.join('')));
         
-        try         { return await bodyPrm; }
-        catch (err) { this.killRes({ res, code: 400, msg: err.message }); }
+        try         { payload = await bodyPrm; }
+        catch (err) { this.killRes({ res, code: 400, msg: err.message }); return; }
         finally     { req.off('data', dataFn); req.off('end', endFn); clearTimeout(timeout); }
         
-      })();
+      }
       
-      this.receivedRequestSc(req, body);
+      // Resolve `payload` to json
+      try         { payload = payload ? jsonToVal(payload) : null; }
+      catch (err) { return this.killRes({ res, code: 400, msg: 'Api: malformed json' }); }
+      
+      this.receivedRequestSc(req, stuffedHeader ? '' : payload);
       
       for (let intercept of this.intercepts) if (intercept(req, res)) return;
       
-      let reqHeaders = req.headers;
       let cookie = reqHeaders.cookie
         ?.split(';')
         ?.map(v => v.trim() || skip)
         ?.toObj(item => item.cut('=') /* Naturally produces [ key, value ] */)
         ?? {};
-      let cookieKeys = cookie.toArr((v, k) => k);
       
       let [ , path, query='', fragment='' ] = req.url.match(/^([/][^?#]*)([?][^#]+)?([#].*)?$/);
       path = path.slice(1).replace(/^[!][^/]+[/]*/, ''); // Ignore cache-busting component and leading slashes
@@ -226,35 +158,33 @@ module.exports = (async () => {
       let msg = {
         hid: null, command: path || 'hutify', trn: 'anon',
         path, fragment,
-        ...query, ...cookie, ...body
+        ...query, ...cookie, ...payload
       };
       if (msg.command === 'hutify') msg.trn = 'sync';
       
       // These can't be confined to DEBUG blocks - Server must always be
       // wary of malformatted remote queries!
-      let { hid=null, command, trn } = msg;
+      let { hid=null, trn } = msg;
       if (!/^(?:anon|sync|async)$/.test(trn))   return this.killRes({ res, code: 400, msg: 'invalid "trn"' });
       if (hid === '')                           return this.killRes({ res, code: 400, msg: '"hid" may not be an empty string' });
       if (hid !== null && !isForm(hid, String)) return this.killRes({ res, code: 400, msg: 'invalid "hid"' });
       
-      let { belowHut, road } = this.aboveHut.getBelowHut({ authority: this, trn, hid });
+      let { belowHut, road } = this.aboveHut.getBelowHutAndRoad({ roadAuth: this, trn, hid });
       if ([ 'anon', 'sync' ].has(trn)) { // "anon" and "sync" are simple to handle
         
         // `trn` is "sync" (or "anon", implying "sync") - the reply must
         // correspond to the request; hangs until `reply` is called!
         
-        /// {DEBUG= (I think you could argue this belongs under DEBUG)
+        /// {DEBUG= (TODO: I think you could argue this belongs under DEBUG??)
         let syncTimeout = setTimeout(() => {
           this.sc(`Reply timed out... that's not good!`, { msg });
           this.killRes({ res, code: 500, msg: 'We messed up and timed out... sorry!' });
         }, 5 * 1000);
         /// =DEBUG}
         
-        return Hut.sendComm({
-          src: belowHut,
-          trg: this.aboveHut,
-          ms,
-          road,
+        return this.aboveHut.Form.sendComm({
+          src: belowHut, trg: this.aboveHut,
+          ms, road,
           reply: msg => {
             /// {DEBUG=
             clearTimeout(syncTimeout);
@@ -266,7 +196,7 @@ module.exports = (async () => {
         
       }
       
-      if (road.off()) return res.socket.destroy();
+      if (road.off()) return res.socket.destroy(); // TODO: Can this ever happen?
       
       // If we made it here, this trn is "async" - the concept of
       // "reply" breaks down here; the request and response are
@@ -471,6 +401,85 @@ module.exports = (async () => {
       
     },
     
+    createRoad(belowHut) { return (0, Form.HttpRoad)({ roadAuth: this, belowHut }); },
+    
+    receivedRequestSc(req, body) {
+      
+      // TODO: Drift! This needs testing
+      
+      let { chatter, mode } = this.sc.params();
+      if (!chatter) return;
+      
+      if (mode === 'synced') {
+        
+        res.explicitBody = null;
+        
+        let origEnd = res.end;
+        res.end = (...args) => {
+          
+          let { body: resBody='', encode='unencoded' } = res.explicitBody ?? { body: args[0] };
+          delete res.explicitBody;
+          
+          this.sc({
+            type: 'synced',
+            req: {
+              version: req.httpVersion,
+              method: req.method,
+              url: req.url,
+              headers: req.headers.map(v => isForm(v, Array) ? v : [ v ]),
+              body
+            },
+            res: {
+              code: res.statusCode,
+              status: httpResponseCodes[res.statusCode] || `'Response ${data.code}`,
+              version: req.httpVersion, // TODO: Is this necessarily the right version?
+              headers: { ...res.getHeaders() }, // `res.getHeaders()` is a plain Object
+              encode,
+              body: resBody
+            }
+          });
+          
+          return origEnd.call(res, ...args);
+          
+        };
+        
+      } else if (mode === 'immediate') {
+        
+        this.sc({
+          type: 'immediate',
+          version: req.httpVersion,
+          method: req.method,
+          url: req.url,
+          headers: req.headers.map(v => isForm(v, Array) ? v : [ v ]),
+          body
+        });
+        
+        res.explicitBody = null;
+        
+        let origEnd = res.end;
+        res.end = (...args) => {
+          
+          let { body='', encode='unencoded' } = res.explicitBody ?? { body: args[0] };
+          delete res.explicitBody;
+          
+          this.sc({
+            type: 'res',
+            code: res.statusCode,
+            status: httpResponseCodes[res.statusCode] || `'Response ${data.code}`,
+            version: req.httpVersion, // TODO: Is this necessarily the right version?
+            headers: { ...res.getHeaders() }, // `res.getHeaders()` is a plain Object
+            encode,
+            body
+          });
+          
+          return origEnd.call(res, ...args);
+          
+        };
+        
+      }
+        
+    },
+    
     $HttpRoad: form({ name: 'HttpRoad', has: { Road: RoadAuthority.Road }, props: (forms, Form) => ({
       init(args) {
         forms.Road.init.call(this, args);
@@ -482,7 +491,7 @@ module.exports = (async () => {
           this.queueMsg = Array.stub;
           for (let res of resArr) {
             res.unqueued = true;
-            this.authority.killRes({ res, code: 204 });
+            this.roadAuth.killRes({ res, code: 204 });
           }
         });
       },
@@ -491,8 +500,8 @@ module.exports = (async () => {
         let res = this.queueRes.shift();
         if (!res) { this.queueMsg.push(msg); return; }
         
-        pkg.unqueued = true;
-        this.authority.sendRes({ res, reqHeaders: res.reqHeaders, msg });
+        res.unqueued = true;
+        this.roadAuth.sendRes({ res, reqHeaders: res.reqHeaders, msg });
       }
     })})
     

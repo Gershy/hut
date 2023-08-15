@@ -1,6 +1,6 @@
 global.rooms['habitat.HtmlBrowserHabitat.hutify.protocol.ws'] = () => ({ createServer: opts => {
   
-  let { hut, netIden, netProc, compression } = opts;
+  let { hid, netIden, netProc, compression } = opts;
   
   let server = Tmp({
     protocol: 'ws', netIden, netProc,
@@ -10,7 +10,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.protocol.ws'] = () => ({ createS
   
   let session = (() => {
     
-    let socket = new WebSocket(`${netIden.secureBits ? 'wss' : 'ws'}://${netProc}/?trn=sync&hid=${hut.hid}`);
+    let socket = new WebSocket(`${netIden.secureBits ? 'wss' : 'ws'}://${netProc}/?trn=sync&hid=${hid}`);
     socket.evt('error', err => {
       // This probably means the following happened:
       // 1. Another tab was active

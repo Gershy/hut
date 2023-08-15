@@ -379,7 +379,7 @@ Object.assign(global, {
       // Stacks are a Preamble followed by a Trace
       // A Trace is a sequence of callsites
       
-      let { stack } = this;
+      let { stack='' } = this;
       let traceHeadInd = stack.indexOf('>>>HUTTRACE>>>');
       let traceTailInd = stack.indexOf('<<<HUTTRACE<<<');
       

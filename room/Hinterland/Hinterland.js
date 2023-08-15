@@ -271,6 +271,7 @@ global.rooms['Hinterland'] = async () => {
       tmp.endWith(hereHut.ownedHutRh.route(ownedHrec => {
         
         let belowHut = ownedHrec.rec.getMember('below');
+        
         let belowHooks = {
           processArgs: rhFromRecWithRhArgs,
           frameFn: resolveHrecsAndFollowRecs.bound(belowHut)

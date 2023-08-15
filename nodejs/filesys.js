@@ -614,13 +614,13 @@ let FsKeep = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => ({
   // Meta
   getContentType() {
     
-    let lastCmp = this.fp.cmps.slice(-1)[0];
+    let lastCmp = this.fp.cmps.at(-1);
     let pcs = lastCmp.split('.');
     
     // If no "." the content type is unknown
     if (pcs.length < 2) return 'application/octet-stream';
     
-    return Form.extToContentType[pcs.slice(-1)[0]] ?? 'application/octet-stream';
+    return Form.extToContentType[pcs.at(-1)] ?? 'application/octet-stream';
     
   },
   async getContentByteLength() { return this.trn.getDataBytes(this.fp); },

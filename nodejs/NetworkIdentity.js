@@ -1255,9 +1255,9 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
     let tmp = Tmp();
     
-    let activateTmps = servers.map(server => server.activate());
-    for (let activateTmp of activateTmps) tmp.endWith(activateTmp);
-    tmp.prm = Promise.all(activateTmps.map(tmp => tmp.prm));
+    let activeTmps = servers.map(server => server.activate());
+    for (let activeTmp of activeTmps) tmp.endWith(activeTmp);
+    tmp.prm = Promise.all(activeTmps.map(tmp => tmp.prm));
     
     return tmp;
     

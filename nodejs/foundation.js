@@ -106,15 +106,16 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     // we were to the millisecond origin. Finally use the nearest such
     // millisecond as an origin time for `getMs` calls, supplemented by
     // a hi-res value
-    let nowHiRes = require('perf_hooks').performance.now;
-    let nowLoRes = Date.now;
+    let { performance: perf } = require('perf_hooks');
+    let getMsHiRes = perf.now.bind(perf);
+    let getMsLoRes = Date.now;
     
-    let origin = nowHiRes() - nowLoRes(); // We're going to tune `origin` to the average difference between `nowHiRes()` and `nowLoRes()`
+    let origin = getMsHiRes() - getMsLoRes(); // We're going to tune `origin` to the average difference between `nowHiRes()` and `nowLoRes()`
     let maxMs = 15; // How long to calibrate (and busy-wait) for
-    let lo0 = nowLoRes();
+    let lo0 = getMsLoRes();
     while (true) {
       
-      let [ lo, hi ] = [ nowLoRes(), nowHiRes() ];
+      let [ lo, hi ] = [ getMsLoRes(), getMsHiRes() ];
       let elapsed = lo - lo0;
       if (elapsed > maxMs) break; // 30ms busy-wait
       
@@ -126,7 +127,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       
     }
     
-    global.getMs = () => origin + nowHiRes();
+    global.getMs = () => origin + getMsHiRes();
     
   };
   
@@ -927,7 +928,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           }).flat();
           
           let call = trace[global.subcon.relevantTraceIndex];
-          call = call?.file && `${token.dive(call.file).slice(-1)[0]} ${call.row}:${call.col}`;
+          call = call?.file && `${token.dive(call.file).at(-1)} ${call.row}:${call.col}`;
           if (call) {
             let extraChars = call.length - leftColW;
             if (extraChars > 0) call = call.slice(extraChars + 1) + '\u2026';
@@ -1194,10 +1195,10 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       
       roomDive = token.dive(roomDive);
       
-      let cmpKeep = keep([ 'file:code:cmp', bearing, ...roomDive, `${roomDive.slice(-1)[0]}.js` ]);
+      let cmpKeep = keep([ 'file:code:cmp', bearing, ...roomDive, `${roomDive.at(-1)}.js` ]);
       if (await cmpKeep.exists()) return cmpKeep;
       
-      let srcKeep = keep([ 'file:code:src', ...roomDive, `${roomDive.slice(-1)[0]}.js` ]);
+      let srcKeep = keep([ 'file:code:src', ...roomDive, `${roomDive.at(-1)}.js` ]);
       let { lines, offsets } = await getCompiledCode(srcKeep, {
         above: [ 'above', 'between' ].has(bearing),
         below: [ 'below', 'between' ].has(bearing)
@@ -1300,7 +1301,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       }
       
       let roomPcs = roomName.split('.');
-      let roomPcLast = roomPcs.slice(-1)[0];
+      let roomPcLast = roomPcs.at(-1);
       return {
         file: srcKeep.fp.kid([ roomPcs, roomPcLast + '.js' ]).desc(),
         row: srcRow,
@@ -1321,7 +1322,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           try {
             
             let namePcs = name.split('.');
-            let roomSrcKeep = srcKeep.access([ ...namePcs, `${namePcs.slice(-1)[0]}.js` ]);
+            let roomSrcKeep = srcKeep.access([ ...namePcs, `${namePcs.at(-1)}.js` ]);
             
             let { lines, offsets } = await getCompiledCode(roomSrcKeep, {
               above: [ 'above', 'between' ].has(bearing),
@@ -1355,7 +1356,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           
         })());
         
-        return [ shorten ? name.split('.').slice(-1)[0] : name, room ];
+        return [ shorten ? name.split('.').at(-1) : name, room ];
         
       }));
       

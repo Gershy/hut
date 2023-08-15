@@ -213,7 +213,8 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   /// =DEBUG}
   
   let { hid: belowHid, aboveHid, deploy: { uid, host } } = global.conf();
-  let { netAddr, netIden: netIdenConf, protocols, heartbeatMs } = host;
+  let { netAddr, netIden: netIdenConf, protocols: pcls, heartbeatMs } = host;
+  pcls = pcls.toArr(v => v); // Otherwise `pcls ~== { 0: pclConf0, 1: pclConf1, ... }`
   
   // Make sure that refreshes redirect to the same session
   document.cookie = 'hut=' + global.btoa(valToJson({ hid: belowHid }));
@@ -326,60 +327,53 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   })();
   
   // `global` is set up... now run a Hut based on settings
-  let { hut, record, WeakBank, ...loftObj } = await global.getRooms([
+  let loftName = global.conf('deploy.loft.name');
+  let { hut, record, WeakBank, [loftName.split('.').at(-1)]: loft, ...pclServers } = await global.getRooms([
     'setup.hut',
     'record',
     
     // TODO: Maybe something like localstorage could allow BELOW to
     // work with KeepBank? (Would be blazing-fast client-side!!)
     'record.bank.WeakBank',
-    global.conf('deploy.loft.name')
+    loftName,
+    ...pcls.map(p => `${hutifyPath}.protocol.${p.name}`)
   ]);
   
   let bank = WeakBank({ sc: global.subcon('bank') });
   let recMan = record.Manager({ bank });
   
-  let aboveHut = hut.AboveHut({ hid: aboveHid, isHere: false, recMan, heartbeatMs });
-  let belowHut = aboveHut.makeBelowHut(belowHid);
+  foundationTmp.endWith(() => aboveHut.end());
   
-  foundationTmp.endWith(() => { aboveHut.end(); belowHut.end(); });
-  
-  // Note that `netIden` is just a stub - Hinterland will want to call
-  // `netIden.runOnNetwork`; BELOW we know that the Tmp produced by this
-  // will never be ended, so we manually initialize all servers ("run on
-  // network" functionality), and call `loft.open`, which will call
-  // `Hinterland(...).open({ ..., netIden })` with the spoofed `netIden`
+  // Note that `netIden` is just a stub - the nodejs foundation uses a
+  // real NetworkIdentity instance to run serve all protocols together,
+  // because it allows for sophisticated network management - e.g. cert
+  // management, https redirects, etc; in the browser we manually start
+  // all servers and call `loft.open`!
   
   // TODO: This assumes Above never ends which may introduce annoyances
   // for development (e.g. Above restarting should refresh Below)
   let netIden = { ...netIdenConf };
+  let aboveHut = hut.AboveHut({ hid: aboveHid, isHere: false, recMan, heartbeatMs });
   
-  let setupServer = (server) => {
-    
-    // Any Session represents a Session with Above
-    server.src.route(session => {
-          
-      // HutMsgs from the Session are sent from Above to us (Below)
-      belowHut.seenOnRoad(server, session);
-      session.hear.route(({ ms, msg }) => aboveHut.tell({ trg: belowHut, road: session, ms, msg }));
-      
+  let roadAuths = pcls.map(({ name, port, ...opts }) => {
+    let RoadAuthForm = pclServers[name];
+    return RoadAuthForm({
+      aboveHut,
+      secure: netIden.secureBits > 0,
+      netProc: `${netAddr}:${port}`,
+      ...opts
     });
-    
-  };
-  await Promise.all(protocols.map(async protocolObj => {
-    
-    let { name: protocol, port, ...opts } = protocolObj;
-    let protocolServer = await global.getRoom(`${hutifyPath}.protocol.${protocol}`);
-    let server = protocolServer.createServer({ hut: belowHut, netIden, netProc: `${netAddr}:${port}`, ...opts });
-    foundationTmp.endWith(server);
-    setupServer(server);
-    
-  }));
+  });
+  let activePrms = roadAuths.map(ra => ra.activate());
+  foundationTmp.endWith(() => activePrms.each(p => p.end()));
+  
+  // Providing the same `belowHid` initiates only one BelowHut 
+  for (let roadAuth of roadAuths) aboveHut.getBelowHutAndRoad({ roadAuth, hid: belowHid });
+  let belowHut = aboveHut.belowHuts.values().next().value; // Get the single BelowHut
   
   let initComm = conf('initComm');
-  if (initComm) belowHut.actOnComm({ src: aboveHut, msg: initComm });
+  if (initComm) belowHut.processCommand({ src: aboveHut, msg: initComm });
   
-  let loft = loftObj.toArr(v => v)[0];
   await loft.open({ sc: global.subcon('loft'), hereHut: belowHut, rec: aboveHut });
   
   gsc(`Loft opened after ${(getMs() - performance.timeOrigin).toFixed(2)}ms`);
