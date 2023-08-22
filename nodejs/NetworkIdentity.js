@@ -1280,6 +1280,9 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       
       sc(`Will redirect http port 80 to -> ${httpsServer.desc()}`);
       let { netAddr, port: httpsPort } = httpsServer;
+      
+      // TODO: this is outdated
+      // TODO: when `tmp` ends everything here should be undone
       let redirectServer = require('./server/http.js')({
         secure: false, netAddr, port: 80,
         doCaching: false,

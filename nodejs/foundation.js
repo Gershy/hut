@@ -6,14 +6,17 @@ let { rootTransaction: rootTrn, Filepath, FsKeep } = require('./filesys.js');
 let NetworkIdentity = require('./NetworkIdentity.js');
 
 // Set up basic monitoring
+let processExitSrc = Src();
 (() => {
   
   // https://nodejs.org/api/process.html#signal-events
   let origExit = process.exit;
   process.exitNow = process.exit;
   process.exit = code => {
-    gsc(Error(`Process explicitly exited (${code})`));
     process.explicitExit = true;
+    
+    let err = Error(`Process explicitly exited (${code})`);
+    processExitSrc.route(() => gsc(err));
     return process.exitNow(code);
   };
   
@@ -33,7 +36,9 @@ let NetworkIdentity = require('./NetworkIdentity.js');
   };
   process.on('uncaughtException', onErr);
   process.on('unhandledRejection', onErr);
-  process.on('exit', code => process.explicitExit || gsc(`Hut terminated (code: ${code})`));
+  process.on('exit', code => processExitSrc.send(code));
+  
+  processExitSrc.route(code => process.explicitExit || gsc(`Hut terminated (code: ${code})`));
   
 })();
 
@@ -1414,7 +1419,10 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
   { // RUN DAT
     
     let activateTmp = Tmp();
-    process.on('exit', (...args) => activateTmp.end());
+    
+    // Hacky: want `activateTmp` to end if the process exits, but it should do so before other exit
+    // handlers trigger
+    processExitSrc.route(() => activateTmp.end());
     
     // Clear data from previous runs
     await Promise.all([
@@ -1586,7 +1594,9 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       // so that Sessions are put in contact with the Hut
       for (let server of servers) netIden.addServer(server);
       
-      activateTmp.endWith(await netIden.runOnNetwork());
+      let runOnNetworkTmp = netIden.runOnNetwork();
+      activateTmp.endWith(runOnNetworkTmp);
+      await runOnNetworkTmp.prm;
       
       let loft = await getRoom(loftConf.name);
       let loftTmp = await loft.open({

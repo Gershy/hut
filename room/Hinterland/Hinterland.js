@@ -188,7 +188,7 @@ global.rooms['Hinterland'] = async () => {
       })();
       /// =DEBUG}
       
-      let rhFromRecWithRhArgs = (args, dep) => {
+      let convertRecWithRhArgsToRh = (args, dep) => {
         
         // Allows `dep.scp` to be passed 2 arguments, a Record and a
         // RelHandler argument, and those 2 arguments will be resolved
@@ -212,23 +212,25 @@ global.rooms['Hinterland'] = async () => {
       let handleBelowLofter = (loftRec, belowHut, dep) => {
         
         let lofterRh = dep(belowHut.relHandler(`${this.prefix}.lofter`));
-        
         let lofterExistsChooser = dep(Chooser(lofterRh));
         dep.scp(lofterExistsChooser.srcs.off, (noPlayer, dep) => {
           
-          let makeLofterAct = dep(belowHut.enableAction(`${this.prefix}.makeLofter`, () => {
+          // This Scope can get retriggered if the Foundation is ended and the previous Lofter in
+          // the Chooser ends, causing `lofterExistsChooser.srcs.off` to trigger
+          if (tmp.off() || lofterRh.off()) return;
+          
+          let makeLofterAct = belowHut.enableAction(`${this.prefix}.makeLofter`, () => {
             /// {ABOVE=
+            // Allow multiple "makeLofter" requests - ignore if the Lofter exists already!
+            if (lofterRh.hrecs.size) return;
             let lofter = recMan.addRecord(`${this.prefix}.lofter`, [ belowHut, loftRec ]);
             belowHut.followRec(lofter);
             /// =ABOVE}
-          }));
+          });
           
           /// {BELOW=
-          // Don't act unless we know that `lofterRh` won't Send - this
-          // is known when `lofterRh.ready()` resolves, and
-          // `makeLofterAct` hasn't yet been Ended by `dep`
-          dep(() => makeLofterAct = { act: Function.stub });
-          then(lofterRh.ready(), () => makeLofterAct.act());
+          // Below immediately requests to initialize a Lofter
+          makeLofterAct.act();
           /// =BELOW}
           
         });
@@ -254,7 +256,7 @@ global.rooms['Hinterland'] = async () => {
       
       // Run Above logic once
       let aboveHooks = {
-        processArgs: rhFromRecWithRhArgs,
+        processArgs: convertRecWithRhArgsToRh,
         frameFn: resolveHrecs
       };
       let aboveScp = Scope(Src(), aboveHooks, (_, dep) => {
@@ -273,7 +275,12 @@ global.rooms['Hinterland'] = async () => {
         let belowHut = ownedHrec.rec.getMember('below');
         
         let belowHooks = {
-          processArgs: rhFromRecWithRhArgs,
+          // Enable shorthand of passing Record(...) and RelHandler args to `dep.scp`, and
+          // `dep.scp` will convert it to `Record(...).relHandler(args)`
+          processArgs: convertRecWithRhArgsToRh,
+          
+          // - Added convenience of working with Recs instead of Hrecs
+          // - Added convenience of following Recs routed through any descendant Scope
           frameFn: resolveHrecsAndFollowRecs.bound(belowHut)
         };
         let belowScp = Scope(Src(), belowHooks, (_, dep) => {
@@ -288,6 +295,8 @@ global.rooms['Hinterland'] = async () => {
             ...Form.makeUtils(this.prefix, belowHut, recMan, pfx)
           }, dep);
         });
+        
+        // If the BelowHut ends, the Scope which handles its Lofter ends too
         belowScp.makeFrame(belowHut); // Kick off single frame
         
       }));
@@ -296,7 +305,7 @@ global.rooms['Hinterland'] = async () => {
       
       // As soon as Below syncs the root Rec it's good to go
       let belowHooks = {
-        processArgs: rhFromRecWithRhArgs,
+        processArgs: convertRecWithRhArgsToRh,
         frameFn: resolveHrecs
       };
       tmp.endWith(Scope(loftRh, belowHooks, (loftRec, dep) => {
@@ -320,7 +329,7 @@ global.rooms['Hinterland'] = async () => {
         belowHut: hereHut,
         loftRh,
         belowHooks: {
-          processArgs: rhFromRecWithRhArgs,
+          processArgs: convertRecWithRhArgsToRh,
           frameFn: resolveHrecs
         }
       }));

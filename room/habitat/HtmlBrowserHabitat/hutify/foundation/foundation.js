@@ -81,6 +81,9 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
     init(uri) { Object.assign(this, { uri }); },
     getUri() { return this.uri; }
   })});
+  
+  // Some maturities use cache-busting for every asset request, but we want to avoid requesting the
+  // same asset multiple times with different cache-busting values; therefore we cache locally
   let seenHttpKeeps = Map();
   
   global.getMs = () => performance.timeOrigin + performance.now();
@@ -272,6 +275,8 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   let foundationTmp = Tmp();
   (() => {
     
+    let sc = global.subcon('ensureSingleTab');
+    
     // TODO: Support multiple tabs! (Probably with a SharedWorker)
     let { localStorage: storage } = window;
     if (!storage) throw Error(`No "localStorage" available`);
@@ -281,14 +286,13 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
     let viewId = (Number.int32 * Math.random()).encodeStr(String.base32, 7);
     let hutKey = `view/${belowHid}`;
     storage.setItem(hutKey, `${viewId}/${Date.now().toString(32)}`);
-    let evtFn = null;
-    window.evt('storage', evtFn = evt => {
+    
+    foundationTmp.endWith(window.evt('storage', evt => {
       
       if (evt.key !== hutKey) return;
       
       // Any other event means another tab took control
-      subcon('multiview')(`Lost view priority (hut: ${belowHid}, view: ${viewId})`, evt);
-      window.removeEventListener('storage', evtFn);
+      sc(`Lost view priority (hut: ${belowHid}, view: ${viewId})`, evt);
       
       let val = window.localStorage.getItem(`view/${belowHid}`);
       if (val.hasHead(`${viewId}/`)) window.localStorage.removeItem(`view/${belowHid}`);
@@ -320,9 +324,9 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
       
       document.body.appendChild(anchor);
       
-    });
+    }));
     
-    subcon('multiview')(`Took view priority (hut: ${belowHid}, view: ${viewId})`);
+    sc(`Took view priority (hut: ${belowHid}, view: ${viewId})`);
     
   })();
   
@@ -353,16 +357,12 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   // TODO: This assumes Above never ends which may introduce annoyances
   // for development (e.g. Above restarting should refresh Below)
   let netIden = { ...netIdenConf };
+  let secure = netIden.secureBits > 0;
   let aboveHut = hut.AboveHut({ hid: aboveHid, isHere: false, recMan, heartbeatMs });
   
   let roadAuths = pcls.map(({ name, port, ...opts }) => {
     let RoadAuthForm = pclServers[name];
-    return RoadAuthForm({
-      aboveHut,
-      secure: netIden.secureBits > 0,
-      netProc: `${netAddr}:${port}`,
-      ...opts
-    });
+    return RoadAuthForm({ aboveHut, secure, netProc: `${netAddr}:${port}`, ...opts });
   });
   let activePrms = roadAuths.map(ra => ra.activate());
   foundationTmp.endWith(() => activePrms.each(p => p.end()));

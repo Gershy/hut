@@ -705,9 +705,8 @@ global.rooms['chess2'] = async chess2Keep => {
         dep(numQueuedSrc.route(num => {
           let text = null;
           if      (num === 0) text = 'No one is matching right now...';
-          else if (num === 1) text = 'Only you are matching...';
-          else if (num === 2) text = 'Any opponent is matching!';
-          else                text = `There are ${num - 1} opponents matching!`;
+          else if (num === 1) text = 'There is 1 player matching!';
+          else                text = `There are ${num} players matching!`;
           numQueuedReal.mod({ text });
         }));
 
@@ -1177,7 +1176,7 @@ global.rooms['chess2'] = async chess2Keep => {
           /// {ABOVE=
           let { status=null } = msg ?? {};
           if (![ 'chill', 'learn', 'queue' ].has(status)) throw Error('Invalid status!');
-          if (status === lofter.getValue('status')) throw Error(`Can't change to same status!`);
+          if (status === lofter.getValue('status')) return;
           
           sc(`Lofter "${lofter.getValue('term')}" status: "${lofter.getValue('status')}" -> "${status}"`);
           

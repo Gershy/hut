@@ -27,11 +27,13 @@ global.rooms['logic.Chooser'] = async () => {
       
       if (src) {
         
-        if (!src.srcFlags.tmpsOnly) throw Error(`Provided ${getFormName(src)} doesn't only send Tmps`);
-        if (names.length !== 2) throw Error(`${getFormName(this)} requires exactly 2 names when used with a Src; got [${names.join(', ')}]`);
-        if (names.find(name => !isForm(name, String)).found) throw Error(`${getFormName(this)} names must be Strings`);
+        /// {DEBUG=
+        if (!src.srcFlags.tmpsOnly) throw Error(`Api: Provided ${getFormName(src)} doesn't only send Tmps`);
+        if (names.length !== 2) throw Error(`Api: ${getFormName(this)} requires exactly 2 names when used with a Src; got [${names.join(', ')}]`);
+        if (names.find(name => !isForm(name, String)).found) throw Error(`Api: ${getFormName(this)} names must be Strings`);
         let [ nOff, nOnn ] = names;
-        if (nOff === nOnn) throw Error(`${getFormName(this)} must have two different names`);
+        if (nOff === nOnn) throw Error(`Api: ${getFormName(this)} must have two different names`);
+        /// =DEBUG}
         
         this.srcRouteDeps = Set();
         this.srcRoute = src.route(tmp => {

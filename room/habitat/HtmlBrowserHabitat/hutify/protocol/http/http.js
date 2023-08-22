@@ -69,7 +69,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.protocol.http'] =
             
           } catch (cause) {
             // TODO: Retry logic!
-            let ignore = cause.message.has('abort') && !this.authority.active;
+            let ignore = cause.message.has('abort') && !this.roadAuth.active;
             if (!ignore) err.propagate({ cause, msg: 'Http failed (maybe network problems, server down?)', netTell: msg });
           }
           this.activeReqs--;

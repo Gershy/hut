@@ -142,10 +142,20 @@ module.exports = (async () => {
       for (let intercept of this.intercepts) if (intercept(req, res)) return;
       
       let cookie = reqHeaders.cookie
-        ?.split(';')
+        ?.split(/,;/)
         ?.map(v => v.trim() || skip)
         ?.toObj(item => item.cut('=') /* Naturally produces [ key, value ] */)
         ?? {};
+      
+      let hutCookie;
+      try {
+        hutCookie = cookie.has('hut') ? jsonToVal(Buffer.from(cookie.hut, 'base64').toString('utf8')) : {};
+      } catch (err) {
+        return this.killRes({ res, code: 302, msg: 'Api: malformed cookie', resHeaders: {
+          'Set-Cookie': cookie.toArr((v, k) => `${k}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;`),
+          'Location': '/'
+        }});
+      }
       
       let [ , path, query='', fragment='' ] = req.url.match(/^([/][^?#]*)([?][^#]+)?([#].*)?$/);
       path = path.slice(1).replace(/^[!][^/]+[/]*/, ''); // Ignore cache-busting component and leading slashes
@@ -158,7 +168,10 @@ module.exports = (async () => {
       let msg = {
         hid: null, command: path || 'hutify', trn: 'anon',
         path, fragment,
-        ...query, ...cookie, ...payload
+        // Note that `query` needs to take priority over `hutCookie` - otherwise a client with a
+        // cookie set won't be able to simply spoof their hid via the query
+        // TODO: What about the rest of `cookie`? We ignore everything but `cookie.hut`
+        ...hutCookie, ...query, ...payload
       };
       if (msg.command === 'hutify') msg.trn = 'sync';
       
@@ -484,6 +497,7 @@ module.exports = (async () => {
       init(args) {
         forms.Road.init.call(this, args);
         Object.assign(this, { queueRes: [], queueMsg: [] });
+        denumerate(this, 'queueRes');
         
         this.endWith(() => {
           let resArr = this.queueRes;
