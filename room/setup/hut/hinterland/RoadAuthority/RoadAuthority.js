@@ -9,11 +9,10 @@ global.rooms['setup.hut.hinterland.RoadAuthority'] = async () => {
     // work with duck-typing instead? (Or don't delete it but just never
     // reference it??) If so may want to simplify some functionality
     // e.g. parsing netAddr and port from netProc...
-    init({ aboveHut, secure, protocol, netProc, compression=[], sc=subcon(`roadAuth.${protocol}`) }) {
+    init({ aboveHut, protocol, netProc, compression=[], sc=subcon(`roadAuth.${protocol}`) }) {
       
       /// {DEBUG=
       if (!aboveHut) throw Error('Api: must provide "aboveHut"');
-      if (!isForm(secure, Boolean)) throw Error('Api: "secure" must be Boolean').mod({ secure });
       if (!protocol) throw Error('Api: must provide "protocol"');
       if (!netProc) throw Error('Api: must provide "netProc"');
       if (!sc) throw Error('Api: must provide "sc"');
@@ -22,17 +21,16 @@ global.rooms['setup.hut.hinterland.RoadAuthority'] = async () => {
       let [ netAddr, port ] = netProc.split(':');
       Object.assign(this, {
         aboveHut,
-        secure, protocol, netProc, netAddr, port: parseInt(port, 10), compression,
+        protocol, netProc, netAddr, port: parseInt(port, 10), compression,
         state: 'shut', statePrm: Promise.resolve(),
         roads: Map(/* BelowHut(...) => Road(...) */),
         sc
       });
       
     },
-    getProtocol() { return `${this.protocol}${this.secure ? 's' : ''}`; },
     getNetAddr() { return this.netProc.cut(':')[0]; },
     getPort() { return this.netProc.cut(':')[1]; },
-    desc() { return `${this.getProtocol()}://${this.netProc}`; },
+    desc() { return `${this.protocol}://${this.netProc}`; },
     
     activate() {
       // Returns a Tmp indicating that the RoadAuthority is active and
@@ -44,7 +42,7 @@ global.rooms['setup.hut.hinterland.RoadAuthority'] = async () => {
       // - commands being told by the AboveHut and heard by the BelowHut
       throw Error('Not implemented');
     },
-    createRoad(belowHut) { throw Error('Not implemented'); },
+    makeRoad(belowHut, params={}) { throw Error('Not implemented'); },
     
     $Road: form({ name: 'Road', has: { Tmp }, props: (forms, Form) => ({
       

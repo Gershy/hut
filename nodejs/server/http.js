@@ -1,49 +1,17 @@
 'use strict';
 
-// GOALS:
-// - Support functionality from FoundationNodejs BUT ALSO:
-// - Allow server destruction/restart (to allow live cert updates)
-// - Support sokt+http on the same port - the sokt RoadAuthority can
-//   handle "upgrade" events coming from the http RoadAuthority's server
-
-// - There should always be a NetworkIdentity, secure or unsafe!
-// - NetworkIdentity should be provided list of all Servers, and then be
-//   told to initialize. This will allow it to disable only the port 80
-//   server when performing ACME. It may also make it easier to run ws
-//   on same port as http, and have an http server which redirects to
-//   https
-// - Deal with discrepancies between NetworkIdentity Details and Keep data (take hash to ensure consistency??)
-// - Provide all Servers to NetworkIdentity
-
-// TODO: For `res.writeHead(...)`, consider Keep-Alive
-// e.g. 'Keep-Alive: timeout=5, max=100'
-
 require('../../room/setup/clearing/clearing.js');
-
 let zlib = require('zlib');
 let stream = require('stream');
 
-let precompressedMimes = Set([ 'image/png' ]); // TODO: Add more!
-let httpResponseCodes = Object.plain({
-  200: 'Ok',
-  201: 'Created',
-  202: 'Accepted',
-  204: 'No Content',
-  302: 'Found',
-  400: 'Bad Request',
-  500: 'Internal Server Error'
-});
-
-// TODO: Note this isn't being run - although it's the better approach!
-// As long as refactoring this, fix Comms!!
-//    | { hid: 'anHid', trn: 'someTrn', command: 'myCommand', ...args }
-// should become
-//    | { hid: '...', trn: '...', command: '...', args: { ... } }
-module.exports = (async () => {
+module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthority => {
   
-  let RoadAuthority = await getRoom('setup.hut.hinterland.RoadAuthority');
-  
-  let HttpRoadAuthority = form({ name: 'HttpRoadAuthority', has: { RoadAuthority }, props: (forms, Form) => ({
+  return form({ name: 'HttpRoadAuthority', has: { RoadAuthority }, props: (forms, Form) => ({
+    
+    $precompressedMimes: Set([ 'image/png' ]), // TODO: Add more!
+    $getHttpStatusFromCode: code => {
+      return code >= 500 ? 'Failure' : code >= 400 ? 'Refusal' : code >= 300 ? 'Redirect' : code >= 200 ? 'Success' : 'Info';
+    },
     
     init({ doCaching=true, getCacheSecs=msg=>(60 * 60 * 24 * 5), ...args }) {
       
@@ -52,7 +20,7 @@ module.exports = (async () => {
       
     },
     
-    activate() {
+    activate({ security=null }={}) {
       
       // Run the server, make it call `hearComm` as necessary. Note that the https cert data will
       // need to be passed to `activate`, not the constructor, as the cert data can become
@@ -61,7 +29,7 @@ module.exports = (async () => {
       let tmp = Tmp();
       
       tmp.prm = (async () => {
-        let server = require(this.getProtocol()).createServer({ /* TODO */ });
+        let server = require(security ? 'https' : 'http').createServer({ /* TODO - use `security` */ });
         
         let sockets = Set();
         let reqFn = this.processReq.bind(this);
@@ -95,8 +63,7 @@ module.exports = (async () => {
           server.listen(this.port, this.netAddr);
         });
         
-        return server;
-        
+        this.server = server;
       })();
       
       return tmp;
@@ -178,11 +145,18 @@ module.exports = (async () => {
       // These can't be confined to DEBUG blocks - Server must always be
       // wary of malformatted remote queries!
       let { hid=null, trn } = msg;
-      if (!/^(?:anon|sync|async)$/.test(trn))   return this.killRes({ res, code: 400, msg: 'invalid "trn"' });
-      if (hid === '')                           return this.killRes({ res, code: 400, msg: '"hid" may not be an empty string' });
-      if (hid !== null && !isForm(hid, String)) return this.killRes({ res, code: 400, msg: 'invalid "hid"' });
+      if (!/^(?:anon|sync|async)$/.test(trn))   return this.killRes({ res, code: 400, msg: 'Api: invalid "trn"' });
+      if (hid === '')                           return this.killRes({ res, code: 400, msg: 'Api: "hid" may not be an empty string' });
+      if (hid !== null && !isForm(hid, String)) return this.killRes({ res, code: 400, msg: 'Api: invalid "hid"' });
       
-      let { belowHut, road } = this.aboveHut.getBelowHutAndRoad({ roadAuth: this, trn, hid });
+      let { belowHut, road } = safe(
+        () => this.aboveHut.getBelowHutAndRoad({ roadAuth: this, trn, hid, params: {} }),
+        err => {
+          this.killRes({ res, code: 500, msg: 'Api: sorry - experiencing issues' });
+          throw err.mod(msg => `Failed to get BelowHut and Road: ${msg}`);
+        }
+      );
+      
       if ([ 'anon', 'sync' ].has(trn)) { // "anon" and "sync" are simple to handle
         
         // `trn` is "sync" (or "anon", implying "sync") - the reply must
@@ -302,7 +276,7 @@ module.exports = (async () => {
       // to be long enough to be worth compressing, or the message's
       // length isn't known (it's streamed)
       let encode = null;
-      let tryEncode = this.compression.length && (keep || msg.length > 75) && !precompressedMimes.has(mime);
+      let tryEncode = this.compression.length && (keep || msg.length > 75) && !Form.precompressedMimes.has(mime);
       if (tryEncode) {
         
         // If the payload isn't precompressed and compression options
@@ -414,7 +388,7 @@ module.exports = (async () => {
       
     },
     
-    createRoad(belowHut) { return (0, Form.HttpRoad)({ roadAuth: this, belowHut }); },
+    makeRoad(belowHut, params) { return (0, Form.HttpRoad)({ roadAuth: this, belowHut, ...params }); },
     
     receivedRequestSc(req, body) {
       
@@ -431,7 +405,9 @@ module.exports = (async () => {
         res.end = (...args) => {
           
           let { body: resBody='', encode='unencoded' } = res.explicitBody ?? { body: args[0] };
+          let { statusCode: code } = res;
           delete res.explicitBody;
+          
           
           this.sc({
             type: 'synced',
@@ -443,8 +419,8 @@ module.exports = (async () => {
               body
             },
             res: {
-              code: res.statusCode,
-              status: httpResponseCodes[res.statusCode] || `'Response ${data.code}`,
+              code,
+              status: Form.getHttpStatusFromCode(code),
               version: req.httpVersion, // TODO: Is this necessarily the right version?
               headers: { ...res.getHeaders() }, // `res.getHeaders()` is a plain Object
               encode,
@@ -478,7 +454,7 @@ module.exports = (async () => {
           this.sc({
             type: 'res',
             code: res.statusCode,
-            status: httpResponseCodes[res.statusCode] || `'Response ${data.code}`,
+            status: Form.getHttpStatusFromCode(code),
             version: req.httpVersion, // TODO: Is this necessarily the right version?
             headers: { ...res.getHeaders() }, // `res.getHeaders()` is a plain Object
             encode,
@@ -490,7 +466,7 @@ module.exports = (async () => {
         };
         
       }
-        
+      
     },
     
     $HttpRoad: form({ name: 'HttpRoad', has: { Road: RoadAuthority.Road }, props: (forms, Form) => ({
@@ -521,6 +497,4 @@ module.exports = (async () => {
     
   })});
   
-  return { HttpRoadAuthority };
-  
-})();
+});

@@ -1467,9 +1467,9 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         let { name: protocol, port, compression, ...opts } = protocolOpts;
         
         let roadAuthorityPrm = Object.plain({
-          http: () => require('./server/http.js').then(v => v.HttpRoadAuthority),
-          sokt: () => require('./server/sokt.js').then(v => v.SoktRoadAuthority),
-          ws:   () => require('./server/sokt.js').then(v => v.SoktRoadAuthority)
+          http: () => require('./server/http.js'),
+          sokt: () => require('./server/sokt.js'),
+          ws:   () => require('./server/sokt.js')
         })[protocol]?.() ?? Error(`Unfamiliar protocol: ${protocol}`).propagate();
         
         let RoadAuthority = await roadAuthorityPrm;

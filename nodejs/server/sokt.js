@@ -1,6 +1,162 @@
 'use strict';
 
 require('../room/setup/clearing/clearing.js');
+let crypto = require('crypto');
+
+module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthority => {
+  
+  return form({ name: 'SoktRoadAuthority', has: { RoadAuthority }, props: (forms, Form) => ({
+    
+    init({ ...args }) {
+      
+      forms.RoadAuthority.init.call(this, { protocol: 'sokt', ...args });
+      Object.assign(this, {});
+      
+    },
+    
+    activate({ security=null, adjacentServerPrms={} }={}) {
+      
+      // Note that "adjacent" implies any such servers are on the same port
+      
+      let tmp = Tmp();
+      
+      tmp.prm = (async () => {
+        
+        let existingHttpRoadAuthority = adjacentServerPrms.has('http') && await adjacentServerPrms.http;
+        let httpRoadAuthority = existingHttpRoadAuthority ||  await (async () => {
+          
+          this.sc('No adjacent http server - creating a sokt-specific http server');
+          
+          let HttpRoadAuthority = await require('./http.js');
+          let httpRoadAuthority = HttpRoadAuthority({
+            aboveHut: this.aboveHut, // The AboveHut won't be used
+            netProc: this.netProc,
+            sc: subconStub // Prevent http subcon - we'll do all necessary sc for websocket
+          });
+          httpRoadAuthority.intercepts = [
+            (req, res) => {
+              gsc('SOKT INTERCEPT HTTP', req.url);
+              res.socket.destroy();
+              return true;
+            }
+          ];
+          
+          let activateTmp = httpRoadAuthority.activate({ security });
+          tmp.endWith(activateTmp);
+          await activateTmp.prm;
+          
+          return httpRoadAuthority;
+          
+        })();
+        
+        httpRoadAuthority.server.on('upgrade', (req, socket, initialBuff) => {
+          
+          gsc('UPGRADING');
+          
+          if (req.headers['upgrade'] !== 'websocket') return socket.end('Api: upgrade header must be "websocket"');
+          if (!req.headers['sec-websocket-key'])      return socket.end('Api: missing "sec-websocket-key" header');
+          
+          let query = (req.url.cut('?')[1] ?? '').split('&').toObj(v => v.cut('='));
+          
+          let { belowHut, road } = safe(
+            () => this.aboveHut.getBelowHutAndRoad({ roadAuth: this, trn: 'async', hid, params: { socket, initialBuff } }),
+            err => {
+              socket.end('Api: sorry - experiencing issues');
+              throw err.mod(msg => `Failed to get BelowHut and Road: ${msg}`);
+            }
+          );
+          
+          
+          {
+            
+            try {
+              
+              let key = opts.getKey({ query });
+              let session = makeSoktSession(key, req, socket, buff);
+              
+              gsc(`OPEN ${session.desc()}`);
+              session.endWith(() => gsc(`SHUT ${session.desc()}`));
+              
+              tmp.endWith(session, 'tmp');
+              
+              tmp.src.send(session);
+              
+              subcon(() => ({ type: 'hear', fin: null, op: null, mask: null, data: null }));
+              
+              if (session.off()) return socket.destroy();
+              
+            } catch (err) {
+              
+              errSubcon('Error getting session key', query, err);
+              
+              let date = (new Date()).toUTCString();
+              tmp.httpServer.subcon(() => ({
+                type: 'res', version: 'HTTP/1.1', code: 400,
+                headers: { 'Date': date, 'Connection': 'Closed' },
+                body: ''
+              }));
+              
+              return socket.write([
+                'HTTP/1.1 400 Bad Request',
+                `Date: ${date}`,
+                'Connection: Closed',
+                '\r\n'
+              ].join('\r\n'));
+              
+            }
+            
+            let hash = crypto
+              .createHash('sha1')
+              .end(`${req.headers['sec-websocket-key']}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+              .digest('base64');
+            
+            socket.write([
+              'HTTP/1.1 101 Switching Protocols',
+              'Upgrade: websocket',
+              'Connection: Upgrade',
+              `Sec-WebSocket-Accept: ${hash}`,
+              '\r\n'
+            ].join('\r\n'));
+            
+          }
+          
+          
+        });
+        
+      })();
+      
+      return tmp;
+      
+    },
+    makeRoad(belowHut, { socket }) { return (0, Form.SoktRoad)({ roadAuth: this, belowHut, socket }); },
+    
+    $SoktRoad: form({ name: 'SoktRoad', has: { Road: RoadAuthority.Road }, props: (forms, Form) => ({
+      init({ socket, initialBuff=Buffer.alloc(0), ...args }) {
+        
+        /// {DEBUG=
+        if (!socket) throw Error('Api: missing "socket"');
+        if (!initialBuff) throw Error('Api: missing "initialBuff"');
+        /// =DEBUG}
+        
+        forms.Road.init.call(this, args);
+        Object.assign(this, { frames: [], size: 0, buff: initialBuff, socket });
+        
+        this.endWith(() => { /* TODO */ });
+        
+      },
+      currentCost() { return 0.1; },
+      tellAfar(msg) {
+        //let res = this.queueRes.shift();
+        //if (!res) { this.queueMsg.push(msg); return; }
+        
+        //res.unqueued = true;
+        //this.roadAuth.sendRes({ res, reqHeaders: res.reqHeaders, msg });
+      }
+    })})
+    
+  })});
+  
+});
 
 module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
   
@@ -47,7 +203,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       let rsv1 = b & 0b01000000;
       let rsv3 = b & 0b00100000;
       let rsv4 = b & 0b00010000;
-      let op =   b & 0b00001111; // Final (low-order) 4 bits compose OP
+      let op =   b & 0b00001111; // Final (low-order) 4 bits define OP
       
       // SECOND BYTE: 
       b = buff[1];
@@ -136,6 +292,10 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
     };
     
+    // TODO: HEEERE socket being passed to SoktRoad; need to transfer `wsDecode`, `wsIncoming`
+    // and `wsFrame` plus hook up the "readable" event to `wsIncoming` for INCOMING sokt comms, and
+    // transfer `wsWrite` and `wsDecode`, plus write-queueing for OUTGOING sokt comms!!
+    
     // Queue writes to ensure they can't become interleaved
     let wsWriteQueue = Promise.resolve();
     let wsWrite = (opts /* { op, code, text, data } */) => {
@@ -171,7 +331,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
       
       while (session.onn()) {
         
-        let wsMsg = wsDecode(state.buff);
+        let wsMsg = wsDecode(state.buff); // May consume a prefix of `state.buff`
         if (!wsMsg) break; // Need more data to finish decoding
         
         let { consumed, ...frame } = wsMsg;
@@ -293,10 +453,14 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
     
     tmp.httpServer.server.on('upgrade', (req, socket, buff) => {
       
-      if (req.headers['upgrade'] !== 'websocket') return req.writeHead(400).end();
-      if (!req.headers['sec-websocket-key'])      return req.writeHead(400).end();
+      if (req.headers['upgrade'] !== 'websocket') return socket.end('Api: upgrade header must be "websocket"');
+      if (!req.headers['sec-websocket-key'])      return socket.end('Api: missing "sec-websocket-key" header');
       
       let query = req.url.cut('?')[1].split('&').toObj(v => v.cut('='));
+      let { hid=null } = query;
+      if (!hid) return socket.end('Api: missing "hid" query parameter');
+      
+      
       try {
         
         let key = opts.getKey({ query });
@@ -333,7 +497,7 @@ module.exports = ({ secure, netAddr, port, compression=[], ...opts }) => {
         
       }
       
-      let hash = require('crypto')
+      let hash = crypto
         .createHash('sha1')
         .end(`${req.headers['sec-websocket-key']}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
         .digest('base64');

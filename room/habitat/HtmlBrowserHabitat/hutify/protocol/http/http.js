@@ -24,9 +24,9 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.protocol.http'] =
         return tmp;
         
       },
-      createRoad(belowHut) {
+      makeRoad(belowHut, params) {
         if (!this.active) throw Error('Api: inactive; unable to create road');
-        let road = (0, Form.BrowserHttpRoad)({ roadAuth: this, belowHut });
+        let road = (0, Form.BrowserHttpRoad)({ roadAuth: this, belowHut, ...params });
         road.tellAfar(''); // Immediately bank a request
         return road;
       },

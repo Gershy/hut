@@ -367,8 +367,9 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   let activePrms = roadAuths.map(ra => ra.activate());
   foundationTmp.endWith(() => activePrms.each(p => p.end()));
   
-  // Providing the same `belowHid` initiates only one BelowHut 
-  for (let roadAuth of roadAuths) aboveHut.getBelowHutAndRoad({ roadAuth, hid: belowHid });
+  // Providing the same `belowHid` initiates only one BelowHut
+  // Note that RoadAuthorities BELOW should never require any params passed to their Roads
+  for (let roadAuth of roadAuths) aboveHut.getBelowHutAndRoad({ roadAuth, hid: belowHid, params: {} });
   let belowHut = aboveHut.belowHuts.values().next().value; // Get the single BelowHut
   
   let initComm = conf('initComm');

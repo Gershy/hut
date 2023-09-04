@@ -337,7 +337,7 @@ global.rooms['setup.hut'] = async () => {
       /// =ABOVE}
       
     },
-    getBelowHutAndRoad({ roadAuth, trn, hid=null }) {
+    getBelowHutAndRoad({ roadAuth, trn, hid=null, params }) {
       
       // Returns a BelowHut with a Road for the given Authority
       // Even if an invalid `hid` is provided with non-dev maturity, a
@@ -345,14 +345,12 @@ global.rooms['setup.hut'] = async () => {
       // note that if `hid === "anon"`, a spoofed "anonymous" BelowHut
       // is returned
       
-      // TODO: Really, the BelowHut should be passed the RoadAuth - this
-      // indicates that a BelowHut always exists in the presence of at
-      // least one Road! The BelowHut is never exposed to any consuming
-      // code without a Road set on `BelowHut(...).roads`, but it does
-      // exist for some number of event-loop ticks, within the logic in
-      // this file, before having its Road set! (This was exposed by a
-      // bug where `heartbeatMs` was not being set, the `setTimeout` was
-      // firing after 0ms, and a "no Road available" bug appeared)
+      // TODO: Really, the BelowHut should be passed the RoadAuth - this indicates that a BelowHut
+      // always exists in the presence of at least one Road! The BelowHut is never exposed to any
+      // consuming code without a Road set on `BelowHut(...).roads`, but it does exist for some
+      // number of event-loop ticks, within the logic in this file, before having its Road set!
+      // This was exposed by a bug where `heartbeatMs` was not being set, the `setTimeout` was
+      // firing after 0ms, and a "no Road available" bug appeared
       
       /// {ABOVE=
       if (trn === 'anon') {
@@ -399,7 +397,7 @@ global.rooms['setup.hut'] = async () => {
         /// =ABOVE} {BELOW=
         
         /// {DEBUG=
-        if (!hid) throw Error('Api: must provide BelowHut hid BELOW');
+        if (!hid) throw Error('Api: must be able to resolve a BelowHut hid BELOW');
         /// =DEBUG}
         
         /// =BELOW}
@@ -422,7 +420,7 @@ global.rooms['setup.hut'] = async () => {
       })();
       
       // Initialize a Road if necessary
-      let road = belowHut.roads.get(roadAuth) ?? onto(roadAuth.createRoad(belowHut), road => {
+      let road = belowHut.roads.get(roadAuth) ?? onto(roadAuth.makeRoad(belowHut, params), road => {
         
         belowHut.roads.set(roadAuth, road);
         road.endWith(() => {
@@ -555,7 +553,7 @@ global.rooms['setup.hut'] = async () => {
           if (!isForm(version, Number)) throw Error('Invalid "version"');
           if (!version.isInteger()) throw Error('Invalid "version"');
           if (!isForm(content, Object)) throw Error('Invalid "content"');
-          if (version < this.syncHearVersion) throw Error(`Duplicated sync (version: ${version}; current version: ${this.syncHearVersion})`);
+          if (version < this.syncHearVersion) throw Error(`Api: Duplicated sync (version: ${version}; current version: ${this.syncHearVersion})`);
           /// =DEBUG}
           
           // Add this newly-arrived sync to the buffer
@@ -577,7 +575,12 @@ global.rooms['setup.hut'] = async () => {
           
         } catch (cause) {
           
-          throw err.mod({ msg: 'Error syncing - did the AboveHut restart unexpectedly?', cause });
+          // A duplicated sync occurs if Above restarts - the new instance won't remember that it
+          // already synced us - this is a good when to detect when a reload is needed!
+          if (cause.message.startsWith('Api: Duplicated sync'))
+            window.location.reload();
+          
+          throw err.mod({ msg: 'Error syncing - did the AboveHut stop unexpectedly?', cause });
           
         }
         
