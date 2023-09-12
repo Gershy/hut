@@ -1,7 +1,9 @@
+/// <reference path="./../../../ts/hut.d.ts"/>
 global.rooms['setup.hut'] = async () => {
   
   let { Record } = await getRoom('record');
   
+  /** @type Room_setup_hut['Hut'] */ // TODO: HEEERE PROGRESS - vscode link to hut.d.ts works!!
   let Hut = form({ name: 'Hut', has: { Record }, props: (forms, Form) => ({
     
     // Huts connect by Roads to other Huts, have the ability to Tell and Hear to/from other Huts,
@@ -998,6 +1000,8 @@ global.rooms['setup.hut'] = async () => {
     }
     
   })});
+  
+  /** @type Room_setup_hut */
   return { Hut, AboveHut, BelowHut };
   
 };
