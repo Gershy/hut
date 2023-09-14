@@ -3,7 +3,7 @@ global.rooms['setup.hut'] = async () => {
   
   let { Record } = await getRoom('record');
   
-  /** @type Room_setup_hut['Hut'] */ // TODO: HEEERE PROGRESS - vscode link to hut.d.ts works!!
+  /** @type HutRoom_setup_hut.Hut */
   let Hut = form({ name: 'Hut', has: { Record }, props: (forms, Form) => ({
     
     // Huts connect by Roads to other Huts, have the ability to Tell and Hear to/from other Huts,
@@ -218,6 +218,8 @@ global.rooms['setup.hut'] = async () => {
     }
     
   })});
+  
+  /** @type HutRoom_setup_hut.AboveHut */
   let AboveHut = form({ name: 'AboveHut', has: { Hut }, props: (forms, Form) => ({
     
     // A Hut that directly manages a Record structure and manages making
@@ -485,6 +487,8 @@ global.rooms['setup.hut'] = async () => {
     }
     
   })});
+  
+  /** @type HutRoom_setup_hut.BelowHut */
   let BelowHut = form({ name: 'BelowHut', has: { Hut }, props: (forms, Form) => ({
     
     init({ aboveHut, ...args }) {
@@ -1001,7 +1005,7 @@ global.rooms['setup.hut'] = async () => {
     
   })});
   
-  /** @type Room_setup_hut */
+  /** @type HutRoom_setup_hut.Room */
   return { Hut, AboveHut, BelowHut };
   
 };

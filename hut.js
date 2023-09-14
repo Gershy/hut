@@ -1,3 +1,4 @@
+/// <reference path="./ts/hut.d.ts"/>
 'use strict';
 
 // Make Errors better! (https://v8.dev/docs/stack-trace-api)
