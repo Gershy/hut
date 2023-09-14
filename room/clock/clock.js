@@ -36,18 +36,12 @@ global.rooms['clock'] = async foundation => {
       // The logic with `markMs` is meant to align the `TimerSrc` to the
       // utc second, so it ticks precisely whenever the utc second turns
       // over
-      let timerSrc = TimerSrc({ num: Infinity, ms: 1, markMs: 1000 - (getMs() % 1000) });
-      let batchSrc = BatchSrc({ timer: timerSrc, endMs: endMsSrc });
-      let remainingMsSrc = FnSrc(batchSrc, ({ timer, endMs }) => {
+      let timerSrc = TimerSrc({ num: Infinity, ms: 1, markMs: 1000 - (Date.now() % 1000) });
+      
+      let remainingMsSrc = FnSrc.Prm1([ timerSrc, endMsSrc ], (tick, endMs=null) => {
         if (endMs === null) return null;
         return endMs - Date.now();
       });
-      
-      //let remainingMsSrc = FnSrc.Prm1([ timerSrc, endMsSrc ], (tick, endMs=null) => {
-      //  if (endMs === null) return null;
-      //  return endMs - Date.now();
-      //});
-      
       remainingMsSrc.route(remainingMs => {
         
         // If `remainingMs` is `null` show "--" for all time components
@@ -68,13 +62,12 @@ global.rooms['clock'] = async foundation => {
         
       });
       
-      Object.assign(this, { endMsSrc, manageEndMsSrc, timerSrc, batchSrc, remainingMsSrc });
+      Object.assign(this, { endMsSrc, manageEndMsSrc, timerSrc, remainingMsSrc });
       
     },
     cleanup() {
-      this.remainingMsSrc.end();
-      this.batchSrc.end();
       this.timerSrc.end();
+      this.remainingMsSrc.end();
       if (this.manageEndMsSrc) this.endMsSrc.end();
     }
     
