@@ -3,9 +3,9 @@ global.rooms['clock'] = async foundation => {
   let rooms = await foundation.getRooms([
     'logic.TimerSrc',
     'logic.MemSrc',
-    'logic.FnSrc',
+    'logic.MapSrc',
   ]);
-  let { TimerSrc, MemSrc, FnSrc }  = rooms;
+  let { TimerSrc, MemSrc, MapSrc }  = rooms;
   
   let Clock = form({ name: 'Clock', has: { Endable }, props: (forms, Form) => ({
     
@@ -24,8 +24,8 @@ global.rooms['clock'] = async foundation => {
       if (!endMsSrc.srcFlags.memory) throw Error(`The "endMsSrc" Src must supply an immediate value`);
       if (!real) throw Error(`Can't omit "real"`);
       
-      // Note that `real` is meant to be "tabula rasa", initialized by
-      // the consuming Room. It will probably be named, e.g., "clock"
+      // Note that `real` is meant to be "tabula rasa", initialized by the consuming Room. It will
+      // probably be named, e.g., "clock"
       
       let hrReal =  real.addReal('hr',  { text: '--' }, [{ form: 'Text' }]);
       real.addReal('sep', [ { form: 'Text', text: ':' } ]);
@@ -33,15 +33,15 @@ global.rooms['clock'] = async foundation => {
       real.addReal('sep', [ { form: 'Text', text: ':' } ]);
       let secReal = real.addReal('sec', { text: '--' }, [{ form: 'Text' }]);
       
-      // The logic with `markMs` is meant to align the `TimerSrc` to the
-      // utc second, so it ticks precisely whenever the utc second turns
-      // over
-      let timerSrc = TimerSrc({ num: Infinity, ms: 1, markMs: 1000 - (Date.now() % 1000) });
-      
-      let remainingMsSrc = FnSrc.Prm1([ timerSrc, endMsSrc ], (tick, endMs=null) => {
+      // The logic with `markMs` is meant to align the `TimerSrc` to the utc second, so it ticks
+      // precisely whenever the utc second turns over
+      let timerSrc = TimerSrc({ num: Infinity, ms: 1, markMs: 1000 - (getMs() % 1000) });
+      let batchSrc = BatchSrc({ timer: timerSrc, endMs: endMsSrc });
+      let remainingMsSrc = MapSrc(batchSrc, ({ timer, endMs }) => {
         if (endMs === null) return null;
         return endMs - Date.now();
       });
+      
       remainingMsSrc.route(remainingMs => {
         
         // If `remainingMs` is `null` show "--" for all time components
@@ -62,12 +62,13 @@ global.rooms['clock'] = async foundation => {
         
       });
       
-      Object.assign(this, { endMsSrc, manageEndMsSrc, timerSrc, remainingMsSrc });
+      Object.assign(this, { endMsSrc, manageEndMsSrc, timerSrc, batchSrc, remainingMsSrc });
       
     },
     cleanup() {
-      this.timerSrc.end();
       this.remainingMsSrc.end();
+      this.batchSrc.end();
+      this.timerSrc.end();
       if (this.manageEndMsSrc) this.endMsSrc.end();
     }
     

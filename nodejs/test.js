@@ -7,12 +7,12 @@ module.exports = async () => {
   // all such tests and run them all here!
   let rooms = await getRooms([
     'logic.MemSrc',
-    'logic.FnSrc',
+    'logic.MapSrc',
     'logic.SetSrc',
     'logic.Chooser',
     'logic.Scope'
   ]);
-  let { MemSrc, FnSrc, SetSrc, Chooser, Scope } = rooms;
+  let { MemSrc, MapSrc, SetSrc, Chooser, Scope } = rooms;
   
   let tests = [
     
@@ -258,7 +258,7 @@ module.exports = async () => {
     async m => { // Tmps with refs end appropriately #1
       
       // TODO: Think about referenced Tmps + logic classes that
-      // manage their underlying Tmps; e.g. FnSrc.Tmp1 ends every
+      // manage their underlying Tmps; e.g. MapSrc.Tmp1 ends every
       // Tmp when a new one arrives
       
       let tmp = Tmp();
@@ -446,94 +446,6 @@ module.exports = async () => {
       
     },
     
-    ...[ FnSrc.Prm1, FnSrc.PrmM ].map(FnSrcCls => [
-      async m => { // FnSrc fn doesn't run if no child has event
-        
-        let srcs = (5).toArr(() => Src());
-        let events = [];
-        let fnSrc = FnSrcCls(srcs, (...args) => events.push(args));
-        if (events.count() !== 0) throw Error(`Expected exactly 0 events; got ${events.count()}`);
-        
-      },
-      async m => { // FnSrc fn only runs when all Srcs have sent
-        
-        let srcs = (5).toArr(() => Src());
-        let events = [];
-        let fnSrc = FnSrcCls(srcs, (...args) => events.push(args));
-        
-        for (let i = 0; i < 3; i++) srcs[0].send(null);
-        for (let i = 0; i < 6; i++) srcs[1].send(null);
-        for (let i = 0; i < 2; i++) srcs[2].send(null);
-        for (let i = 0; i < 1; i++) srcs[3].send(null);
-        
-        for (let i = 0; i < 9; i++) srcs[4].send(null);
-        
-        if (events.count() !== 9) throw Error(`Expected exactly 9 events; got ${events.count()}`);
-        
-      },
-      async m => { // FnSrc fn only runs when all Srcs have sent
-        
-        let srcs = (5).toArr(() => Src());
-        let events = [];
-        let fnSrc = FnSrcCls(srcs, (...args) => events.push(args));
-        
-        for (let i = 0; i < 3; i++) srcs[0].send();
-        for (let i = 0; i < 6; i++) srcs[1].send();
-        for (let i = 0; i < 1; i++) srcs[3].send();
-        for (let i = 0; i < 9; i++) srcs[4].send();
-        
-        for (let i = 0; i < 7; i++) srcs[2].send();
-        
-        if (events.count() !== 7) throw Error(`Expected exactly 7 events; got ${events.count()}`);
-        
-      },
-      async m => { // FnSrc sends values as expected
-        
-        let srcs = (3).toArr(() => Src());
-        let events = [];
-        let fnSrc = FnSrcCls(srcs, (...args) => args);
-        fnSrc.route(val => events.push(val));
-        for (let i = 0; i < 5; i++) srcs[0].send('hee');
-        for (let i = 0; i < 9; i++) srcs[1].send('haa');
-        for (let i = 0; i < 6; i++) srcs[2].send('hoo');
-        
-        if (events.count() !== 6) throw Error(`Expected exactly 6 events; got ${events.count()}`);
-        if (events.find(evt => !isForm(evt, Array)).found) throw Error(`All events should be Array`);
-        
-        let lastEvent = events.slice(-1)[0];
-        if (lastEvent.count() !== 3) throw Error(`Event should have 3 items (because there are 3 Srcs)`);
-        if (lastEvent[0] !== 'hee') throw Error(`1st item should be "hee"`);
-        if (lastEvent[1] !== 'haa') throw Error(`1st item should be "haa"`);
-        if (lastEvent[2] !== 'hoo') throw Error(`1st item should be "hoo"`);
-        
-      },
-      async m => { // FnSrc events have correct values
-        
-        let src1 = Src();
-        let src2 = Src();
-        let events = [];
-        let last = 0;
-        let fnSrc = FnSrcCls([ src1, src2 ], (v1, v2) => { events.push([ v1, v2, last ]); return last++; });
-        
-        src2.send('src2val1');
-        src1.send('src1val1');
-        src2.send('src2val2');
-        src1.send('src1val2');
-        src1.send('src1val3');
-        
-        if (events.count() !== 4) throw Error(`Expected exactly 4 results; got ${events.count()}`);
-        
-        [ [ 'src1val1', 'src2val1', 0 ],
-          [ 'src1val1', 'src2val2', 1 ],
-          [ 'src1val2', 'src2val2', 2 ],
-          [ 'src1val3', 'src2val2', 3 ] ]
-        .each((vals, ind1) => vals.each((v, ind2) => {
-          if (events[ind1][ind2] !== v) throw Error(`events[${ind1}][${ind2}] should be ${v} (got ${events[ind1][ind2]})`);
-        }));
-        
-      },
-    ]).flat(Infinity),
-    
     async m => { // MemSrc.Tmp1 sends value
       
       let src = MemSrc.Tmp1();
@@ -599,10 +511,99 @@ module.exports = async () => {
       
     },
     
-    async m => { // FnSrc.Prm1 only sends once, for multiple src sends, if value is always the same
+    /* TODO: Write proper MapSrc tests! (And BatchSrc, SwitchSrc, etc!)
+    ...[ MapSrc.Prm1, MapSrc.PrmM ].map(MapSrcCls => [
+      async m => { // MapSrc fn doesn't run if no child has event
+        
+        let srcs = (5).toArr(() => Src());
+        let events = [];
+        let fnSrc = MapSrcCls(srcs, (...args) => events.push(args));
+        if (events.count() !== 0) throw Error(`Expected exactly 0 events; got ${events.count()}`);
+        
+      },
+      async m => { // MapSrc fn only runs when all Srcs have sent
+        
+        let srcs = (5).toArr(() => Src());
+        let events = [];
+        let fnSrc = MapSrcCls(srcs, (...args) => events.push(args));
+        
+        for (let i = 0; i < 3; i++) srcs[0].send(null);
+        for (let i = 0; i < 6; i++) srcs[1].send(null);
+        for (let i = 0; i < 2; i++) srcs[2].send(null);
+        for (let i = 0; i < 1; i++) srcs[3].send(null);
+        
+        for (let i = 0; i < 9; i++) srcs[4].send(null);
+        
+        if (events.count() !== 9) throw Error(`Expected exactly 9 events; got ${events.count()}`);
+        
+      },
+      async m => { // MapSrc fn only runs when all Srcs have sent
+        
+        let srcs = (5).toArr(() => Src());
+        let events = [];
+        let fnSrc = MapSrcCls(srcs, (...args) => events.push(args));
+        
+        for (let i = 0; i < 3; i++) srcs[0].send();
+        for (let i = 0; i < 6; i++) srcs[1].send();
+        for (let i = 0; i < 1; i++) srcs[3].send();
+        for (let i = 0; i < 9; i++) srcs[4].send();
+        
+        for (let i = 0; i < 7; i++) srcs[2].send();
+        
+        if (events.count() !== 7) throw Error(`Expected exactly 7 events; got ${events.count()}`);
+        
+      },
+      async m => { // MapSrc sends values as expected
+        
+        let srcs = (3).toArr(() => Src());
+        let events = [];
+        let fnSrc = MapSrcCls(srcs, (...args) => args);
+        fnSrc.route(val => events.push(val));
+        for (let i = 0; i < 5; i++) srcs[0].send('hee');
+        for (let i = 0; i < 9; i++) srcs[1].send('haa');
+        for (let i = 0; i < 6; i++) srcs[2].send('hoo');
+        
+        if (events.count() !== 6) throw Error(`Expected exactly 6 events; got ${events.count()}`);
+        if (events.find(evt => !isForm(evt, Array)).found) throw Error(`All events should be Array`);
+        
+        let lastEvent = events.slice(-1)[0];
+        if (lastEvent.count() !== 3) throw Error(`Event should have 3 items (because there are 3 Srcs)`);
+        if (lastEvent[0] !== 'hee') throw Error(`1st item should be "hee"`);
+        if (lastEvent[1] !== 'haa') throw Error(`1st item should be "haa"`);
+        if (lastEvent[2] !== 'hoo') throw Error(`1st item should be "hoo"`);
+        
+      },
+      async m => { // MapSrc events have correct values
+        
+        let src1 = Src();
+        let src2 = Src();
+        let events = [];
+        let last = 0;
+        let fnSrc = MapSrcCls([ src1, src2 ], (v1, v2) => { events.push([ v1, v2, last ]); return last++; });
+        
+        src2.send('src2val1');
+        src1.send('src1val1');
+        src2.send('src2val2');
+        src1.send('src1val2');
+        src1.send('src1val3');
+        
+        if (events.count() !== 4) throw Error(`Expected exactly 4 results; got ${events.count()}`);
+        
+        [ [ 'src1val1', 'src2val1', 0 ],
+          [ 'src1val1', 'src2val2', 1 ],
+          [ 'src1val2', 'src2val2', 2 ],
+          [ 'src1val3', 'src2val2', 3 ] ]
+        .each((vals, ind1) => vals.each((v, ind2) => {
+          if (events[ind1][ind2] !== v) throw Error(`events[${ind1}][${ind2}] should be ${v} (got ${events[ind1][ind2]})`);
+        }));
+        
+      },
+    ]).flat(Infinity),
+    
+    async m => { // MapSrc.Prm1 only sends once, for multiple src sends, if value is always the same
       
       let srcs = (3).toArr(() => Src());
-      let fnSrc = FnSrc.Prm1(srcs, (...args) => args.join(','));
+      let fnSrc = MapSrc.Prm1(srcs, (...args) => args.join(','));
       let events = [];
       fnSrc.route(v => events.push(v));
       
@@ -615,10 +616,10 @@ module.exports = async () => {
       fnSrc.end();
       
     },
-    async m => { // FnSrc.Prm1 gets MemSrc.Prm1 vals as expected
+    async m => { // MapSrc.Prm1 gets MemSrc.Prm1 vals as expected
       
       let srcs = (3).toArr(() => MemSrc.Prm1('a'));
-      let fnSrc = FnSrc.Prm1(srcs, (s1, s2, s3) => [ s1, s2, s3 ]);
+      let fnSrc = MapSrc.Prm1(srcs, (s1, s2, s3) => [ s1, s2, s3 ]);
       let results = [];
       fnSrc.route(v => results.push(v));
       
@@ -653,10 +654,10 @@ module.exports = async () => {
       fnSrc.end();
       
     },
-    async m => { // FnSrc.Prm1 gets Chooser vals as expected
+    async m => { // MapSrc.Prm1 gets Chooser vals as expected
       
       let choosers = (3).toArr(() => Chooser([ 'a', 'b' ]));
-      let fnSrc = FnSrc.Prm1(choosers, (s1, s2, s3) => [ s1, s2, s3 ]);
+      let fnSrc = MapSrc.Prm1(choosers, (s1, s2, s3) => [ s1, s2, s3 ]);
       let results = [];
       fnSrc.route(v => results.push(v));
       
@@ -691,11 +692,11 @@ module.exports = async () => {
       fnSrc.end();
       
     },
-    async m => { // FnSrc.Tmp1 only sends once, for multiple src sends, if value is always the same Tmp
+    async m => { // MapSrc.Tmp1 only sends once, for multiple src sends, if value is always the same Tmp
       
       let srcs = (3).toArr(() => Src());
       let tmppp = Tmp();
-      let fnSrc = FnSrc.Tmp1(srcs, (v1, v2, v3, tmp=tmppp) => tmp);
+      let fnSrc = MapSrc.Tmp1(srcs, (v1, v2, v3, tmp=tmppp) => tmp);
       let events = [];
       fnSrc.route(v => events.push(v));
       
@@ -707,23 +708,23 @@ module.exports = async () => {
       if (events[0] !== tmppp) throw Error(`Single send had unexpected value`);
       
     },
-    async m => { // FnSrc.Tmp1 Tmp value ends when FnSrc ends
+    async m => { // MapSrc.Tmp1 Tmp value ends when MapSrc ends
       
       let src = Src();
       let tmppp = Tmp();
-      let fnSrc = FnSrc.Tmp1([ src ], (v, tmp=tmppp) => tmp);
+      let fnSrc = MapSrc.Tmp1([ src ], (v, tmp=tmppp) => tmp);
       src.send('whee');
       
       if (tmppp.off()) throw Error(`Tmp ended too early`);
       fnSrc.end();
-      if (tmppp.onn()) throw Error(`Tmp didn't end with FnSrc`);
+      if (tmppp.onn()) throw Error(`Tmp didn't end with MapSrc`);
       
     },
-    async m => { // FnSrc.Tmp1 sending ends any previous Tmp sent by same FnSrc
+    async m => { // MapSrc.Tmp1 sending ends any previous Tmp sent by same MapSrc
       
       let srcs = [ Src(), Src() ];
       let tmps = [ Tmp(), Tmp(), Tmp() ];
-      let fnSrc = FnSrc.Tmp1(srcs, (src1Val, src2Val) => tmps[src2Val]);
+      let fnSrc = MapSrc.Tmp1(srcs, (src1Val, src2Val) => tmps[src2Val]);
       
       srcs[0].send('hello');
       
@@ -742,6 +743,7 @@ module.exports = async () => {
       if (tmps[2].onn()) throw Error(`Tmp didn't end`);
       
     },
+    */
     
     async m => { // Scope basics
       

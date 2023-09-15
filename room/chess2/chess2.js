@@ -299,7 +299,7 @@ global.rooms['chess2'] = async chess2Keep => {
         'habitat.HtmlBrowserHabitat',
         'record.bank.WeakBank',
         'logic.Chooser',
-        'logic.FnSrc',
+        'logic.MapSrc',
         'logic.MemSrc',
         'logic.Scope',
         'logic.SetSrc',
@@ -699,7 +699,6 @@ global.rooms['chess2'] = async chess2Keep => {
           Axis1d: { axis: 'y', mode: 'compactCenter' },
         }));
         
-        queueReal.addReal('title', lay.text('Play an Opponent', tsP1));
         let numQueuedReal = queueReal.addReal('item', lay.text(''));
         let numQueuedSrc = dep(chess2.getValuePropSrc('numQueued'));
         dep(numQueuedSrc.route(num => {

@@ -1,12 +1,12 @@
 global.rooms['reality.layout.Feel'] = async () => {
   
-  let { MemSrc, FnSrc, Real: { Layout } } = await getRooms([
+  let { MemSrc, MapSrc, Real: { Layout } } = await getRooms([
     'logic.MemSrc',
-    'logic.FnSrc',
+    'logic.MapSrc',
     'reality.real.Real'
   ]);
   return form({ name: 'Feel', has: { Layout }, props: (form, Form) => ({
-    init({ modes=[ 'continuous', 'discrete' ], feelSrc=true, feelFn=null }={}) {
+    init({ modes=[ 'continuous', 'discrete' ], feelSrc=null, feelFn=null }={}) {
       
       if (!isForm(modes, Array)) modes = [ modes ];
       
@@ -23,24 +23,14 @@ global.rooms['reality.layout.Feel'] = async () => {
       
       let tmp = Tmp();
       
-      let feelSrc = this.getParam(real, 'feelSrc');
-      
-      let gotExternalFeelSrc = !!feelSrc?.onn();
-      if (!gotExternalFeelSrc) {
-        feelSrc = real.params.feelSrc = MemSrc.Tmp1();
-        tmp.endWith(feelSrc);
-      }
+      // Note that if this context creates the MemSrc, it owns it and ends it if the Layout ends
+      if (!this.getParam(real, 'feelSrc')) tmp.endWith(real.params.feelSrc = MemSrc.Tmp1());
       
       /// {DEBUG=
+      let feelSrc = this.getParam(real, 'feelSrc');
       if (!isForm(feelSrc, MemSrc.Tmp1)) throw Error(`feelSrc must be MemSrc.Tmp1`);
       if (feelSrc.val !== null) throw Error(`feelSrc.val must be null`);
       /// =DEBUG}
-      
-      // If a FeelFn was provided, pass it a Tmp whenever a Feel begins,
-      // and end that Tmp when the Feel ends (note it's up to FeelFn to
-      // open/shut actions along with the Tmp!)
-      let feelFn = this.getParam(real, 'feelFn');
-      if (feelFn) tmp.endWith(feelSrc.route(feelTmp => feelFn(feelTmp)));
       
       return tmp;
       

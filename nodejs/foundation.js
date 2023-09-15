@@ -91,7 +91,9 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     global.subconOutput.buffered = [];
     
     // Define `global.formatAnyValue`
-    global.formatAnyValue = (val, { colors=true, depth=10 }={}) => util.inspect(val, { colors, depth });
+    global.formatAnyValue = (val, { colors=true, depth=10 }={}) => {
+      return util.inspect(val, { colors, depth });
+    };
     
     // Make sure Errors are formatted properly by util.inspect
     Object.defineProperty(Error.prototype, Symbol.for('nodejs.util.inspect.custom'), {

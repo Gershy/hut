@@ -6,7 +6,7 @@ global.rooms['collabowrite'] = async foundation => {
     /// =ABOVE}
     'logic.TimerSrc',
     'logic.Chooser',
-    'logic.FnSrc',
+    'logic.MapSrc',
     'persona',
     'clock',
     'habitat.HtmlBrowserHabitat',
@@ -16,7 +16,7 @@ global.rooms['collabowrite'] = async foundation => {
   /// {ABOVE=
   let { random } = rooms;
   /// =ABOVE}
-  let { Chooser, FnSrc, TimerSrc, Hinterland, HtmlBrowserHabitat } = rooms;
+  let { Chooser, MapSrc, TimerSrc, Hinterland, HtmlBrowserHabitat } = rooms;
   let { Clock } = rooms.clock;
   let { PersonaSrc } = rooms.persona;
   
@@ -104,7 +104,7 @@ global.rooms['collabowrite'] = async foundation => {
       hut.addPreloadRooms([
         'logic.MemSrc',
         'logic.Chooser',
-        'logic.FnSrc',
+        'logic.MapSrc',
         'logic.TimerSrc',
         'persona',
         'clock',
@@ -168,11 +168,12 @@ global.rooms['collabowrite'] = async foundation => {
           
           // Check for all Authors to have submitted an Idea
           let ideaRhAudit = dep(room.rh('idea')).getAuditSrc();
-          let allSubmittedSrc = dep(FnSrc.Prm1(
-            [ ideaRhAudit, dep(room.getValuePropSrc('numAuthors')) ],
-            (ideaAudit, numAuthors) => (ideaAudit.num >= numAuthors) ? null : skip
-          ));
-          allSubmittedSrc.route(() => submitTmp.send({ reason: 'allSubmitted' }));
+          
+          let numAuthorsSrc = dep(room.getValuePropSrc('numAuthors'));
+          let batchSrc = dep(BatchSrc({ ideaAudit: ideaRhAudit, numAuthors: numAuthorsSrc }));
+          let fnSrc = dep(MapSrc(batchSrc, ({ ideaAudit, numAuthors }) => {
+            if (ideaAudit.num >= numAuthors) submitTmp.send({ reason: 'allSubmitted' })); 
+          }));
           
           // Check for the time limit to run out
           let { submitTs, submitSecs } = room.getValue();
@@ -244,41 +245,40 @@ global.rooms['collabowrite'] = async foundation => {
             
           }));
           
+          let numAuthorsSrc = dep(room.getValuePropSrc('numAuthors'));
           let ideaAuditSrc = dep(room.rh('idea')).getAuditSrc();
           let voteAuditSrc = dep(room.rh('vote')).getAuditSrc();
-          let numAuthorsSrc = dep(room.getValuePropSrc('numAuthors'));
           
           // Check for an idea to gain an unbeatable lead
-          let unbeatableSrc = dep(FnSrc.Prm1(
-            [ ideaAuditSrc, voteAuditSrc, numAuthorsSrc ],
-            (ideaAudit, voteAudit, numAuthors) => {
+          dep(BatchSrc([ numAuthorsSrc, ideaAuditSrc, voteAuditSrc ])).route(([ numAuthors, ideaAudit, voteAudit ]) => {
+            
+            let doneVotingResult = (() => {
+              
+              // Check for all Authors to have submitted a Vote
+              if (voteAudit.num >= numAuthors) voteTmp.send({ reason: 'allVoted' });
               
               let ideas = [ ...ideaAudit.all() ];
               let votes = [ ...voteAudit.all() ];
               
               let ranking = getIdeaRanking({ ideas, votes });
               
+              // Check if there was a trivial number of submissions
               if (ranking.count() === 0) return { reason: 'pointless', ranking, winningIdea: null };
               if (ranking.count() === 1) return { reason: 'noContest', ranking, winningIdea: ranking[0].idea };
               
+              // Check if the leading idea is unbeatable
               let [ gold, silver ] = ranking; // Note at this point there's at least 2 Ideas submitted!
               let remainingVoters = numAuthors - voteAudit.num;
               let voteGap = gold.votes.count() - silver.votes.count();
               
-              return (voteGap > remainingVoters)
-                ? { reason: 'unbeatable', winningIdea: gold.idea, ranking }
-                : skip;
-              
-            }
-          ));
-          unbeatableSrc.route(doneVoting => voteTmp.send(doneVoting));
-          
-          // Check for all Authors to have submitted a Vote
-          let allVotedSrc = dep(FnSrc.Prm1(
-            [ voteAuditSrc, numAuthorsSrc ],
-            (voteAudit, numAuthors) => (voteAudit.num >= numAuthors) ? null : skip
-          ));
-          allVotedSrc.route(() => voteTmp.send({ reason: 'allVoted' }));
+              if (voteGap > remainingVoters) return { reason: 'unbeatable', winningIdea: gold.idea, ranking };
+              return null;
+            
+            })();
+            
+            if (doneVotingResult) voteTmp.send(doneVotingResult);
+            
+          });
           
           // Check for the time limit to run out
           let { voteTs, voteSecs } = room.getValue();
@@ -556,12 +556,8 @@ global.rooms['collabowrite'] = async foundation => {
               ]));
               let numAuthorsSrc = dep(room.getValuePropSrc('numAuthors'));
               let numIdeasSrc = dep(room.getValuePropSrc('numIdeas'));
-              let progressSrc = dep(FnSrc.Prm1(
-                [ numAuthorsSrc, numIdeasSrc ],
-                (numAuthors, numIdeas) => ({ numAuthors, numIdeas })
-              ));
-              progressSrc.route(v => {
-                submittedReal.mod({ text: `You submitted! Got ${v.numIdeas} / ${v.numAuthors} submissions...` });
+              dep(BatchSrc([ numAuthorsSrc, numIdeasSrc ])).route(([ numAuthors, numIdeas ]) => {
+                submittedReal.mod({ text: `You submitted! Got ${numIdeas} / ${numAuthors} submissions...` });
               });
               
             });

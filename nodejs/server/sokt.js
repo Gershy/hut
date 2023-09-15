@@ -56,10 +56,11 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
           if (req.headers['upgrade'] !== 'websocket') return socket.end('Api: upgrade header must be "websocket"');
           if (!req.headers['sec-websocket-key'])      return socket.end('Api: missing "sec-websocket-key" header');
           
+          let belowNetAddr = req.connection.remoteAddress;
           let query = (req.url.cut('?')[1] ?? '').split('&').toObj(v => v.cut('='));
           
           let { belowHut, road } = safe(
-            () => this.aboveHut.getBelowHutAndRoad({ roadAuth: this, trn: 'async', hid, params: { socket, initialBuff } }),
+            () => this.aboveHut.getBelowHutAndRoad({ roadAuth: this, trn: 'async', hid, params: { socket, initialBuff, belowNetAddr } }),
             err => {
               socket.end('Api: sorry - experiencing issues');
               throw err.mod(msg => `Failed to get BelowHut and Road: ${msg}`);

@@ -192,16 +192,14 @@ global.rooms['setup.hut'] = async () => {
         // Errors can occur when processing Comms from other Huts; when this happens we ideally
         // inform the other Hut of the Error, and if this isn't possible we send the Error to subcon
         
-        gsc.kid('error')(err.mod(m => ({
-          message: `${this.desc()} failed to handle Comm!\n${m}`,
-          comm
-        })));
+        gsc.kid('error')(err.mod(m => ({ message: `Api: failed to handle Comm\n${m}`, hut: this, comm })));
         
         /// {ABOVE=
         // Above should inform Below of the Error
+        gsc(`ERR: ${err.message}`);
         comm.reply?.({ command: 'error', msg: {
           detail: err.message.startsWith('Api: ') ? err.message : 'Server error',
-          orig: comm.msg
+          echo: comm.msg
         }});
         /// =ABOVE}
         
@@ -266,6 +264,8 @@ global.rooms['setup.hut'] = async () => {
         allFollows: Object.plain(/* uid -> { hutId -> FollowTmp } */)
         
       });
+      denumerate(this, 'deployConf');
+      denumerate(this, 'belowHuts');
       denumerate(this, 'allFollows');
       
       /// {ABOVE=
@@ -359,20 +359,22 @@ global.rooms['setup.hut'] = async () => {
       /// {ABOVE=
       if (trn === 'anon') {
         
+        let belowNetAddr = params.has('belowNetAddr') ? params.belowNetAddr : '???:???:???:???';
         let anonRoad = {
           tellAfar: msg => { throw Error('OWwwowoaowoasss'); },
-          desc: () => `AnonRoad(${roadAuth.desc()} <-> ${req.connection.remoteAddress} / !anon)`
+          desc: () => `AnonRoad(${roadAuth.desc()} <-> ${belowNetAddr} / !anon)`
         };
         let anonBelowHut = {
           aboveHut: this,
           hid: '!anon', isHere: false, isAfar: true,
-          desc: () => `AnonHut(...)`, // TODO: Include NetworkAddress in desc (from roadAuth)
-          roads: Map([ roadAuth, anonRoad ]),
+          desc: () => `AnonHut(${belowNetAddr})`, // TODO: Include NetworkAddress in desc (from roadAuth)
+          roads: Map([ [ roadAuth,  anonRoad ] ]),
           
           // AnonBelowHuts can only trigger AboveHut handlers
           runCommandHandler: comm => this.runCommandHandler(comm),
           processCommand: comm => this.runCommandHandler(comm)
         };
+        
         return { belowHut: anonBelowHut, road: anonRoad };
         
       }

@@ -174,6 +174,7 @@ Object.assign(global, {
       for (let i = 0; i < len; i++) { let v = it(this[i], i); if (v !== skip) ret.push(v); }
       return ret;
     },
+    toArr(it) { return this.map(it); }, // Can't inherit Object.prototype.toArr - it passes keys as Strings!
     toObj(it) { // Iterator: (val, ind) => [ key0, val0 ]
       let ret = [];
       let len = this.length;
@@ -780,10 +781,9 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     
     // Would be very satisifying to freeze `Form`, but the current
     // pattern of defining specialized subclasses:
-    // 
-    //    |     FnSrc.Tmp1 = form(...);
-    // 
+    //    |     MemSrc.Tmp1 = form(...);
     // relies on `Form` being mutable :(
+    // TODO: MapSrc and MemSrc are being refactored... maybe do this??
     for (let k in statics) statics[k] = [ ...statics[k] ][0];
     Object.assign(Form, statics);
     // Object.freeze(Form);
@@ -1121,7 +1121,7 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
       // Does this Src remember previous values?
       memory: false,
       
-      // Does this Src only work with a single value at once?
+      // Does this Src only work with a single value at once? (Will it only send 1 value?)
       singleton: false,
       
       // Does this Src only send Tmps?
@@ -1299,7 +1299,7 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
     };
     
   }});
-  Tmp.stub = (() => { let t = Tmp(); t.end(); return t; })();
+  Tmp.stub = Tmp(); Tmp.stub.end();
   
   let Slots = form({ name: 'Slots', props: (forms, Form) => ({
     

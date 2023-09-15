@@ -64,6 +64,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         });
         
         this.server = server;
+        denumerate(this, 'server');
       })();
       
       return tmp;
@@ -75,6 +76,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       
       let reqHeaders = req.headers;
       let stuffedHeader = reqHeaders['x-hut-msg'];
+      let belowNetAddr = req.connection.remoteAddress;
       
       let payload = reqHeaders['x-hut-msg'];
       if (!payload && req.method === 'GET') {
@@ -150,7 +152,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       if (hid !== null && !isForm(hid, String)) return this.killRes({ res, code: 400, msg: 'Api: invalid "hid"' });
       
       let { belowHut, road } = safe(
-        () => this.aboveHut.getBelowHutAndRoad({ roadAuth: this, trn, hid, params: {} }),
+        () => this.aboveHut.getBelowHutAndRoad({ roadAuth: this, trn, hid, params: { belowNetAddr } }),
         err => {
           this.killRes({ res, code: 500, msg: 'Api: sorry - experiencing issues' });
           throw err.mod(msg => `Failed to get BelowHut and Road: ${msg}`);

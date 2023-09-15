@@ -23,7 +23,6 @@ global.rooms['setup.hut.hinterland.RoadAuthority'] = async () => {
         aboveHut,
         protocol, netProc, netAddr, port: parseInt(port, 10), compression,
         state: 'shut', statePrm: Promise.resolve(),
-        roads: Map(/* BelowHut(...) => Road(...) */),
         sc
       });
       
