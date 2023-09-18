@@ -393,7 +393,15 @@ global.rooms['record'] = async () => {
         
         // Resolve numeric keys to type names, then collect all Terms,
         // then remove `null` Members!
+        /// {DEBUG=
+        let origMems = { ...mems };
+        /// =DEBUG}
         mems = mems.mapk((rec, term) => [ /^[0-9]+$/.test(term) ? rec.type.name : term, rec ]);
+        /// {DEBUG=
+        if (mems.count() !== origMems.count())
+          throw Error('Api: conflicting keys when Group supplied as Object with numeric keys')
+            .mod({ keyTypes: origMems.map(rec => rec.type.name) });
+        /// =DEBUG}
         terms = Set(mems.toArr((v, k) => k));
         mems = mems.map(rec => rec ?? skip); // Remove `null` Members
         
@@ -1094,7 +1102,7 @@ global.rooms['record'] = async () => {
       // Try to get the Member directly by the Term
       
       if (this.group.mems.has(term)) return this.group.mems[term];
-      if (this.group.terms.has(term)) return null;
+      if (this.group.terms.has(term)) return null; // TODO: Just store `null` in `group.mems` and return `group.mems[term]`??
       
       // Perhaps `term` is a Type's name, without the shortname prefix?
       // Add the shortname prefix and check for a matching member...

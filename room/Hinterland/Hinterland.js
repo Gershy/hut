@@ -58,8 +58,6 @@ global.rooms['Hinterland'] = async () => {
       // +----------------------------+------------------------------------------------------------------
       // | dep.scp(rec, 'term', ...)  | Defaults same as `rec.relHandler(...)`
       // +----------------------------+------------------------------------------------------------------
-      // |                            | 
-      // +----------------------------+------------------------------------------------------------------
       
       // Note that none of these should conflict with properties that
       // can be found on a Record!!
@@ -73,16 +71,12 @@ global.rooms['Hinterland'] = async () => {
       },
       addRecord: (...args /* type, group, value, uid, volatile | { type, group, value, uid, volatile } */) => {
         
-        // HEEERE need to test everything with Collabowrite!! I NEED TO
-        // KNOW if Persona can be simplified now that prefixes are
-        // removed everywhere (it could just be passed, e.g., the Loft,
-        // and all prefixes would automatically fall into place!). Need
-        // to see if using `recMan.addRecord` instead of
-        // `belowHut.addRecord` causes issues with Records getting
-        // followed!!!
+        // TODO: need to test everything with Collabowrite!! I NEED TO KNOW if Persona can be
+        // simplified now that prefixes are removed everywhere (it could just be passed, e.g., the
+        // Loft, and all prefixes would automatically fall into place!). Need to see if using
+        // `recMan.addRecord` instead of `belowHut.addRecord` causes issues Following Records!
         
-        // Not applying any Follows here!! So Below can only follow
-        // stuff via `resolveHrecsAndFollowRecs`!!!!
+        // Not applying any Follows here; Below must Follow with `resolveHrecsAndFollowRecs`!!!!
         
         // args ~= [ 'eg.type', [ memRec1, memRec2 ], 'val', ... ]
         if (isForm(args[0], String))

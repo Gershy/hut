@@ -126,10 +126,22 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         }});
       }
       
-      let [ , path, query='', fragment='' ] = req.url.match(/^([/][^?#]*)([?][^#]+)?([#].*)?$/);
-      path = path.slice(1).replace(/^[!][^/]+[/]*/, ''); // Ignore cache-busting component and leading slashes
-      query = query ? query.slice(1).split('&').toObj(pc => [ ...pc.cut('='), true /* default key-only value to flag */ ]) : {};
-      fragment = fragment.slice(1);
+      // Note: browsers may not send the fragment to the server even if it shows in the url bar
+      let reg = /^([/][^?#]*)([?][^#]*)?([#].*)?$/;
+      
+      /// {DEBUG=
+      if (!reg.test(req.url)) {
+        gsc.kid('error')(`Failed to parse url "${req.url}"`);
+        req.url = '/hut-wtf'; // Stick a url that will definitely parse properly
+      }
+      /// =DEBUG}
+      
+      // Slice "/" off path, "?" off query and "#" off fragment
+      let [ , path, query='', fragment='' ] = req.url.match(reg);
+      [ path, query, fragment ] = [ path, query, fragment ].map(v => v.slice(1));
+      
+      path = path.replace(/^[!][^/]+[/]*/, ''); // Ignore cache-busting component and leading slashes
+      query = query ? query.split('&').toObj(pc => [ ...pc.cut('='), true /* default key-only value to flag */ ]) : {};
       
       // - Compile the full `msg`
       // - `msg.trn` defaults to "anon"

@@ -76,6 +76,7 @@ Object.assign(global, {
     
     $$: 'has:hasOwnProperty',
     
+    at(k) { return this.has(k) ? this[k] : skip; },
     each(fn) { for (let [ k, v ] of this) fn(v, k); },
     map(fn) { // Iterator: (val, key) => val
       let ret = Object.assign({}, this);

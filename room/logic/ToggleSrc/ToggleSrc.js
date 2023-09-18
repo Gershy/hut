@@ -17,6 +17,10 @@ global.rooms['logic.ToggleSrc'] = () => form({ name: 'ToggleSrc', has: { Endable
   },
   
   process(val) {
+    
+    // Check if we're changing from onn -> onn (same state) but new value - if so end old value!
+    if (this.onn() && val && val !== this.tmp.val) this.tmp.end();
+    
     // Ignore if val is truthy and we are onn, or val is falsey and we are off
     if (!!val === this.tmp.onn()) return;
     
@@ -24,10 +28,11 @@ global.rooms['logic.ToggleSrc'] = () => form({ name: 'ToggleSrc', has: { Endable
       /// {ASSERT=
       if (this.tmp.onn()) throw Error('OOwowuuwauauaushghhg pre-existing Tmp was onn');
       /// =ASSERT}
-      this.send(this.tmp = Tmp());
+      this.send(this.tmp = Tmp({ val }));
     } else {
       this.tmp.end();
     }
+    
   },
   
   srcFlags: { memory: true, multi: true, tmpsOnly: true },

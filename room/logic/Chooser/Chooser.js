@@ -83,10 +83,18 @@ global.rooms['logic.Chooser'] = async () => {
     newRoute(fn) { if (this.onn()) fn(this.activeSrcName); },
     maybeEndTmp(srcName) {
       
-      // TODO: The "~chooserInternal" check is bespoke and ugly - the
-      // fact that this paradigm was made necessary probably indicates
-      // that the Chooser Form as a whole is overloaded.
-      srcName && this.srcs[srcName].val && this.srcs[srcName].val['~chooserInternal'] && this.srcs[srcName].val.end();
+      /// {ASSERT=
+      if (!srcName) throw Error('Api: missing "srcName"');
+      /// =ASSERT}
+      
+      /// {DEBUG=
+      if (!this.srcs.at(srcName)) throw Error('Api: invalid srcName').mod({ srcName });
+      /// =DEBUG}
+      
+      // End the Tmp stored under `srcName` only if we have ownership over it
+      // TODO: The "~chooserInternal" check is bespoke and ugly - the fact that this paradigm was
+      // made necessary probably indicates that Chooser is generally overloaded
+      this.srcs.at(srcName).val?.['~chooserInternal'] && this.srcs[srcName].val.end();
       
     },
     choose(name, tmp=null) {

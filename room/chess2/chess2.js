@@ -15,16 +15,17 @@ global.rooms['chess2'] = async chess2Keep => {
     'logic.MemSrc',
     'logic.MapSrc',
     'logic.TimerSrc',
+    'logic.ToggleSrc',
     'habitat.HtmlBrowserHabitat',
     'Hinterland'
     
   ]);
-  let { AnyTmp, Chooser, SetSrc, MemSrc, TimerSrc, Hinterland, HtmlBrowserHabitat, MapSrc } = rooms;
+  let { AnyTmp, Chooser, SetSrc, MemSrc, TimerSrc, ToggleSrc, Hinterland, HtmlBrowserHabitat, MapSrc } = rooms;
   
   let isDev = conf('global.maturity') === 'dev';
   let pieceStyle = 'classic';
   let layoutStyle = 'classic';
-  let moveMs = (isDev ? 12 : 60) * 1000;
+  let moveMs = (isDev ? 13 : 60) * 1000;
   let enterMs = (isDev ? 0.1 : 2) * 1000;
   let matchmakeMs = (isDev ? 1 : 5) * 1000;
   let tsM2 = 'calc(70% + 0.78vmin)';
@@ -838,8 +839,10 @@ global.rooms['chess2'] = async chess2Keep => {
         
         /// =BELOW}
         
+        // We'll track the Real associated with each Piece
+        let pieceReals = Map(/* Piece(...).uid -> Real(...) */);
+        
         // Render pieces
-        let pieceControls = dep(MemSrc.TmpM());
         dep.scp(match, 'piece', (piece, dep) => {
           
           /// {BELOW=
@@ -885,8 +888,8 @@ global.rooms['chess2'] = async chess2Keep => {
           }));
           dep(() => pieceReal.mod({ scale: 4, opacity: 0 })); // Ghosty explosion upon capture
           
-          let pieceControl = dep(Tmp({ piece, pieceReal }));
-          pieceControls.mod(pieceControl);
+          pieceReals.set(piece.uid, pieceReal);
+          dep(() => pieceReals.rem(piece.uid));
           
           /// =BELOW}
           
@@ -1051,24 +1054,28 @@ global.rooms['chess2'] = async chess2Keep => {
                 
               });
               
-              let selectedPieceChooser = dep(Chooser([ 'off', 'onn' ]));
+              let selectedPieceSrc = Src();
+              let selectedPieceChooser = dep(Chooser(ToggleSrc(selectedPieceSrc)));
               dep.scp(selectedPieceChooser.srcs.off, (noSelectedPiece, dep) => {
                 
                 // Pieces can be selected by clicking
-                dep.scp(pieceControls, ({ piece, pieceReal }, dep) => {
+                dep.scp(match, 'piece', (piece, dep) => {
                   
                   // Can't select enemy pieces
                   if (piece.getValue('colour') !== myColour) return;
                   
-                  dep(pieceReal.addLayout({ form: 'Press',
-                    pressFn: () => selectedPieceChooser.choose('onn', Tmp({ piece, pieceReal, '~chooserInternal': true })) // TODO: Ridiculous
-                  }));
+                  let real = pieceReals.get(piece.uid);
+                  dep(real.addLayout({ form: 'Press', pressFn: () => {
+                    selectedPieceSrc.send(piece);
+                  }}));
                   
                 });
                 
               });
-              dep.scp(selectedPieceChooser.srcs.onn, async ({ piece, pieceReal }, dep) => {
+              dep.scp(selectedPieceChooser.srcs.onn, async (selectedPiece, dep) => {
                 
+                let piece = selectedPiece.val;
+                let pieceReal = pieceReals.get(piece.uid);
                 dep(pieceReal.addLayout('Decal', { border: { ext: '5px', colour: moveColour } }));
                 
                 let pieces = await match.withRh('piece', 'all');
@@ -1088,7 +1095,7 @@ global.rooms['chess2'] = async chess2Keep => {
                 }
                 
                 // Click anywhere on the board to deselect
-                dep(boardReal.addLayout('Press', { pressFn: () =>  selectedPieceChooser.choose('off') }));
+                dep(boardReal.addLayout('Press', { pressFn: () =>  selectedPieceSrc.send(null) }));
                 
               });
               /// =BELOW}
@@ -1121,7 +1128,7 @@ global.rooms['chess2'] = async chess2Keep => {
               let movePiece = roundMove.m('piece?');
               if (!movePiece) return;
               
-              let pieceReal = pieceControls.vals.find(({ piece }) => piece === movePiece).val.pieceReal;
+              let pieceReal = pieceReals.get(movePiece.uid);
               
               let { col, row, cap } = roundMove.getValue();
               
@@ -1347,7 +1354,6 @@ global.rooms['chess2'] = async chess2Keep => {
                   } else {
                     
                     let { piece, col, row } = decision;
-                    if (!actions['c2.submitMove']) gsc('WHATTT');
                     actions['c2.submitMove'].act({ piece: piece.uid, trg: { col, row } });
                     
                   }
