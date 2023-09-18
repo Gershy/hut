@@ -1,10 +1,10 @@
 global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.feel'] = async () => {
   
-  let { MemSrc, MapSrc, BatchSrc, SwitchSrc } = await getRooms([
+  let { MemSrc, MapSrc, BatchSrc, ToggleSrc } = await getRooms([
     'logic.MemSrc',
     'logic.MapSrc',
     'logic.BatchSrc',
-    'logic.SwitchSrc'
+    'logic.ToggleSrc'
   ]);
   
   return {
@@ -27,7 +27,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.feel'] = async () => 
       // Via this logic...
       let batchSrc = BatchSrc({ cnt: feelCnt, dsc: feelDsc });
       let fnSrc = MapSrc(batchSrc, ({ cnt, dsc }) => cnt || dsc);
-      let switchSrc = SwitchSrc(fnSrc);
+      let switchSrc = ToggleSrc(fnSrc);
       
       // Result in feeding Tmps to the "feelSrc" Layout param
       let feelSrc = layout.getParam(real, 'feelSrc');

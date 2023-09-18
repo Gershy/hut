@@ -104,7 +104,7 @@ global.rooms['persona'] = async () => {
       
     },
     
-    srcFlags: { memory: true, singleton: true, tmpsOnly: true },
+    srcFlags: { memory: true, multi: true, tmpsOnly: true },
     countSent() { return this.persona ? 1 : 0; },
     getSent() { return this.persona ? [ this.persona ] : []; },
     newRoute(fn) { this.persona && fn(this.persona); },

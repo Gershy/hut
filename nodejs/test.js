@@ -9,10 +9,12 @@ module.exports = async () => {
     'logic.MemSrc',
     'logic.MapSrc',
     'logic.SetSrc',
+    'logic.ToggleSrc',
+    'logic.BatchSrc',
     'logic.Chooser',
     'logic.Scope'
   ]);
-  let { MemSrc, MapSrc, SetSrc, Chooser, Scope } = rooms;
+  let { MemSrc, MapSrc, SetSrc, ToggleSrc, BatchSrc, Chooser, Scope } = rooms;
   
   let tests = [
     
@@ -370,6 +372,7 @@ module.exports = async () => {
       
     },
     
+    /* TODO: Need tests for MapSrc
     async m => { // Src(...).map #1
       
       let src1 = Src();
@@ -445,6 +448,7 @@ module.exports = async () => {
       if (evts.length !== 8) throw Error('Expected 8 events'); // No changes expected since Src.Mapped ended
       
     },
+    */
     
     async m => { // MemSrc.Tmp1 sends value
       
@@ -510,8 +514,8 @@ module.exports = async () => {
       if (n !== 1) throw Error(`MemSrc.Tmp1 breaks under edge-case; expected 1 call to route fn; got ${n}`);
       
     },
+    /* TODO: Write proper MapSrc tests! (And BatchSrc, ToggleSrc, etc!)
     
-    /* TODO: Write proper MapSrc tests! (And BatchSrc, SwitchSrc, etc!)
     ...[ MapSrc.Prm1, MapSrc.PrmM ].map(MapSrcCls => [
       async m => { // MapSrc fn doesn't run if no child has event
         
@@ -744,6 +748,42 @@ module.exports = async () => {
       
     },
     */
+   
+    async m => { // ToggleSrc basics
+      
+      // TODO...
+      let src = Src();
+      let ts = ToggleSrc(src);
+      
+    },
+    
+    async m => { // MapSrc basics
+      
+      // TODO...
+      let src = Src();
+      let ms = MapSrc(src, v => v);
+      
+    },
+    
+    async m => { // BatchSrc with obj basics
+      
+      // TODO...
+      let src1 = Src();
+      let src2 = Src();
+      let src3 = Src();
+      let bs = BatchSrc({ src1, src2, src3 });
+      
+    },
+    
+    async m => { // BatchSrc with arr basics
+      
+      // TODO...
+      let src1 = Src();
+      let src2 = Src();
+      let src3 = Src();
+      let bs = BatchSrc([ src1, src2, src3 ]);
+      
+    },
     
     async m => { // Scope basics
       

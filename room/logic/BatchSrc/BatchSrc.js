@@ -38,7 +38,7 @@ global.rooms['logic.BatchSrc'] = () => form({ name: 'BatchSrc', has: { Endable, 
     
   },
   
-  srcFlags: { memory: true, singleton: true, tmpsOnly: false },
+  srcFlags: { memory: true, multi: true, tmpsOnly: false },
   newRoute(fn) { if (!this.missing) fn(this.state); },
   cleanup() {
     

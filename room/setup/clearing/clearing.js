@@ -1121,8 +1121,9 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
       // Does this Src remember previous values?
       memory: false,
       
-      // Does this Src only work with a single value at once? (Will it only send 1 value?)
-      singleton: false,
+      // Does this Src only work with a single value at once? (Can it max 1 time without any
+      // external activity?)
+      multi: false,
       
       // Does this Src only send Tmps?
       tmpsOnly: false
@@ -1131,12 +1132,12 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
       // - `newRoute` is probably implemented
       // - `countSent` should be implemented
       
-      // { singleton: true }
+      // { multi: true }
       // - The Sending of a new value indicates the outdatedness of any
       //   previous value
       // - Newly added Routes will be immediately called maximum once
       
-      // { singleton: true, tmpsOnly: true }
+      // { multi: true, tmpsOnly: true }
       // - A previously sent Tmp will probably be ended before a new one
       //   is Sent
       
@@ -1156,40 +1157,10 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
       // which were later Ended)
       throw Error(`Not available for ${this.constructor.name}`);
       
-    },
-    
-    map(fn) { return Src.Mapped(this, fn); }
+    }
     
   })});
   Src.stub = { route: () => Tmp.stub, send: Function.stub };
-  Src.Mapped = form({ name: 'Src.Mapped', has: { Endable, Src }, props: (forms, Form) => ({
-    
-    init(src, fn) {
-      
-      forms.Endable.init.call(this);
-      forms.Src.init.call(this);
-      
-      this.src = src;
-      this.fn = fn;
-      
-      // Inefficient when `src` stores many items; they'll all send, and
-      // there are no routes
-      this.mapRoute = src.route(val => {
-        val = this.fn(val);
-        if (val !== skip) this.send(val);
-      });
-      
-    },
-    newRoute(fn) {
-      this.src.newRoute(val => {
-        val = this.fn(val);
-        if (val !== skip) fn(val);
-      });
-    },
-    
-    cleanup() { this.mapRoute.end(); }
-    
-  })});
   
   let Tmp = form({ name: 'Tmp', has: { Endable, Src }, props: (forms, Form) => {
     

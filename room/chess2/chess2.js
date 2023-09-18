@@ -13,12 +13,13 @@ global.rooms['chess2'] = async chess2Keep => {
     'logic.Chooser',
     'logic.SetSrc',
     'logic.MemSrc',
+    'logic.MapSrc',
     'logic.TimerSrc',
     'habitat.HtmlBrowserHabitat',
     'Hinterland'
     
   ]);
-  let { AnyTmp, Chooser, SetSrc, MemSrc, TimerSrc, Hinterland, HtmlBrowserHabitat } = rooms;
+  let { AnyTmp, Chooser, SetSrc, MemSrc, TimerSrc, Hinterland, HtmlBrowserHabitat, MapSrc } = rooms;
   
   let isDev = conf('global.maturity') === 'dev';
   let pieceStyle = 'classic';
@@ -532,7 +533,7 @@ global.rooms['chess2'] = async chess2Keep => {
         
         // If both lofters have submitted moves, perform those moves
         let roundMoveRh = dep(round.rh('roundMove'));
-        let roundMoveSrc = dep(roundMoveRh.map(hrec => hrec.rec));
+        let roundMoveSrc = dep(MapSrc(roundMoveRh, hrec => hrec.rec));
         let moveSetSrc = dep(SetSrc(roundMoveSrc));
         dep(moveSetSrc.route( lofterMoves => (lofterMoves.count() === 2) && resolveRound(lofterMoves) ));
         
@@ -712,6 +713,9 @@ global.rooms['chess2'] = async chess2Keep => {
         queueReal.addReal('gap', lay.gap());
         
         let queueRh = dep(status.rh('queue'));
+        let no
+        
+        
         let queueChooser = dep(Chooser(queueRh));
         dep.scp(queueChooser.srcs.off, (noQueue, dep) => {
           

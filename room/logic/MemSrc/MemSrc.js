@@ -6,11 +6,11 @@ global.rooms['logic.MemSrc'] = () => {
       forms.Endable.init.call(this);
       forms.Src.init.call(this);
     },
-    srcFlags: { memory: true, singleton: false, tmpsOnly: false },
     mod: C.noFn('mod')
   })});
   MemSrc.Prm1 = form({ name: 'MemSrc.Prm1', has: { MemSrc }, props: (forms, Form) => ({
     init(val=skip) { forms.MemSrc.init.call(this); this.val = val; },
+    srcFlags: { memory: true, multi: true, tmpsOnly: false },
     newRoute(fn) { if (this.val !== skip) fn(this.val); },
     mod(val) {
       
@@ -27,6 +27,7 @@ global.rooms['logic.MemSrc'] = () => {
   })});
   MemSrc.PrmM = form({ name: 'MemSrc.PrmM', has: { MemSrc }, props: (forms, Form) => ({
     init() { forms.MemSrc.init.call(this); this.vals = []; },
+    srcFlags: { memory: true, multi: false, tmpsOnly: false },
     count() { return this.vals.count(); },
     mod(val) { this.vals.push(val); this.send(val); },
     newRoute(fn) { for (let val of this.vals) fn(val); },

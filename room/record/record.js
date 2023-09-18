@@ -507,7 +507,7 @@ global.rooms['record'] = async () => {
         : `${getFormName(this)}( ${this.rec.desc()} <-- ${this.type.name} )`;
     },
     
-    srcFlags: { memory: true, singleton: false, tmpsOnly: true },
+    srcFlags: { memory: true, multi: false, tmpsOnly: true },
     newRoute(fn) { for (let hrec of this.hrecs.values()) fn(hrec); },
     countSent() { return this.hrecs.size; },
     getSent() { return this.hrecs.values(); },

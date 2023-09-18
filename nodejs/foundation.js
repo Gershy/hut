@@ -96,15 +96,21 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       
       if ([ String, Number, Boolean, RegExp, Error ].some(F => isForm(val, F))) return val;
         
+      if (seen.has(val)) return seen.get(val);
+      
       if (hasForm(val, Function)) {
         let str = val.toString().split('\n').map(ln => ln.trim()).join(' ');
         if (str.length > 60) str = str.slice(0, 59) + '\u2026';
-        return { [inspectSym](d, opts) { return opts.stylize(`[fn: ${val.name}] ${str}`, 'special'); } };
+        let result = { [inspectSym](d, opts) { return opts.stylize(`[fn: ${val.name}] ${str}`, 'special'); } };
+        seen.set(val, result);
+        return result;
       }
       
-      if (isForm(val?.desc, Function)) return { [inspectSym](d, opts) { return opts.stylize(val.desc(), 'special'); } };
-      
-      if (seen.has(val)) return seen.get(val);
+      if (isForm(val?.desc, Function)) {
+        let result = { [inspectSym](d, opts) { return opts.stylize(val.desc(), 'special'); } };
+        seen.set(val, result);
+        return result;
+      }
       
       if (isForm(val, Array)) {
         let mapped = [];
@@ -118,11 +124,17 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         return mapped.gain(val.map(v => reformat(v, seen)));
       }
       
+      seen.set(val, val);
       return val;
       
     };
-    global.formatAnyValue = (val, { colors=true, depth=10 }={}) => {
-      return util.inspect(reformat(val), { colors, depth });
+    global.formatAnyValue = (val, { colours=true, colors=colours, depth=10 }={}) => {
+      try {
+        return util.inspect(reformat(val), { colors, depth });
+      } catch (err) {
+        console.log('WHOA', val);
+        return util.inspect(val, { colors, depth });
+      }
     };
     
     // Make sure Errors are formatted properly by util.inspect

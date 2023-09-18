@@ -9,13 +9,20 @@ global.rooms['logic.MapSrc'] = () => form({ name: 'MapSrc', has: { Endable, Src 
     forms.Endable.init.call(this);
     forms.Src.init.call(this);
     
-    Object.assign(this, { fn, srcRoute: null });
+    Object.assign(this, { src, fn, srcRoute: null });
     this.srcRoute = src.route(this.process.bind(this));
     
   },
   process(val) {
     val = this.fn(val);
     if (val !== skip) this.send(val);
+  },
+  newRoute(fn) {
+    // Implement `MapSrc(...).newRoute` simply by delegating to `this.src`
+    this.src.newRoute(val => {
+      val = this.fn(val);
+      if (val !== skip) fn(val);
+    });
   },
   cleanup() { this.srcRoute.end(); }
 })});

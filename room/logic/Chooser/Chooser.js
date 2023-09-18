@@ -18,8 +18,11 @@ global.rooms['logic.Chooser'] = async () => {
       // whether a Tmp is emitted by Src (when "onn") or whether the Tmp
       // gets ended (when "off")
       if (src === null && hasForm(names, Src)) [ src, names ] = [ names, [ 'off', 'onn' ] ];
+      
+      /// {DEBUG=
       if (!isForm(names, Array)) throw Error(`${getFormName(this)} names must be an Array`);
       if (names.length < 2) throw Error(`${getFormName(this)} requires at least 2 options`);
+      /// =DEBUG}
       
       this.srcs = names.toObj(n => [ n, MemSrc.Tmp1() ]);
       this.activeSrcName = names[0];
