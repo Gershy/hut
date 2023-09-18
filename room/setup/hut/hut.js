@@ -183,7 +183,7 @@ global.rooms['setup.hut'] = async () => {
       
       let run = () => {
         let ch = this.commandHandlers.get(comm.msg.command);
-        if (!ch) throw Error(`Api: no handler for command "${comm.msg.command}"`).mod({ hut: this.desc(), comm });
+        if (!ch) throw Error(`Api: unrecognized command`).mod({ hut: this.desc(), comm });
         return ch.fn(comm);
       };
       
@@ -192,11 +192,10 @@ global.rooms['setup.hut'] = async () => {
         // Errors can occur when processing Comms from other Huts; when this happens we ideally
         // inform the other Hut of the Error, and if this isn't possible we send the Error to subcon
         
-        gsc.kid('error')(err.mod(m => ({ message: `Api: failed to handle Comm\n${m}`, hut: this, comm })));
+        gsc.kid('error')('Failed handling Comm', err);
         
         /// {ABOVE=
         // Above should inform Below of the Error
-        gsc(`ERR: ${err.message}`);
         comm.reply?.({ command: 'error', msg: {
           detail: err.message.startsWith('Api: ') ? err.message : 'Server error',
           echo: comm.msg
@@ -374,6 +373,7 @@ global.rooms['setup.hut'] = async () => {
           runCommandHandler: comm => this.runCommandHandler(comm),
           processCommand: comm => this.runCommandHandler(comm)
         };
+        denumerate(anonBelowHut, 'roads');
         
         return { belowHut: anonBelowHut, road: anonRoad };
         

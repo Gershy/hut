@@ -91,8 +91,38 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     global.subconOutput.buffered = [];
     
     // Define `global.formatAnyValue`
+    let inspectSym = Symbol.for('nodejs.util.inspect.custom');
+    let reformat = (val, seen=Map()) => {
+      
+      if ([ String, Number, Boolean, RegExp, Error ].some(F => isForm(val, F))) return val;
+        
+      if (hasForm(val, Function)) {
+        let str = val.toString().split('\n').map(ln => ln.trim()).join(' ');
+        if (str.length > 60) str = str.slice(0, 59) + '\u2026';
+        return { [inspectSym](d, opts) { return opts.stylize(`[fn: ${val.name}] ${str}`, 'special'); } };
+      }
+      
+      if (isForm(val?.desc, Function)) return { [inspectSym](d, opts) { return opts.stylize(val.desc(), 'special'); } };
+      
+      if (seen.has(val)) return seen.get(val);
+      
+      if (isForm(val, Array)) {
+        let mapped = [];
+        seen.set(val, mapped);
+        return mapped.gain(val.map(v => reformat(v, seen)));
+      }
+      
+      if (isForm(val, Object)) {
+        let mapped = {};
+        seen.set(val, mapped);
+        return mapped.gain(val.map(v => reformat(v, seen)));
+      }
+      
+      return val;
+      
+    };
     global.formatAnyValue = (val, { colors=true, depth=10 }={}) => {
-      return util.inspect(val, { colors, depth });
+      return util.inspect(reformat(val), { colors, depth });
     };
     
     // Make sure Errors are formatted properly by util.inspect

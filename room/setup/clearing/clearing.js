@@ -104,11 +104,11 @@ Object.assign(global, {
       return { found: false, val: null, k: null };
     },
     empty() { for (let k in this) return false; return true; },
-    gain(...o) {
+    gain(...objs) {
       // Note for performance we combine all source Objects first, to
       // reduce the number of items that need to be checked for skips -
       // probably worth the overhead of calling `Object.assign` x2
-      let gain = Object.assign({}, ...o);
+      let gain = Object.assign({}, ...objs);
       for (let k in gain) if (gain[k] === skip) delete gain[k];
       return Object.assign(this, gain);
     },
