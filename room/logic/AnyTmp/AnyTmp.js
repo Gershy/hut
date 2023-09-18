@@ -1,4 +1,4 @@
-global.rooms['logic.TmpAny'] = foundation => form({ name: 'TmpAny', has: { Tmp }, props: (forms, Form) => ({
+global.rooms['logic.AnyTmp'] = foundation => form({ name: 'AnyTmp', has: { Tmp }, props: (forms, Form) => ({
   
   // A Tmp which lasts as long as any underlying Tmp lasts
   

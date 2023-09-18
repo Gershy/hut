@@ -9,7 +9,7 @@ global.rooms['chess2'] = async chess2Keep => {
     'random',
     /// =ABOVE}
     
-    'logic.TmpAny',
+    'logic.AnyTmp',
     'logic.Chooser',
     'logic.SetSrc',
     'logic.MemSrc',
@@ -18,7 +18,7 @@ global.rooms['chess2'] = async chess2Keep => {
     'Hinterland'
     
   ]);
-  let { TmpAny, Chooser, SetSrc, MemSrc, TimerSrc, Hinterland, HtmlBrowserHabitat } = rooms;
+  let { AnyTmp, Chooser, SetSrc, MemSrc, TimerSrc, Hinterland, HtmlBrowserHabitat } = rooms;
   
   let isDev = conf('global.maturity') === 'dev';
   let pieceStyle = 'classic';
@@ -304,7 +304,7 @@ global.rooms['chess2'] = async chess2Keep => {
         'logic.Scope',
         'logic.SetSrc',
         'logic.TimerSrc',
-        'logic.TmpAny',
+        'logic.AnyTmp',
         'reality.real.Real',
         'reality.layout.Axis1d',
         'reality.layout.Decal',
@@ -601,7 +601,7 @@ global.rooms['chess2'] = async chess2Keep => {
             });
             
             // Keep the Match alive so long as any Lofter is alive
-            let anyLofterInMatch = TmpAny([ mpw, mpb ]);
+            let anyLofterInMatch = AnyTmp([ mpw, mpb ]);
             anyLofterInMatch.endWith(match);
             
           }

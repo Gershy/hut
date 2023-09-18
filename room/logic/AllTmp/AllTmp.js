@@ -1,4 +1,4 @@
-global.rooms['logic.TmpAll'] = form({ name: 'TmpAll', has: { Tmp }, props: (forms, Form) => ({
+global.rooms['logic.AllTmp'] = form({ name: 'AllTmp', has: { Tmp }, props: (forms, Form) => ({
   
   // A Tmp which lasts as long as all underlying Tmps last
   
