@@ -13,8 +13,8 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.feel'] = async () => 
       let node = real.node;
       
       // These 2 inputs...
-      let feelCnt = MemSrc.Prm1(0);
-      let feelDsc = MemSrc.Prm1(0);
+      let feelCnt = MemSrc(0);
+      let feelDsc = MemSrc(0);
       if (layout.modes.has('continuous')) {
         cleanupTmp.endWith(node.evt('mouseenter', () => feelCnt.mod(1)));
         cleanupTmp.endWith(node.evt('mouseleave', () => feelCnt.mod(0)));

@@ -24,7 +24,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.textInput'] = () => (
     let textInputSrc = layout.getParam(real, 'textInputSrc');
     
     // Input events on the html node trigger the Src
-    cleanupTmp.endWith(input.evt('input', evt => textInputSrc.mod(input.value)));
+    cleanupTmp.endWith(input.evt('input', evt => textInputSrc.send(input.value)));
     
     // When the Src Sends, update the html input
     cleanupTmp.endWith(textInputSrc.route(val => input.value = val));

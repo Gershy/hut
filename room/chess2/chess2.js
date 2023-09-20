@@ -717,7 +717,7 @@ global.rooms['chess2'] = async chess2Keep => {
         let no
         
         
-        let queueChooser = dep(Chooser(queueRh));
+        let queueChooser = dep(Chooser.noneOrSome(queueRh));
         dep.scp(queueChooser.srcs.off, (noQueue, dep) => {
           
           let queueAct = dep(enableAction('enterQueue', ({ term }) => {
@@ -727,7 +727,7 @@ global.rooms['chess2'] = async chess2Keep => {
           }));
           
           /// {BELOW=
-          let termSrc = dep(MemSrc.Prm1(''));
+          let termSrc = dep(MemSrc(''));
           let contentReal = dep(queueReal.addReal('content', {
             Geom: { w: '90%' },
             Axis1d: { axis: 'y', mode: 'stack' }
@@ -799,7 +799,7 @@ global.rooms['chess2'] = async chess2Keep => {
         
         // Get a Chooser for our MatchLofter's Moves! (We'll need it...)
         let roundMoveRh = dep(matchLofter.rh('roundMove'));
-        let roundMoveChooser = dep(Chooser(roundMoveRh));
+        let roundMoveChooser = dep(Chooser.noneOrSome(roundMoveRh));
         
         dep.scp(match, 'matchLofter', (mp, dep) => {
           
@@ -897,7 +897,7 @@ global.rooms['chess2'] = async chess2Keep => {
         
         // Render based on the current Outcome
         let outcomeRh = dep(match.rh('outcome'));
-        let outcomeChooser = dep(Chooser(outcomeRh));
+        let outcomeChooser = dep(Chooser.noneOrSome(outcomeRh));
         dep.scp(outcomeChooser.srcs.onn, (outcome, dep) => {
           
           let outcomeReal = dep(boardReal.addReal('outcome', {
@@ -1027,7 +1027,7 @@ global.rooms['chess2'] = async chess2Keep => {
               /// {BELOW=
               dep(passReal.addLayout('Press', { pressFn: () => submitMoveAct.act({ type: 'pass' }) }));
               
-              let feelSrc = MemSrc.Tmp1();
+              let feelSrc = MemSrc();
               dep(resignReal.addLayout('Feel', { feelSrc }));
               dep.scp(feelSrc, (feel, dep) => {
                 
@@ -1055,7 +1055,7 @@ global.rooms['chess2'] = async chess2Keep => {
               });
               
               let selectedPieceSrc = Src();
-              let selectedPieceChooser = dep(Chooser(ToggleSrc(selectedPieceSrc)));
+              let selectedPieceChooser = dep(Chooser.noneOrSome(ToggleSrc(selectedPieceSrc)));
               dep.scp(selectedPieceChooser.srcs.off, (noSelectedPiece, dep) => {
                 
                 // Pieces can be selected by clicking
@@ -1177,7 +1177,7 @@ global.rooms['chess2'] = async chess2Keep => {
         Decal: { colour: 'rgba(120, 120, 170, 1)' }
       }));
       
-      let lofterExistsChooser = dep(Chooser(lofterRh));
+      let lofterExistsChooser = dep(Chooser.noneOrSome(lofterRh));
       dep.scp(lofterExistsChooser.srcs.off, (noLofter, dep) => nodeLofterless(dep, paneReal, chess2));
       dep.scp(lofterExistsChooser.srcs.onn, (lofter, dep) => {
         

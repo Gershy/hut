@@ -18,9 +18,9 @@ global.rooms['clock'] = async foundation => {
       let manageEndMsSrc = false;
       if (isForm(endMsSrc, Number)) {
         manageEndMsSrc = true; // We created the Src - we need to manage it!
-        endMsSrc = MemSrc.Prm1(endMsSrc);
+        endMsSrc = MemSrc(endMsSrc);
       }
-      if (!isForm(endMsSrc, MemSrc.Prm1)) throw Error(`"endMsSrc" must be MemSrc.Prm1 (got ${getFormName(endMs)})`);
+      if (!isForm(endMsSrc, MemSrc)) throw Error(`"endMsSrc" must be MemSrc (got ${getFormName(endMs)})`);
       if (!endMsSrc.srcFlags.memory) throw Error(`The "endMsSrc" Src must supply an immediate value`);
       if (!real) throw Error(`Can't omit "real"`);
       

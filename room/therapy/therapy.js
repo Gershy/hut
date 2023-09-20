@@ -24,7 +24,7 @@ global.rooms['therapy'] = async therapyKeep => {
       
       dep(experience.real.addLayout('Axis1d', { axis: 'y', dir: '+', mode: 'stack' }));
       
-      let lofterChooser = dep(Chooser(experience.lofterRh));
+      let lofterChooser = dep(Chooser.noneOrSome(experience.lofterRh));
       dep.scp(lofterChooser.srcs.off, (noLofter, dep) => {
         
         dep(experience.real.addLayout('Text', { text: 'Loading...', align: 'mid' }));

@@ -14,7 +14,7 @@ Object.assign(global, {
   GeneratorFunction: (function*(){})().constructor,
   AsyncGeneratorFunction: (async function*(){})().constructor,
   C: Object.freeze({
-    def: Object.defineProperty,
+    def: (obj, prop, value, opts={}) => Object.defineProperty(obj, prop, { value, configurable: true, ...opts }),
     skip: undefined,
     noFn: name => Object.assign(
       function() { throw Error(`${getFormName(this)} does not implement "${name}"`); },
@@ -481,7 +481,7 @@ Object.assign(global, {
     
     let name = Cls.name;
     let Newless = global[name] = function(...args) { return new Cls(...args); };
-    C.def(Newless, 'name', { value: name });
+    C.def(Newless, 'name', name);
     Newless.Native = Cls;
     Newless.prototype = Cls.prototype;
     
@@ -772,12 +772,12 @@ Object.assign(global, global.rooms['setup.clearing'] = {
         
       }
       
-      C.def(Form.prototype, propName, { value: collisionProps[0], enumerable: false, writable: true });
+      C.def(Form.prototype, propName, collisionProps[0], { enumerable: false, writable: true });
       
     }
     
-    C.def(Form.prototype, 'Form', { value: Form, enumerable: false, writable: true });
-    C.def(Form.prototype, 'constructor', { value: Form, enumerable: false, writable: true });
+    C.def(Form.prototype, 'Form', Form, { enumerable: false, writable: true });
+    C.def(Form.prototype, 'constructor', Form, { enumerable: false, writable: true });
     Object.freeze(Form.prototype);
     
     // Would be very satisifying to freeze `Form`, but the current
@@ -970,7 +970,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     }
     
   },
-  denumerate: (obj, prop) => C.def(obj, prop, { enumerable: false, value: obj[prop] }),
+  denumerate: (obj, prop) => C.def(obj, prop, obj[prop], { enumerable: false }),
   formatAnyValue: val => { try { return valToJson(val); } catch (err) { return '<unformattable>'; } },
   valToJson: JSON.stringify,
   jsonToVal: JSON.parse,
@@ -992,8 +992,6 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
     // are required, but a "cleanup" property may get defined by passing
     // a Function to the `init` method
     
-    $turnOffDefProp: Object.freeze({ value: () => false, enumerable: true, writable: true, configurable: true }),
-    
     init(fn) {
       
       // if (global.foundation) this.zzz = this.Form.name + ': ' + global.foundation.formatError(Error('trace'))
@@ -1005,7 +1003,7 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
       mmm(this.zzz ?? this.Form.name, +1);
       
       // Allow Endable.prototype.cleanup to be masked
-      if (fn) C.def(this, 'cleanup', { value: fn, enumerable: true, writable: true, configurable: true });
+      if (fn) C.def(this, 'cleanup', fn);
       
     },
     onn() { return true; },
@@ -1059,7 +1057,7 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
       // For held Endables, prevent ending if refs still exist
       if (this['~holdCnt'] && --this['~holdCnt'] > 0) return false;
       
-      C.def(this, 'onn', Form.turnOffDefProp);
+      C.def(this, 'onn', () => false);
       this.cleanup(); mmm(this.zzz ?? this.Form.name, -1);
       return true;
       
@@ -1070,8 +1068,8 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
   let Src = form({ name: 'Src', props: (forms, Form) => ({
     
     init(newRoute) {
-      C.def(this, 'fns', { enumerable: false, value: Set() });
-      newRoute && C.def(this, 'newRoute', { value: newRoute });
+      C.def(this, 'fns', Set(), { enumerable: false });
+      newRoute && C.def(this, 'newRoute', newRoute);
     },
     newRoute(fn) {},
     route(fn, mode='tmp') {
@@ -1180,8 +1178,7 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
       for (let fn of [ ...this.fns ]) this.fns.has(fn) && fn(arg);
       
       C.def(this, 'fns', Set.stub);
-      return;
-      
+        
     };
     
     return {
@@ -1206,16 +1203,13 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
       newRoute(fn) { if (this.off()) fn(); },
       endWith(val, mode='prm') {
         
-        // Creates a relationship such that whenever `this` ends the
-        // supplied `val` also ends. If `mode` is "prm" the relationship
-        // is permanent. If `mode` is "tmp" the relationship can be
-        // severed, allowing `this` to end without `val` also ending.
-        // `mode === 'prm'` returns `this` for convenience
-        // `mode === 'tmp'` returns a Tmp representing the relationship.
-        // Note that if `val` is a Tmp and `mode` is "tmp", the endWith
-        // relationship is automatically removed when `val` ends (this
-        // is intuitive; it simply removes the reference from `this` to
-        // `val`, allowing `val` to be freed from memory, when it ends)
+        // Creates a relationship such that whenever `this` ends the supplied `val` also ends. If
+        // `mode` is "prm" the relationship is permanent. If `mode` is "tmp" the relationship can
+        // be severed, allowing `this` to end without `val` also ending. `mode === 'prm'` returns
+        // `this` for convenience `mode === 'tmp'` returns a Tmp representing the relationship.
+        // Note that if `val` is a Tmp and `mode` is "tmp", the endWith relationship is
+        // automatically removed when `val` ends (this is intuitive; it simply removes the
+        // reference from `this` to `val`, allowing `val` to be freed from memory, when it ends)
         
         // Note that the following is an anti-pattern:
         // 
@@ -1239,12 +1233,11 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
         if (!hasForm(val, Endable)) throw Error(`Value must be an Endable or Function (got ${getFormName(val)})`);
         /// =DEBUG}
         
-        // If `val` is a Tmp and `mode` is "tmp", ensure that `val` ends
-        // when `this` ends - but if `val` ends first, make sure the
-        // relationship is automatically removed
+        // If `val` is a Tmp and `mode` is "tmp", ensure that `val` ends when `this` ends - but if
+        // `val` ends first, make sure the relationship is automatically removed
         if (mode === 'tmp' && hasForm(val, Tmp)) {
           
-          if (val.off()) return val;
+          if (val.off()) return val; // Repurpose `val`; we just need to return an ended Tmp!
           
           // If `this` ends, end `val`
           let endWithTmp = this.route(() => val.end(), 'tmp');
@@ -1255,9 +1248,11 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
           // If the relationship is ended externally stop waiting for
           // it to end; this is a permanent feature of `endWithTmp` and
           // this Route is never Ended
-          let origCleanup = endWithTmp.cleanup;
-          endWithTmp.cleanup = () => { origCleanup(); remRelTmp.end(); };
-          //endWithTmp.route(() => remRelTmp.end(), 'prm');
+          let origCleanup = endWithTmp.cleanup.bind(endWithTmp);
+          C.def(endWithTmp, 'cleanup', () => {
+            origCleanup();
+            remRelTmp.end();
+          });
           
           return endWithTmp;
           

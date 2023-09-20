@@ -98,14 +98,14 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
               body > * { width: 100%; height: 100%; }
             </style>
             
-            ${roomScript('setup.clearing', 'defer')}
+            ${roomScript('setup.clearing', 'defer') /* Note we want these deferred scripts to appear as early as possible so they can begin downloading */}
             ${roomScript('setup.hut.hinterland.RoadAuthority', 'defer')}
             ${roomScript('habitat.HtmlBrowserHabitat.hutify.foundation', 'defer')}
             ${protocolRooms.toArr(n => roomScript(n, 'defer')).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
             <script>
               Object.assign(window.global = window, { rooms: Object.create(null) });
               let evtSrc = EventTarget.prototype;
-              Object.defineProperty(evtSrc, 'evt', { writable: true, value: function(...args) {
+              Object.defineProperty(evtSrc, 'evt', { configurable: true, value: function(...args) {
                 this.addEventListener(...args);
                 return Tmp(() => this.removeEventListener(...args));
               }});

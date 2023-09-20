@@ -326,7 +326,7 @@ global.rooms['timeStepWorld'] = async foundation => {
       dep.scp(this, `${pfx}.entity`, (ent, dep) => {});
       
       /// {BELOW=
-      let keySrc = MemSrc.Prm1(Set());
+      let keySrc = MemSrc(Set());
       dep(real.addLayout({ form: 'Art', ...this.artLayoutParams(), animationFn: draw => this.render0(draw, hut), keySrc }));
       
       dep.scp(hut, `${pfx}.controller`, (controller, dep) => {

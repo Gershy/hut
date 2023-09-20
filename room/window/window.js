@@ -434,7 +434,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
   })});
   let AdapterVal = form({ name: 'AdapterVal', has: { Adapter }, props: (forms, Form) => ({
     
-    $getBuffFnSuffix: function (type, bLen, endn) {
+    $getBuffFnSuffix: function(type, bLen, endn) {
       
       // Provide default `bLen` for default-able types
       if (type === 'flt' && !bLen) bLen = 32;

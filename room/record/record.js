@@ -779,7 +779,7 @@ global.rooms['record'] = async () => {
       Object.assign(this, {
         
         type, uid, group,
-        valueSrc: MemSrc.Prm1(value), // TODO: Use Src(function newRoute(...) { ... }) to remove MemSrc dependency
+        valueSrc: MemSrc(value), // TODO: Use Src(function newRoute(...) { ... }) to remove MemSrc dependency
         volatile,
         relHandlers: Object.plain(),
         
@@ -804,7 +804,7 @@ global.rooms['record'] = async () => {
         // Consider:
         //  | let scp = Scope(..., (dep) => {
         //  |   
-        //  |   let chooser = dep(Chooser(rec.rh('eg.type')));
+        //  |   let chooser = dep(Chooser.noneOrSome(rec.rh('eg.type')));
         //  |   dep.scp(chooser.srcs.off, (noRec, dep) => {
         //  |     let createAct = dep(hut.enableAction('eg.createRec', () => hut.addRecord('eg.type', ...)));
         //  |   });
@@ -867,7 +867,7 @@ global.rooms['record'] = async () => {
           this.type.manager.recordSc(() => `FAIL ${this.desc()}`, err);
           
           try         { this.end(); }
-          catch (err) { gsc(`Additional Error when ${this.desc()} failed to Bank`, err); }
+          catch (err) { gsc(`Failed ending Record after it failed to bank`, { record: this, err }); }
           
           err.propagate({ cause, msg: `Failed to Bank ${this.desc()}` });
           
@@ -1152,7 +1152,7 @@ global.rooms['record'] = async () => {
       
       if (!isForm(prop, String)) throw Error(`Must provide a String property`);
       
-      let src = MemSrc.Prm1(null); // TODO: Use Src(function newRoute(...) { ... }) to remove MemSrc dependency
+      let src = MemSrc(null); // TODO: Use Src(function newRoute(...) { ... }) to remove MemSrc dependency
       let lastVal = skip;
       let route = this.valueSrc.route(delta => {
         
@@ -1169,12 +1169,12 @@ global.rooms['record'] = async () => {
         if (!val.has(prop)) return;
         if (val[prop] === lastVal) return;
         
-        src.mod(lastVal = val[prop]);
+        src.send(lastVal = val[prop]);
         
       });
       
-      let origCleanup = src.cleanup;
-      Object.defineProperty(src, 'cleanup', { value: () => { origCleanup.call(src); route.end(); }});
+      // Pretend that `src` is an Endable
+      C.def(src, 'cleanup', function() { route.end(); });
       
       return src;
       
@@ -1199,15 +1199,15 @@ global.rooms['record'] = async () => {
       
       // Note that an Object-delta-style value update can't be performed
       // if either the previous or new value is a non-Object!
-      if (!isForm(value, Object) || !curIsObj) return this.valueSrc.mod(value);
+      if (!isForm(value, Object) || !curIsObj) return this.valueSrc.send(value);
       
       // Reduce `delta` to only props that currently mismatch
       let delta = value.map( (v, k) => (v === curVal[k]) ? skip : v );
       if (!delta.empty()) {
       
-        // Set the full value, but only Send `delta`!
+        // Mutate `curVal` to sync it with the full current value, but only Send `delta`!
         Object.assign(curVal, delta); // `curVal` is a reference to `this.valueSrc.val`
-        this.valueSrc.send(delta);
+        Src.prototype.send.call(this.valueSrc, delta); // `this.valueSrc.val` is untouched; `delta` is Sent
         
       }
       
@@ -1219,14 +1219,6 @@ global.rooms['record'] = async () => {
       this.type.manager.recordSc(() => `FINI ${this.desc()}`);
       
       for (let endWithMemRoute of this.endWithMemRoutes) endWithMemRoute.end();
-      
-      // Note that it's good to end `this.valueSrc`, but even Ended,
-      // `this` may be passed around to some code that doesn't expect
-      // `this.valueSrc.val === skip` - so end the value Src, but then
-      // set the value back to what it used to be! (TODO: hacky??)
-      let val = this.valueSrc.val;
-      this.valueSrc.end();
-      this.valueSrc.val = val;
       
       let rhs = Object.values(this.relHandlers);
       this.relHandlers = Object.stub;

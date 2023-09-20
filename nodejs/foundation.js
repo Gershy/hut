@@ -83,6 +83,12 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
   let hutFp = Filepath(hutFpRaw);
   let hutKeepPrm = rootTrn.kid(hutFp).then(trn => FsKeep(trn, hutFp));
   
+  Object.defineProperty(Error.prototype, Symbol.for('nodejs.util.inspect.custom'), {
+    enumerable: false,
+    writable: true,
+    value: function(depth, opts, custom) { return this.desc(); }
+  });
+  
   { // Setup initial utils
     
     // Make `global.subconOutput` immediately available (but any log
@@ -136,13 +142,6 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         return util.inspect(val, { colors, depth });
       }
     };
-    
-    // Make sure Errors are formatted properly by util.inspect
-    Object.defineProperty(Error.prototype, Symbol.for('nodejs.util.inspect.custom'), {
-      enumerable: false,
-      writable: true,
-      value: function(depth, opts, custom) { return this.desc(); }
-    });
     
   };
   

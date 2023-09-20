@@ -15,7 +15,7 @@ global.rooms['reality.layout.Art'] = async () => {
     install(real) {
       
       let tmp = Tmp();
-      if (!this.getParam(real, 'artKeySrc')) real.params.artKeySrc = MemSrc.Prm1(Set());
+      if (!this.getParam(real, 'artKeySrc')) real.params.artKeySrc = MemSrc(Set());
       
       /// {DEBUG=
       let artKeySrc = this.getParam(real, 'artKeySrc');

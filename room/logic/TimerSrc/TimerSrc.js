@@ -62,7 +62,7 @@ global.rooms['logic.TimerSrc'] = () => {
       
     },
     cleanup: function() {
-      Object.defineProperty(this, 'send', { value: Function.stub, enumerable: true, writable: true, configurable: true });
+      C.def(this, 'send', Function.stub);
       clearTimeout(this.timeout);
     }
     

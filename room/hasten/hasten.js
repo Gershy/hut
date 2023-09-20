@@ -132,7 +132,7 @@ global.rooms['hasten'] = async foundation => {
         { form: 'Decal', colour: '#000b', border: { ext: '5px', colour: '#000b' } }
       ]);
       
-      let userChooser = dep(Chooser(hut.relSrc('hst.user')));
+      let userChooser = dep(Chooser.noneOrSome(hut.relSrc('hst.user')));
       dep.scp(userChooser.srcs.off, (noUser, dep) => {
         
         let makeUserAct = dep(hut.enableAction('hst.makeUser', () => {
@@ -150,11 +150,11 @@ global.rooms['hasten'] = async foundation => {
       });
       dep.scp(userChooser.srcs.onn, (user, dep) => {
         
-        let stageChooser = dep(Chooser([ 'user', 'team', 'deploy', 'play' ]));
+        let stageChooser = dep(Chooser());
         dep(user.valSrc.route(() => stageChooser.choose(user.getValue('stage')) ));
         
-        let userStageChooser = dep(Chooser(stageChooser.srcs.user));
-        dep.scp(userStageChooser.srcs.onn, (userStage, dep) => {
+        let userStageChooser = dep(Chooser.noneOrSome(stageChooser.src('user')));
+        dep.scp(userStageChooser.src('onn'), (userStage, dep) => {
           
           let renameUser = dep(hut.enableAction('hst.renameUser', ({ name }) => void user.objVal({ name }) ));
           let confirmUser = dep(hut.enableAction('hst.confirmUser', () => void user.objVal({ stage: 'team' }) ));
@@ -188,7 +188,7 @@ global.rooms['hasten'] = async foundation => {
           /// =BELOW}
           
         });
-        dep.scp(userStageChooser.srcs.off, (noUserStage, dep) => {
+        dep.scp(userStageChooser.src('off'), (noUserStage, dep) => {
           
           dep(userReal.addLayout({ form: 'Decal', opacity: 0.5 }));
           
@@ -205,10 +205,10 @@ global.rooms['hasten'] = async foundation => {
           
         });
         
-        let teamStageChooser = dep(Chooser(stageChooser.srcs.team));
+        let teamStageChooser = dep(Chooser.noneOrSome(stageChooser.srcs.team));
         dep.scp(teamStageChooser.srcs.onn, (teamStage, dep) => {
           
-          let userTeamChooser = dep(Chooser(user.relSrc('hst.userTeam')));
+          let userTeamChooser = dep(Chooser.noneOrSome(user.relSrc('hst.userTeam')));
           
           dep.scp(userTeamChooser.srcs.off, (noUserTeam, dep) => {
             
@@ -237,13 +237,13 @@ global.rooms['hasten'] = async foundation => {
                 userSetSrc.route( () => team.relRecs('hst.userTeam').each(ut => ut.objVal({ status: 'waiting' })) );
                 
                 // Figure out when every user is ready
-                let teamReadyChooser = Chooser([ 'off', 'onn' ]);
+                let teamReadyChooser = Chooser();
                 team.relSrc('hst.userTeam').route(userTeam => userTeam.valSrc.route(() => {
                   let anyUserWaiting = team.relRecs('hst.userTeam').find(ut => ut.getValue('status') === 'waiting').val;
                   teamReadyChooser.choose(anyUserWaiting ? 'off' : 'onn');
                 }));
                 
-                teamReadyChooser.srcs.onn.route(teamReady => {
+                teamReadyChooser.src('onn').route(teamReady => {
                   
                   team.objVal({ readyMs: foundation.getMs() });
                   teamReady.endWith(() => team.objVal({ readyMs: null }));
@@ -280,7 +280,7 @@ global.rooms['hasten'] = async foundation => {
               { form: 'Decal', text: { colour: '#fff' } }
             ]);
             
-            let codeSrc = dep(MemSrc.Prm1(''));
+            let codeSrc = dep(MemSrc(''));
             contentReal.addReal('code', [
               { form: 'Geom', w: '80%', h: '30px' },
               { form: 'TextInput', inputPrompt: 'Team code?', textInputSrc: codeSrc },
@@ -303,7 +303,7 @@ global.rooms['hasten'] = async foundation => {
               
             }));
             
-            let roleChooser = dep(Chooser([ 'member', 'captain' ]));
+            let roleChooser = dep(Chooser());
             dep(userTeam.valSrc.route(() => roleChooser.choose(userTeam.getValue('role')) ));
             
             let team = userTeam.mems['hst.team'];
@@ -321,18 +321,18 @@ global.rooms['hasten'] = async foundation => {
               { form: 'Text', size: '220%', text: 'Team:' },
               { form: 'Decal', text: { colour: '#fff' } }
             ]);
-            dep.scp(roleChooser.srcs.member, (memberRole, dep) => {
+            dep.scp(roleChooser.src('member'), (memberRole, dep) => {
               let nameReal = dep(titleReal.addReal('name', { text: '??' }, [
                 { form: 'Text', size: '220%' },
                 { form: 'Decal', text: { colour: '#fff' } }
               ]));
               dep(team.valSrc.route(() => nameReal.mod({ text: team.getValue('name') }) ));
             });
-            dep.scp(roleChooser.srcs.captain, (captainRole, dep) => {
+            dep.scp(roleChooser.src('captain'), (captainRole, dep) => {
               
               let renameTeamAct = dep(hut.enableAction('hst.renameTeam', ({ name }) => void team.objVal({ name }) ));
               
-              let textInputSrc = MemSrc.Prm1(team.getValue('name'));
+              let textInputSrc = MemSrc(team.getValue('name'));
               let nameReal = dep(titleReal.addReal('name', [
                 { form: 'Geom', w: '80%', h: '30px' },
                 { form: 'TextInput', size: '220%', textInputSrc },
@@ -398,9 +398,9 @@ global.rooms['hasten'] = async foundation => {
               { form: 'Decal', text: { colour: '#fff' } }
             ]);
             
-            let readyChooser = dep(Chooser([ 'off', 'onn' ]));
+            let readyChooser = dep(Chooser());
             dep(team.valSrc.route(() => readyChooser.choose(team.getValue('readyMs') ? 'onn' : 'off')));
-            dep.scp(readyChooser.srcs.onn, (ready, dep) => {
+            dep.scp(readyChooser.src('onn'), (ready, dep) => {
               
               let timerSrc = dep(TimerSrc({ ms: 250, num: Infinity }));
               timerSrc.route(() => {
@@ -409,7 +409,7 @@ global.rooms['hasten'] = async foundation => {
               });
               
             });
-            dep.scp(readyChooser.srcs.off, (ready, dep) => {
+            dep.scp(readyChooser.src('off'), (ready, dep) => {
               readyReal.mod({ text: '' });
             });
             
@@ -441,7 +441,7 @@ global.rooms['hasten'] = async foundation => {
           
         }));
         
-        let deployStageChooser = dep(Chooser(stageChooser.srcs.deploy));
+        let deployStageChooser = dep(Chooser.noneOrSome(stageChooser.srcs.deploy));
         dep.scp(deployStageChooser.srcs.onn, (deployStage, dep) => dep.scp(user, 'hst.userTeam', (userTeam, dep) => {
           
           let team = userTeam.mems['hst.team'];
@@ -512,7 +512,7 @@ global.rooms['hasten'] = async foundation => {
             ]));
           });
           
-          let msgSrc = MemSrc.Prm1('');
+          let msgSrc = MemSrc('');
           let submitMsgReal = messagingReal.addReal('submit', [
             { form: 'Geom', anchor: 'bl', x: 0, y: 0, w: '100%', h: '30px' },
             { form: 'TextInput', align: 'fwd', inputPrompt: '>', textInputSrc: msgSrc },
@@ -523,9 +523,9 @@ global.rooms['hasten'] = async foundation => {
             { form: 'Decal', colour: '#fff2', text: { colour: '#fff' } }
           ]);
           
-          let roleChooser = dep(Chooser([ 'member', 'captain' ]));
+          let roleChooser = dep(Chooser());
           dep(userTeam.valSrc.route(() => roleChooser.choose(userTeam.getValue('role')) ));
-          dep.scp(roleChooser.srcs.captain, (captain, dep) => {
+          dep.scp(roleChooser.src('captain'), (captain, dep) => {
             
             let makeWorldAct = dep(hut.enableAction('hst.makeWorld', () => {
               
@@ -571,7 +571,7 @@ global.rooms['hasten'] = async foundation => {
           dep(deployReal.addLayout({ form: 'Decal', opacity: 0.5 }));
         });
         
-        let playStageChooser = dep(Chooser(stageChooser.srcs.play));
+        let playStageChooser = dep(Chooser.noneOrSome(stageChooser.srcs.play));
         dep.scp(playStageChooser.srcs.onn, (gameStage, dep) => dep.scp(user, 'hst.userTeam', (userTeam, dep) => {
           
           let team = userTeam.mems['hst.team'];

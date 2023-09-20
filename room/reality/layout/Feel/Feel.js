@@ -24,7 +24,7 @@ global.rooms['reality.layout.Feel'] = async () => {
       let tmp = Tmp();
       
       // Note that if this context creates the MemSrc, it owns it and ends it if the Layout ends
-      if (!this.getParam(real, 'feelSrc')) tmp.endWith(real.params.feelSrc = MemSrc.Tmp1());
+      if (!this.getParam(real, 'feelSrc')) tmp.endWith(real.params.feelSrc = MemSrc());
       
       /// {DEBUG=
       let feelSrc = this.getParam(real, 'feelSrc');

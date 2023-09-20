@@ -89,7 +89,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.art'] = async () => {
         ctx.imageSmoothingEnabled = true;
       } catch (err) {
         /// {DEBUG=
-        console.log('Error drawing image', foundation.formatError(err));
+        gsc('Error drawing image', err);
         /// =DEBUG}
       }
     },

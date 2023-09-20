@@ -49,12 +49,12 @@ global.rooms['reality.layout.TextInput'] = async () => {
       let textInputSrc = this.getParam(real, 'textInputSrc');
       let gotExternalInputSrc = !!textInputSrc?.onn();
       if (!gotExternalInputSrc) {
-        textInputSrc = real.params.textInputSrc = MemSrc.Prm1(this.getParam(real, 'text'));
+        textInputSrc = real.params.textInputSrc = MemSrc(this.getParam(real, 'text'));
         tmp.endWith(textInputSrc);
       }
       
       /// {DEBUG=
-      if (!isForm(textInputSrc, MemSrc.Prm1)) throw Error(`textInputSrc must be MemSrc.Prm1`);
+      if (!isForm(textInputSrc, MemSrc)) throw Error(`textInputSrc must be MemSrc`);
       if (!isForm(textInputSrc.val, String)) throw Error(`textInputSrc.val must be String`);
       /// =DEBUG}
       

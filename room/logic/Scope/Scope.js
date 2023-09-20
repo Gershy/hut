@@ -55,6 +55,8 @@ global.rooms['logic.Scope'] = foundation => form({ name: 'Scope', has: { Tmp }, 
     let deps = Set();
     let addDep = dep => {
       
+      gsc('DEP', getFormName(dep), dep);
+      
       // Allow raw functions; wrap them in `Endable`
       if (dep instanceof Function)    dep = Endable(dep);
       else if (dep.off())             return dep; // Ignore any inactive Deps

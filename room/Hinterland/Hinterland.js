@@ -206,7 +206,8 @@ global.rooms['Hinterland'] = async () => {
       let handleBelowLofter = (loftRec, belowHut, dep) => {
         
         let lofterRh = dep(belowHut.relHandler(`${this.prefix}.lofter`));
-        let lofterExistsChooser = dep(Chooser(lofterRh));
+        let lofterExistsChooser = dep(Chooser.noneOrSome(lofterRh));
+        
         dep.scp(lofterExistsChooser.srcs.off, (noPlayer, dep) => {
           
           // This Scope can get retriggered if the Foundation is ended and the previous Lofter in

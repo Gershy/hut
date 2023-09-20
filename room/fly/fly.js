@@ -226,7 +226,7 @@ global.rooms['fly'] = async foundation => {
       });
       dep.scp(flyRec, 'fly.lobby', (lobby, dep) => {
         
-        let readinessSrc = dep(MemSrc.Prm1({}));
+        let readinessSrc = dep(MemSrc({}));
         dep.scp(lobby, 'fly.lobbyPlayer', (lobbyPlayer, dep) => {
           
           let term = lobbyPlayer.getValue('term');
@@ -248,10 +248,10 @@ global.rooms['fly'] = async foundation => {
           .choose([ 'waiting', 'ready' ], vals => vals.all() ? 'waiting' : 'ready');
         */
         
-        let readyChooser = dep(Chooser([ 'waiting', 'ready' ]));
+        let readyChooser = dep(Chooser());
         readinessSrc.route(r => readyChooser.choose(r.all() ? 'ready' : 'waiting'));
         
-        dep.scp(readyChooser.srcs.ready, (ready, dep) => {
+        dep.scp(readyChooser.src('ready'), (ready, dep) => {
           
           lobby.setValue({ allReadyMark: foundation.getMs() });
           dep(() => lobby.setValue({ allReadyMark: null }));
@@ -315,11 +315,11 @@ global.rooms['fly'] = async foundation => {
       real.addLayout(lay.Decal({ colour: '#000' }));
       rootReal.addLayout(lay.Decal({ colour: '#fff' }));
       
-      let myHutPlayerChooser = dep(Chooser(hut.rh('fly.hutPlayer')));
+      let myHutPlayerChooser = dep(Chooser.noneOrSome(hut.rh('fly.hutPlayer')));
       dep.scp(myHutPlayerChooser.srcs.onn, myHutPlayer => {
         
         let myPlayer = myHutPlayer.m('fly.player');
-        let myLobbyPlayerChooser = dep(Chooser(myPlayer.rh('fly.lobbyPlayer')));
+        let myLobbyPlayerChooser = dep(Chooser.noneOrSome(myPlayer.rh('fly.lobbyPlayer')));
         
         dep.scp(myLobbyPlayerChooser.srcs.off, (noLobbyPlayer, dep) => {
           
@@ -375,8 +375,8 @@ global.rooms['fly'] = async foundation => {
               // End the lobby when no players remain
               lobbyPlayersSrc.route(lobbyPlayers => lobbyPlayers.count() || lobby.end());
               
-              console.log(`++Lobby @ ${lobby.getValue('code')}`);
-              lobby.endWith(() => console.log(`--Lobby @ ${lobby.getValue('code')}`));
+              gsc(`++Lobby @ ${lobby.getValue('code')}`);
+              lobby.endWith(() => gsc(`--Lobby @ ${lobby.getValue('code')}`));
               
             }
             /// =ABOVE}
@@ -394,7 +394,7 @@ global.rooms['fly'] = async foundation => {
           let myPlayer = myLobbyPlayer.m('fly.player');
           let myLobby = myLobbyPlayer.m('fly.lobby');
           
-          let inLevelChooser = Chooser(myLobby.rh('fly.level'));
+          let inLevelChooser = Chooser.noneOrSome(myLobby.rh('fly.level'));
           dep.scp(inLevelChooser.srcs.off, (notInLevel, dep) => {
             
             let lobbyReal = dep(rootReal.addReal('lobby', [
@@ -541,15 +541,15 @@ global.rooms['fly'] = async foundation => {
                 ]);
                 
                 // Indicate the player's selected option
-                let selectedChooser = dep(Chooser([ 'inactive', 'active' ]));
+                let selectedChooser = dep(Chooser());
                 dep(teamLobbyPlayer.valueSrc.route(val => {
                   selectedChooser.choose(val.modelTerm === modelTerm ? 'active' : 'inactive');
                 }));
-                dep.scp(selectedChooser.srcs.active, (active, dep) => {
+                dep.scp(selectedChooser.src('active'), (active, dep) => {
                   let decal = lay.Decal({ border: { ext: '6px', colour: 'rgba(255, 120, 0, 0.4)' } });
                   dep(modelReal.addLayout(decal));
                 });
-                dep.scp(selectedChooser.srcs.inactive, (active, dep) => {
+                dep.scp(selectedChooser.src('inactive'), (active, dep) => {
                   let decal = lay.Decal({ border: null });
                   dep(modelReal.addLayout(decal));
                 });
@@ -564,14 +564,14 @@ global.rooms['fly'] = async foundation => {
               lay.Geom({ w: '100%', h: '5vmin' }),
               lay.Text({})
             ]);
-            let statusChooser = Chooser([ 'waiting', 'starting' ]);
+            let statusChooser = Chooser();
             dep(myLobby.valueSrc.route(() => statusChooser.choose(myLobby.getValue('allReadyMark') ? 'starting' : 'waiting')));
             
-            dep.scp(statusChooser.srcs.waiting, (waiting, dep) => {
+            dep.scp(statusChooser.src('waiting'), (waiting, dep) => {
               statusReal.mod({ text: 'Waiting for players to ready...' });
               dep(statusReal.addLayout(lay.Decal({ colour: 'rgba(0, 0, 0, 0.1)' })));
             });
-            dep.scp(statusChooser.srcs.starting, (waiting, dep) => {
+            dep.scp(statusChooser.src('starting'), (waiting, dep) => {
               
               dep(TimerSrc({ foundation, ms: 500, num: Infinity })).route(() => {
                 let ms = levelStartingDelay - (foundation.getMs() - myLobby.getValue('allReadyMark'));
@@ -617,7 +617,7 @@ global.rooms['fly'] = async foundation => {
                 livesValueReal.mod({ text: level.getValue('lives').toString() });
               }));
               
-              let keySrc = MemSrc.Prm1(Set());
+              let keySrc = MemSrc(Set());
               let gameReal = levelReal.addReal('game', [
                 lay.Geom({ w: '80%', h: '100%' }),
                 lay.Art({ pixelCount: [ 800, 1000 ], keySrc })

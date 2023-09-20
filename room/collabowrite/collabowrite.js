@@ -135,13 +135,13 @@ global.rooms['collabowrite'] = async foundation => {
         dep(roomVoteAuditSrc.route( audit => room.setValue({ numVotes: audit.num }) ));
         
         // `stateChooser` turns the Room's "state" value into a Choice
-        let stateChooser = dep(Chooser([ 'wait', 'ready', 'submit', 'vote' ]));
+        let stateChooser = dep(Chooser());
         let roomStateSrc = dep(room.getValuePropSrc('state'));
         dep(roomStateSrc.route(state => stateChooser.choose(state)));
         
         // Treat each of the states independently; each State leads to
         // the next and "vote" finally loops back to "wait"
-        dep.scp(stateChooser.srcs.wait, (wait, dep) => {
+        dep.scp(stateChooser.src('wait'), (wait, dep) => {
           
           // Switch to "ready" when enough Authors join
           dep(room.valueSrc.route(() => {
@@ -154,14 +154,14 @@ global.rooms['collabowrite'] = async foundation => {
           }));
           
         });
-        dep.scp(stateChooser.srcs.ready, (ready, dep) => {
+        dep.scp(stateChooser.src('ready'), (ready, dep) => {
           
           // Switch to "submit" once any single Idea is received
           let ideaRh = dep(room.rh({ type: 'idea', limit: 1 }));
           dep(ideaRh.route( () => room.setValue({ state: 'submit', submitTs: Date.now() }) ));
           
         });
-        dep.scp(stateChooser.srcs.submit, (submit, dep) => {
+        dep.scp(stateChooser.src('submit'), (submit, dep) => {
           
           let submitTmp = Tmp(); // Sends once submitting ends
           dep(submitTmp.route( () => room.setValue({ state: 'vote', voteTs: Date.now() }) ));
@@ -181,7 +181,7 @@ global.rooms['collabowrite'] = async foundation => {
           timerSrc.route(() => submitTmp.send({ reason: 'timeLimit' }));
           
         });
-        dep.scp(stateChooser.srcs.vote, async (submit, dep) => {
+        dep.scp(stateChooser.src('vote'), async (submit, dep) => {
           
           // Note that there's at least 1 submitted Idea at this point,
           // because it's impossible to get to the "submit" stage unless
@@ -214,7 +214,7 @@ global.rooms['collabowrite'] = async foundation => {
               
             }
             
-            console.log('DONE VOTING', { reason, text: winningIdea.getValue() });
+            gsc('DONE VOTING', { reason, text: winningIdea.getValue() });
             
             // Add an Entry to the story!
             let entry = hut.addRecord('entry', [ room, winningIdea.m('roomAccount').m('account') ], winningIdea.getValue());
@@ -309,7 +309,7 @@ global.rooms['collabowrite'] = async foundation => {
       let mainReal = dep(real.addReal('main', []));
       
       let personaSrc = dep(PersonaSrc({ hut, rec: cw }));
-      let loginChooser = dep(Chooser(personaSrc));
+      let loginChooser = dep(Chooser.noneOrSome(personaSrc));
       dep.scp(loginChooser.srcs.off, (out, dep) => {
         
         let loginReal = dep(mainReal.addReal('login'));
@@ -325,7 +325,7 @@ global.rooms['collabowrite'] = async foundation => {
         ]));
         
         let roomPersonaRh = dep(persona.rh('roomPersona'));
-        let roomPersonaChooser = dep(Chooser(roomPersonaRh));
+        let roomPersonaChooser = dep(Chooser.noneOrSome(roomPersonaRh));
         dep.scp(roomPersonaChooser.srcs.off, (noRoomPersona, dep) => {
           
           // View the lobby, or make a new room
@@ -364,8 +364,8 @@ global.rooms['collabowrite'] = async foundation => {
             maxAuthors: { name: 'Maximum Authors',   type: 'int',  def: '10'     }
           };
           
-          let modeChooser = dep(Chooser([ 'lobby', 'make' ]));
-          dep.scp(modeChooser.srcs.lobby, (lobby, dep) => {
+          let modeChooser = dep(Chooser());
+          dep.scp(modeChooser.src('lobby'), (lobby, dep) => {
             
             // TODO: Handle RelHandlers whose offset/limit changes sync
             // between above/below?? Above applies the offset and sends
@@ -420,14 +420,14 @@ global.rooms['collabowrite'] = async foundation => {
                 { form: 'Press', pressFn: () => joinRoomAct.act() }
               ]);
               
-              let detailsChooser = dep(Chooser([ 'off', 'onn' ]));
-              dep.scp(detailsChooser.srcs.off, (noDetails, dep) => {
+              let detailsChooser = dep(Chooser());
+              dep.scp(detailsChooser.src('off'), (noDetails, dep) => {
                 
                 dep(deetsReal.addLayout({ form: 'Text', text: 'See Details' }));
                 dep(deetsReal.addLayout({ form: 'Press', pressFn: () => detailsChooser.choose('onn') }));
                 
               });
-              dep.scp(detailsChooser.srcs.onn, (details, dep) => {
+              dep.scp(detailsChooser.src('onn'), (details, dep) => {
                 
                 dep(deetsReal.addLayout({ form: 'Text', text: 'Hide Details' }));
                 dep(deetsReal.addLayout({ form: 'Press', pressFn: () => detailsChooser.choose('off') }));
@@ -468,7 +468,7 @@ global.rooms['collabowrite'] = async foundation => {
             ]);
             
           });
-          dep.scp(modeChooser.srcs.make, (make, dep) => {
+          dep.scp(modeChooser.src('make'), (make, dep) => {
             
             let makeReal = dep(mainReal.addReal('makeRoom'));
             let fields = makeRoomFields.map(({ name: prompt, type, def }) => {
@@ -528,7 +528,7 @@ global.rooms['collabowrite'] = async foundation => {
           let setupCanSubmit = dep => {
             
             let ideaRh = dep(roomAccount.rh('idea'));
-            let ideaChooser = dep(Chooser(ideaRh));
+            let ideaChooser = dep(Chooser.noneOrSome(ideaRh));
             dep.scp(ideaChooser.srcs.off, (noIdea, dep) => {
               
               let submitAction = dep(hut.enableAction(`submit`, ({ text }) => {
@@ -564,11 +564,11 @@ global.rooms['collabowrite'] = async foundation => {
             
           };
           
-          let stateChooser = dep(Chooser([ 'wait', 'ready', 'submit', 'vote' ]));
+          let stateChooser = dep(Chooser());
           let roomStateSrc = dep(room.getValuePropSrc('state'));
           
           dep(roomStateSrc.route(state => stateChooser.choose(state)));
-          dep.scp(stateChooser.srcs.wait, (wait, dep) => {
+          dep.scp(stateChooser.src('wait'), (wait, dep) => {
             
             let waitReal = dep(statusReal.addReal('wait', { text: '...' }, [{ form: 'Text' }]));
             dep(room.valueSrc.route(() => {
@@ -577,14 +577,14 @@ global.rooms['collabowrite'] = async foundation => {
             }));
             
           });
-          dep.scp(stateChooser.srcs.ready, (ready, dep) => {
+          dep.scp(stateChooser.src('ready'), (ready, dep) => {
             
             setupCanSubmit(dep);
             
             let readyReal = dep(statusReal.addReal('ready', [{ form: 'Text', text: 'Waiting for submission...' }]));
             
           });
-          dep.scp(stateChooser.srcs.submit, (submit, dep) => {
+          dep.scp(stateChooser.src('submit'), (submit, dep) => {
             
             setupCanSubmit(dep);
             
@@ -596,10 +596,10 @@ global.rooms['collabowrite'] = async foundation => {
             }));
             
           });
-          dep.scp(stateChooser.srcs.vote, (vote, dep) => {
+          dep.scp(stateChooser.src('vote'), (vote, dep) => {
             
             let voteRh = dep(roomAccount.rh('vote'));
-            let voteChooser = dep(Chooser(voteRh));
+            let voteChooser = dep(Chooser.noneOrSome(voteRh));
             
             let voteReal = dep(statusReal.addReal('vote'));
             
