@@ -455,8 +455,8 @@ global.rooms['record'] = async () => {
       },
       newRoute(fn) {
         
-        // Avoid Sending anything to a new Route if the RelHandler is
-        // still in the middle of a Selection
+        // Avoid Sending anything to a new Route if the RelHandler is still in the middle of a
+        // Selection - `fn` will get called when the next Selection begins (TODO: that's ok??)
         if (this.rh.activeSignal.onn()) return;
         
         let num = this.rh.hrecs.size;
