@@ -259,10 +259,6 @@ module.exports = async () => {
     },
     async m => { // Tmps with refs end appropriately #1
       
-      // TODO: Think about referenced Tmps + logic classes that
-      // manage their underlying Tmps; e.g. MapSrc.Tmp1 ends every
-      // Tmp when a new one arrives
-      
       let tmp = Tmp();
       tmp.hold();
       tmp.end();

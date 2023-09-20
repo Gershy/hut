@@ -714,9 +714,6 @@ global.rooms['chess2'] = async chess2Keep => {
         queueReal.addReal('gap', lay.gap());
         
         let queueRh = dep(status.rh('queue'));
-        let no
-        
-        
         let queueChooser = dep(Chooser.noneOrSome(queueRh));
         dep.scp(queueChooser.srcs.off, (noQueue, dep) => {
           
