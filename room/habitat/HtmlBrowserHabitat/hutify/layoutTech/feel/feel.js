@@ -16,12 +16,12 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.feel'] = async () => 
       let feelCnt = MemSrc(0);
       let feelDsc = MemSrc(0);
       if (layout.modes.has('continuous')) {
-        cleanupTmp.endWith(node.evt('mouseenter', () => feelCnt.mod(1)));
-        cleanupTmp.endWith(node.evt('mouseleave', () => feelCnt.mod(0)));
+        cleanupTmp.endWith(node.evt('mouseenter', () => feelCnt.send(1)));
+        cleanupTmp.endWith(node.evt('mouseleave', () => feelCnt.send(0)));
       }
       if (layout.modes.has('discrete')) {
-        cleanupTmp.endWith(node.evt('focus', () => feelDsc.mod(1)));
-        cleanupTmp.endWith(node.evt('blur',  () => feelDsc.mod(0)));
+        cleanupTmp.endWith(node.evt('focus', () => feelDsc.send(1)));
+        cleanupTmp.endWith(node.evt('blur',  () => feelDsc.send(0)));
       }
       
       // Via this logic...
@@ -37,8 +37,8 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.feel'] = async () => 
       });
       
       cleanupTmp.endWith(() => {
-        feelCnt.mod(0); feelCnt.end();
-        feelDsc.mod(0); feelDsc.end();
+        feelCnt.send(0);
+        feelDsc.send(0);
         
         routeToConsumer.end();
         switchSrc.end();

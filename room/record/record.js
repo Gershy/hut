@@ -757,6 +757,40 @@ global.rooms['record'] = async () => {
       all: rh => rh.getRecs(),
       one: rh => rh.getRec()
     }),
+    $ValuePropSrc: form({ name: 'ValuePropSrc', has: { MemSrc, Endable }, props: (forms, Form) => ({
+      
+      init(valueSrc, prop) {
+        forms.MemSrc.init.call(this);
+        forms.Endable.init.call(this);
+        
+        if (!isForm(prop, String)) throw Error(`Must provide a String property`);
+        
+        Object.assign(this, { srcRoute: null });
+        
+        let lastVal = skip;
+        this.srcRoute = valueSrc.route(delta => {
+          
+          // TODO: Would be much nicer if we used `delta` but there is an
+          // issue involving a Routing setup where at the moment that the
+          // Send goes out `this.valueSrc.val` is perfectly in-sync with
+          // `delta`, but some Route before this one mutates
+          // `this.valueSrc.val` so that it goes out-of-sync with `delta`;
+          // overall this means `this.valueSrc.val` holds a more reliable
+          // value than `delta`
+          
+          let val = valueSrc.val;
+          if (!isForm(val, Object)) return;
+          if (!val.has(prop)) return;
+          if (val[prop] === lastVal) return;
+          
+          this.send(lastVal = val[prop]);
+          
+        });
+        
+      },
+      cleanup() { this.srcRoute.end(); }
+      
+    })}),
     
     init({ type, uid, group=Group(type.manager, {}), value=null, volatile=false }) {
       
@@ -866,10 +900,16 @@ global.rooms['record'] = async () => {
           
           this.type.manager.recordSc(() => `FAIL ${this.desc()}`, err);
           
-          try         { this.end(); }
-          catch (err) { gsc(`Failed ending Record after it failed to bank`, { record: this, err }); }
+          try { this.end(); }
+          catch (endCause) {
+            err.propagate({
+              msg: `Failed banking Record, and failed ending it`,
+              cause: [ cause, endCause ], // TODO: Would be nice to provide this as { bank: cause, end: endcause }
+              record: this,
+            });
+          }
           
-          err.propagate({ cause, msg: `Failed to Bank ${this.desc()}` });
+          err.propagate({ msg: `Failed to bank Record, but ended it successfully`, cause, record: this });
           
         }
         
@@ -1150,33 +1190,7 @@ global.rooms['record'] = async () => {
       // Note this will also require all tracked ValuePropSrcs to be
       // ended when the Record is cleaned up!
       
-      if (!isForm(prop, String)) throw Error(`Must provide a String property`);
-      
-      let src = MemSrc(null); // TODO: Use Src(function newRoute(...) { ... }) to remove MemSrc dependency
-      let lastVal = skip;
-      let route = this.valueSrc.route(delta => {
-        
-        // TODO: Would be much nicer if we used `delta` but there is an
-        // issue involving a Routing setup where at the moment that the
-        // Send goes out `this.valueSrc.val` is perfectly in-sync with
-        // `delta`, but some Route before this one mutates
-        // `this.valueSrc.val` so that it goes out-of-sync with `delta`;
-        // overall this means `this.valueSrc.val` holds a more reliable
-        // value than `delta`
-        
-        let val = this.valueSrc.val;
-        if (!isForm(val, Object)) return;
-        if (!val.has(prop)) return;
-        if (val[prop] === lastVal) return;
-        
-        src.send(lastVal = val[prop]);
-        
-      });
-      
-      // Pretend that `src` is an Endable
-      C.def(src, 'cleanup', function() { route.end(); });
-      
-      return src;
+      return Form.ValuePropSrc(this.valueSrc, prop);
       
     },
     setValue(value) {

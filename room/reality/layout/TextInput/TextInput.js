@@ -47,7 +47,7 @@ global.rooms['reality.layout.TextInput'] = async () => {
       let tmp = forms.Text.install.call(this, real);
       
       let textInputSrc = this.getParam(real, 'textInputSrc');
-      let gotExternalInputSrc = !!textInputSrc?.onn();
+      let gotExternalInputSrc = !!textInputSrc;
       if (!gotExternalInputSrc) {
         textInputSrc = real.params.textInputSrc = MemSrc(this.getParam(real, 'text'));
         tmp.endWith(textInputSrc);
@@ -66,15 +66,15 @@ global.rooms['reality.layout.TextInput'] = async () => {
       if (this.textInputFn) {
         
         let prev = textInputSrc.val;
-        tmp.endWith(textInputSrc.route(gotExternalInputSrc
-          // If the MemSrc was passed in external make sure to debounce;
-          // this prevents repeating values back to Above
+        let inputRoute = textInputSrc.route(gotExternalInputSrc
+          // If the MemSrc is consumer-owned must debounce; it prevents echoing back to Above
           ? val => (val !== prev) && (prev = val, textInputFn(val))
           
-          // Otherwise don't debounce; let the function immediately
-          // react to the initial value
-          : val => (true        ) && (null,       textInputFn(val))
-        ));
+          // Otherwise don't debounce - the function may also immediately receive an initial value
+          : textInputFn
+        );
+        
+        tmp.endWith(inputRoute);
         
       }
       

@@ -19,7 +19,7 @@ global.rooms['reality.layout.Art'] = async () => {
       
       /// {DEBUG=
       let artKeySrc = this.getParam(real, 'artKeySrc');
-      if (!isForm(artKeySrc, MemSrc.Prm1)) throw Error(`Api: artKeySrc must be MemSrc.Prm1; got ${getFormName(artKeySrc)}`);
+      if (!isForm(artKeySrc, MemSrc)) throw Error(`Api: artKeySrc must be MemSrc; got ${getFormName(artKeySrc)}`);
       if (!isForm(artKeySrc.val, Set)) throw Error(`Api: artKeySrc.val must be Set; got ${getFormName(artKeySrc.val)}`);
       /// =DEBUG}
       

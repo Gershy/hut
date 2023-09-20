@@ -727,7 +727,7 @@ global.rooms['chess2'] = async chess2Keep => {
           }));
           
           /// {BELOW=
-          let termSrc = dep(MemSrc(''));
+          let termSrc = MemSrc('');
           let contentReal = dep(queueReal.addReal('content', {
             Geom: { w: '90%' },
             Axis1d: { axis: 'y', mode: 'stack' }

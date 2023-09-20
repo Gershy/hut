@@ -83,11 +83,11 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
   let hutFp = Filepath(hutFpRaw);
   let hutKeepPrm = rootTrn.kid(hutFp).then(trn => FsKeep(trn, hutFp));
   
-  Object.defineProperty(Error.prototype, Symbol.for('nodejs.util.inspect.custom'), {
-    enumerable: false,
-    writable: true,
-    value: function(depth, opts, custom) { return this.desc(); }
-  });
+  // Object.defineProperty(Error.prototype, Symbol.for('nodejs.util.inspect.custom'), {
+  //   enumerable: false,
+  //   writable: true,
+  //   value: function(depth, opts, custom) { return this.desc(); }
+  // });
   
   { // Setup initial utils
     
@@ -100,7 +100,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     let inspectSym = Symbol.for('nodejs.util.inspect.custom');
     let reformat = (val, seen=Map()) => {
       
-      if ([ String, Number, Boolean, RegExp, Error ].some(F => isForm(val, F))) return val;
+      if ([ String, Number, Boolean, RegExp ].some(F => isForm(val, F))) return val;
         
       if (seen.has(val)) return seen.get(val);
       
@@ -135,12 +135,14 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       
     };
     global.formatAnyValue = (val, { colours=true, colors=colours, depth=10 }={}) => {
+      
       try {
         return util.inspect(reformat(val), { colors, depth });
       } catch (err) {
-        console.log('WHOA', val);
+        console.log('WHOA', err, val);
         return util.inspect(val, { colors, depth });
       }
+      
     };
     
   };
@@ -1034,7 +1036,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
             `SUBCON: "${sc.term}"`,
             ...args.map(a => {
               if (isForm(a, Function)) a = a();
-              if (!isForm(a, String)) a = util.inspect(a, { colors: false, depth: 7 });
+              if (!isForm(a, String)) a = global.formatAnyValue(a);
               return a;
             })
           ].join('\n').indent('[panic] '));

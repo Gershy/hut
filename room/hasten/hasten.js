@@ -280,7 +280,7 @@ global.rooms['hasten'] = async foundation => {
               { form: 'Decal', text: { colour: '#fff' } }
             ]);
             
-            let codeSrc = dep(MemSrc(''));
+            let codeSrc = MemSrc('');
             contentReal.addReal('code', [
               { form: 'Geom', w: '80%', h: '30px' },
               { form: 'TextInput', inputPrompt: 'Team code?', textInputSrc: codeSrc },

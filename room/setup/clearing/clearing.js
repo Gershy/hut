@@ -359,11 +359,12 @@ Object.assign(global, {
       
       let { cause=null, msg=null, message=msg??this.message, ...moreProps } = props;
       
-      // Assign `cause` to transfer props like fs "code" props, etc.
-      // Assign `moreProps` to transfer any other properties
-      // Add `message` prop
-      // Only add `cause` prop if `cause` is non-null
-      return Object.assign(this, cause, moreProps, cause ? { message, cause } : { message });
+      // - Assign `cause` to transfer props like fs "code" props, etc. - watch out, `cause` may be
+      //   an Array or Object!
+      // - Assign `moreProps` to transfer any other properties
+      // - Add `message` prop
+      // - Only add `cause` prop if `cause` is non-null
+      return Object.assign(this, hasForm(cause, Error) ? cause : {}, moreProps, cause ? { message, cause } : { message });
       
     },
     propagate(props /* { cause, msg, message, ...more } */) { throw this.mod(props); },
@@ -407,6 +408,7 @@ Object.assign(global, {
       
     },
     desc(seen=Set()) {
+      
       if (seen.has(this)) return '<circ>';
       seen.add(this);
       
@@ -464,7 +466,7 @@ Object.assign(global, {
       
       if (cause) {
         if (hasForm(cause, Error)) cause = cause.desc(seen);
-        else                       cause = cause.map(err => err.desc(seen)).join('\n\n');
+        else                       cause = cause.map((err, n) => `Cause #${n + 1}: ` + err.desc(seen)).join('\n');
         desc += `\nCAUSE:\n${cause.indent(2)}`;
       }
       
@@ -782,7 +784,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     
     // Would be very satisifying to freeze `Form`, but the current
     // pattern of defining specialized subclasses:
-    //    |     MemSrc.Tmp1 = form(...);
+    //    |     FnSrc.Tmp1 = form(...);
     // relies on `Form` being mutable :(
     // TODO: MapSrc and MemSrc are being refactored... maybe do this??
     for (let k in statics) statics[k] = [ ...statics[k] ][0];

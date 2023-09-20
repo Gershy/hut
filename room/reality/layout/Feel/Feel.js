@@ -28,8 +28,8 @@ global.rooms['reality.layout.Feel'] = async () => {
       
       /// {DEBUG=
       let feelSrc = this.getParam(real, 'feelSrc');
-      if (!isForm(feelSrc, MemSrc.Tmp1)) throw Error(`feelSrc must be MemSrc.Tmp1`);
-      if (feelSrc.val !== null) throw Error(`feelSrc.val must be null`);
+      if (!isForm(feelSrc, MemSrc)) throw Error(`feelSrc must be MemSrc`);
+      if (feelSrc.val !== skip) throw Error(`feelSrc must be cleared`);
       /// =DEBUG}
       
       return tmp;

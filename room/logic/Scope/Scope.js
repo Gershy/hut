@@ -5,6 +5,39 @@ global.rooms['logic.Scope'] = foundation => form({ name: 'Scope', has: { Tmp }, 
   // Scope itself ends - this latter condition requires calling
   // `endWith` on the Scope!
   
+  $addDep: (deps, dep) => {
+      
+    // Allow raw functions; wrap them in `Endable`
+    if (dep instanceof Function)    dep = Endable(dep);
+    else if (dep.off())             return dep; // Ignore any inactive Deps
+    else if (deps && deps.has(dep)) return dep; // Ignore duplicates!
+    
+    // Trying to add a Dep after the Scope has ended (as detected by
+    // whether `deps` has been set to `null`) immediately ends that
+    // Dep and short-circuits
+    if (!deps) { dep.end(); return dep; }
+    
+    if (hasForm(dep, Tmp)) {
+      
+      // Any dependencies which are Tmps may end before the Scope
+      // causes them to end - ended Tmps no longer need to be
+      // referenced by the Scope!
+      let remDep = dep.route(() => {
+        // Note `deps` can become `null`
+        if (!deps) return;
+        deps.rem(dep);
+        deps.rem(remDep);
+      });
+      deps.add(remDep);
+      
+    }
+    
+    deps.add(dep);
+    
+    return dep;
+    
+  },
+  
   init(...args /* src, fn | src, hooks, fn */) {
     
     /// {DEBUG=
@@ -53,40 +86,7 @@ global.rooms['logic.Scope'] = foundation => form({ name: 'Scope', has: { Tmp }, 
     
     // Define `addDep` and `addDep.scp` to enable nice shorthand
     let deps = Set();
-    let addDep = dep => {
-      
-      gsc('DEP', getFormName(dep), dep);
-      
-      // Allow raw functions; wrap them in `Endable`
-      if (dep instanceof Function)    dep = Endable(dep);
-      else if (dep.off())             return dep; // Ignore any inactive Deps
-      else if (deps && deps.has(dep)) return dep; // Ignore duplicates!
-      
-      // Trying to add a Dep after the Scope has ended (as detected by
-      // whether `deps` has been set to `null`) immediately ends that
-      // Dep and short-circuits
-      if (!deps) { dep.end(); return dep; }
-      
-      if (hasForm(dep, Tmp)) {
-        
-        // Any dependencies which are Tmps may end before the Scope
-        // causes them to end - ended Tmps no longer need to be
-        // referenced by the Scope!
-        let remDep = dep.route(() => {
-          // Note `deps` can become `null`
-          if (!deps) return;
-          deps.rem(dep);
-          deps.rem(remDep);
-        });
-        deps.add(remDep);
-        
-      }
-      
-      deps.add(dep);
-      
-      return dep;
-      
-    };
+    let addDep = Object.assign(Scope.addDep.bound(deps), { scope: this });
     let scpProcessArgs = this.hooks.has('processArgs') ? this.hooks.processArgs : Function.stub;
     addDep.scp = (...args /* src, fn | src, hooks, fn */) => {
       
@@ -106,7 +106,6 @@ global.rooms['logic.Scope'] = foundation => form({ name: 'Scope', has: { Tmp }, 
       return (deps.add(subScp), subScp);
       
     };
-    addDep.scope = this;
     
     // If either `tmp` or Scope ends, all existing dependencies end as
     // well (scope relationship is itself a dependency)
