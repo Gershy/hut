@@ -171,8 +171,8 @@ global.rooms['collabowrite'] = async foundation => {
           
           let numAuthorsSrc = dep(room.getValuePropSrc('numAuthors'));
           let batchSrc = dep(BatchSrc({ ideaAudit: ideaRhAudit, numAuthors: numAuthorsSrc }));
-          let fnSrc = dep(MapSrc(batchSrc, ({ ideaAudit, numAuthors }) => {
-            if (ideaAudit.num >= numAuthors) submitTmp.send({ reason: 'allSubmitted' })); 
+          dep(batchSrc.route(({ ideaAudit, numAuthors }) => {
+            if (ideaAudit.num >= numAuthors) submitTmp.send({ reason: 'allSubmitted' }); 
           }));
           
           // Check for the time limit to run out
