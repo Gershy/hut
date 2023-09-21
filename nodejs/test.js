@@ -83,7 +83,7 @@ module.exports = async () => {
       }
       
     },
-    async m => { // Exotic numbers (NaN, (+-)Infinity)
+    async m => { // Exotic numbers: NaN, +Infinity, -Infinity
       
       if (!(Infinity).isInteger()) throw Error('Infinity should be an int');
       if ((NaN).isInteger()) throw Error('NaN should not be int');

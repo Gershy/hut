@@ -65,6 +65,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         
         this.server = server;
         denumerate(this, 'server');
+        
       })();
       
       return tmp;

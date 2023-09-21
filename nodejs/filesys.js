@@ -795,7 +795,7 @@ module.exports = {
             trn.getData(testFp, 'utf8').then(v => results.add(v))
           ]);
           
-          if (results.find(r => r.length).found) throw Error('All results should be 0-length');
+          if (results.find(r => r.length).found) throw Error('All results must be 0-length');
           
         }
         
@@ -808,7 +808,7 @@ module.exports = {
             trn.getData(testFp, 'utf8').then(v => results.add(v))
           ]);
           
-          if (results.find(r => r !== 'hihihi').found) throw Error('All results should be "hihihi"');
+          if (results.find(r => r !== 'hihihi').found) throw Error('All results must be "hihihi"');
           
         }
         

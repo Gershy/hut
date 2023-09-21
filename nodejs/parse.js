@@ -114,7 +114,7 @@ let parse = function*(parser, input, trace) {
       //if (par.type === 'all')  par = { ...par.slice([ 'name' ]), type: 'any', parsers: [ par /*, child*/ ] };
       
       if (par.type === 'repeat' && par.parser)
-        throw Error(`par.parser should be null!`); // Can't add a child if one is already present (well... could make make the repeat child an "any", and add the original and new children to that...)
+        throw Error(`par.parser must be null!`); // Can't add a child if one is already present (well... could make make the repeat child an "any", and add the original and new children to that...)
       
       if (par.type === 'repeat') par.parser = child;
       

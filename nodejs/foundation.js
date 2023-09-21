@@ -115,13 +115,17 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       if (isForm(val, Array)) {
         let mapped = [];
         seen.set(val, mapped);
-        return mapped.gain(val.map(v => reformat(v, seen)));
+        
+        for (let v of val) mapped.push(reformat(v, seen));
+        return mapped;
       }
       
       if (isForm(val, Object)) {
         let mapped = {};
         seen.set(val, mapped);
-        return mapped.gain(val.map(v => reformat(v, seen)));
+        
+        for (let [ k, v ] of val) mapped[k] = reformat(v, seen);
+        return mapped;
       }
       
       seen.set(val, val);
@@ -131,7 +135,9 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     global.formatAnyValue = (val, { colours=true, colors=colours, depth=10 }={}) => {
       
       try {
-        return util.inspect(reformat(val), { colors, depth });
+        let doReformat = false;
+        if (doReformat) val = reformat(val);
+        return util.inspect(val, { colors, depth });
       } catch (err) {
         console.log('WHOA', err, val);
         return util.inspect(val, { colors, depth });
@@ -506,7 +512,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           },
           all: ConfyVal({ fn: feature => {
             if (![ Boolean, Number, String ].any(F => isForm(feature, F)))
-              throw Error(`doesn't allow value of type "${getFormName(feature)}"`);
+              throw Error(`forbids value of type "${getFormName(feature)}"`);
             return feature;
           }})
         });
@@ -724,6 +730,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
                   let match = protocol.match(protocolRegex);
                   if (match) {
                     let [ , name, port='!<def>', compression='!<def>' ] = match;
+                    if (name === 'ws') name = 'sokt';
                     protocol = { name, port, compression };
                   }
                 }
@@ -745,12 +752,16 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
                     let term = `${secureBits > 0 ? 'secure' : 'unsafe'} ${protocol}`;
                     
                     let def = Object.plain({
-                      'secure http': 443,
-                      'unsafe http': 80,
-                      'secure ftp': 22,
-                      'unsafe ftp': 21,
-                      'secure ws': 443,
-                      'unsafe ws': 80,
+                      
+                      'secure http':  443,
+                      'unsafe http':   80,
+                      
+                      'secure ftp':    22,
+                      'unsafe ftp':    21,
+                      
+                      'secure sokt':  443,
+                      'unsafe sokt':   80,
+                      
                     })[term];
                     if (!def) throw Error(`has no default port for "${term}"`);
                     

@@ -358,7 +358,7 @@ global.rooms['setup.hut'] = async () => {
       /// {ABOVE=
       if (trn === 'anon') {
         
-        let belowNetAddr = params.has('belowNetAddr') ? params.belowNetAddr : '???:???:???:???';
+        let belowNetAddr = params.at('belowNetAddr') ?? '???:???:???:???';
         let anonRoad = {
           tellAfar: msg => { throw Error('OWwwowoaowoasss'); },
           desc: () => `AnonRoad(${roadAuth.desc()} <-> ${belowNetAddr} / !anon)`

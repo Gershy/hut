@@ -1,6 +1,6 @@
 'use strict';
 
-require('../room/setup/clearing/clearing.js');
+require('../../room/setup/clearing/clearing.js');
 
 module.exports = {
   

@@ -504,9 +504,8 @@ global.rooms['record'] = async () => {
         .then(() => err = null)
         .fail(cause => err.propagate({ cause, msg: `Failed initial mod for ${this.desc()}` }));
       
-      // Fixed RelHandlers immediately clobber their `this.mod` method
-      // after calling it for the first (and only) time
-      if (this.fixed) Object.defineProperty(this, 'mod', { value: () => { throw Error(`Can't mod fixed ${this.desc}`); } });
+      // Fixed RelHandlers call `mod` and then immediately clobber it
+      if (this.fixed) C.def(this, 'mod', () => Error(`Can't mod fixed ${this.desc}`).propagate());
       
     },
     desc() {
@@ -526,8 +525,10 @@ global.rooms['record'] = async () => {
     },
     async mod({ filter=null, offset, limit }) {
       
+      // Change the parameterization for this RelHandler - this means that any previous Hrecs may
+      
       /// {DEBUG=
-      if (filter && !hasForm(filter, Function)) throw Error(`"filter" must be a Function (got ${getFormName(filter)})`);
+      if (filter && !hasForm(filter, Function)) throw Error(`Api: "filter" must be a Function (got ${getFormName(filter)})`);
       /// =DEBUG}
       
       let err = Error('trace');
@@ -619,8 +620,10 @@ global.rooms['record'] = async () => {
           
           if (selected.rec) {
             
+            /// {DEBUG=
             if (hrecs.has(selected.rec.uid) && hrecs.get(selected.rec.uid).rec !== selected.rec)
-              throw Error(`OWWWWWW Bank probably incorrectly instantiated a dupicate Record (${selected.rec.desc()}`);
+              throw Error(`OWWWWWW Bank probably incorrectly instantiated a dupicate Record`).mod({ selected });
+            /// =DEBUG}
             
             this.handleRec(selected.rec) && addedRecs.push(selected.rec);
             
@@ -646,7 +649,7 @@ global.rooms['record'] = async () => {
         // Wait for all new hrecs to be handled
         await Promise.all(newHrecPrms);
         
-        this.auditSrc && this.auditSrc.mod({ add: +addedRecs.length, delta: addedRecs });
+        this.auditSrc?.mod({ add: +addedRecs.length, delta: addedRecs });
         
       } finally {
         
