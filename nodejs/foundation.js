@@ -92,6 +92,8 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     
     // Define `global.formatAnyValue`
     let inspectSym = Symbol.for('nodejs.util.inspect.custom');
+    Error.prototype[inspectSym] = function() { return this.desc() };
+    
     let reformat = (val, seen=Map()) => {
       
       if ([ String, Number, Boolean, RegExp ].some(F => isForm(val, F))) return val;
@@ -731,6 +733,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
                   if (match) {
                     let [ , name, port='!<def>', compression='!<def>' ] = match;
                     if (name === 'ws') name = 'sokt';
+                    if (name === 'websocket') name = 'sokt';
                     protocol = { name, port, compression };
                   }
                 }
@@ -1519,15 +1522,13 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         let roadAuthorityPrm = Object.plain({
           http: () => require('./server/http.js'),
           sokt: () => require('./server/sokt.js'),
-          ws:   () => require('./server/sokt.js')
         })[protocol]?.() ?? Error(`Unfamiliar protocol: ${protocol}`).propagate();
         
         let RoadAuthority = await roadAuthorityPrm;
-        
         return RoadAuthority({
           secure, netProc: `${netAddr}:${port}`, compression,
           aboveHut,
-          sc: global.subcon(`road.${protocol}.raw`),
+          sc: global.subcon(`road.${protocol}`),
           ...opts
         });
         

@@ -59,7 +59,7 @@ global.rooms[roomName] = () => then(getRoom('setup.hut.hinterland.RoadAuthority'
           // 3. Just implement a SharedWorker to handle networking
           gsc.kid('error')('Socket error event', err);
           
-          // TODO: This interim solution is the WORST and could create tons of traffic:
+          // TODO: This interim solution is the WORST (and could create huge congestion)
           window.location.reload();
         });
         socket.addEventListener('message', ({ data: msg /*, ...stuff */ }) => {

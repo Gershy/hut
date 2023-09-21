@@ -1,8 +1,7 @@
 'use strict';
 
 require('../../room/setup/clearing/clearing.js');
-let zlib = require('zlib');
-let stream = require('stream');
+let [ zlib, stream ] = [ 'zlib', 'stream' ].map(require);
 
 module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthority => {
   
@@ -74,7 +73,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
     async processReq(req, res) {
       
       let ms = getMs();
-      
+      let comm = { req, res };
       let reqHeaders = req.headers;
       let stuffedHeader = reqHeaders['x-hut-msg'];
       let belowNetAddr = req.connection.remoteAddress;
@@ -107,7 +106,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       try         { payload = payload ? jsonToVal(payload) : null; }
       catch (err) { return this.killRes({ res, code: 400, msg: 'Api: malformed json' }); }
       
-      this.receivedRequestSc(req, stuffedHeader ? '' : payload);
+      this.receivedRequestRawSc(req, res, stuffedHeader ? '' : payload);
       
       for (let intercept of this.intercepts) if (intercept(req, res)) return;
       
@@ -120,7 +119,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       let hutCookie;
       try {
         hutCookie = cookie.has('hut') ? jsonToVal(Buffer.from(cookie.hut, 'base64').toString('utf8')) : {};
-      } catch (err) {
+      } catch (cause) {
         return this.killRes({ res, code: 302, msg: 'Api: malformed cookie', resHeaders: {
           'Set-Cookie': cookie.toArr((v, k) => `${k}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;`),
           'Location': '/'
@@ -132,8 +131,8 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       
       /// {DEBUG=
       if (!reg.test(req.url)) {
-        gsc.kid('error')(`Failed to parse url "${req.url}"`);
-        req.url = '/hut-wtf'; // Stick a url that will definitely parse properly
+        gsc.kid('error')(`Failed to parse url "${req.url}"`); // Use `gsc.kid('error')`, not `this.sc.kid('err')`!
+        req.url = '/'; // Stick a url that will definitely parse properly... this is bad
       }
       /// =DEBUG}
       
@@ -143,6 +142,8 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       
       path = path.replace(/^[!][^/]+[/]*/, ''); // Ignore cache-busting component and leading slashes
       query = query ? query.split('&').toObj(pc => [ ...pc.cut('='), true /* default key-only value to flag */ ]) : {};
+      
+      this.sc({ event: 'hear', belowNetAddr, path, fragment, hutCookie, query, payload });
       
       // - Compile the full `msg`
       // - `msg.trn` defaults to "anon"
@@ -179,8 +180,8 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         
         /// {DEBUG= (TODO: I think you could argue this belongs under DEBUG??)
         let syncTimeout = setTimeout(() => {
-          this.sc(`Reply timed out... that's not good!`, { msg });
-          this.killRes({ res, code: 500, msg: 'We messed up and timed out... sorry!' });
+          this.sc.kid('err')(`Reply timed out... that's not good!`, { msg, roadAuth: this });
+          this.killRes({ res, code: 500, msg: 'Api: sorry - experiencing issues' });
         }, 5 * 1000);
         /// =DEBUG}
         
@@ -198,7 +199,10 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         
       }
       
-      if (road.off()) return res.socket.destroy(); // TODO: Can this ever happen?
+      if (road.off()) {
+        this.sc(() => ({ event: 'tell/destroy', belowNetAddr, detail: 'Road was inactive' }));
+        return res.socket.destroy(); // TODO: Can this ever happen?
+      }
       
       // If we made it here, this trn is "async" - the concept of
       // "reply" breaks down here; the request and response are
@@ -333,11 +337,11 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         'Cache-Control': (this.doCaching && cache) ? `${cache}, max-age=${this.getCacheSecs(msg)}` : 'max-age=0'
       };
       
-      res.explicitBody = { body: keep ?? msg, encode }; // Use the "explicitBody" property to make values clearer in subcon
+      res.explicitBody = { body: keep?.desc() ?? msg, encode }; // Use the "explicitBody" property to make values clearer in subcon
       
       let timeout = setTimeout(() => {
-        this.sc(`Ending response destructively because response data was not ready in time`);
-        res.end();
+        this.sc.kid('err')(`Stream timed out before reply`);
+        this.killRes({ res, code: 500, msg: 'Api: sorry - experiencing issues' });
       }, 5000); // Stream needs to complete in 5000ms
       
       try {
@@ -364,17 +368,24 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
           
         } else {
           
+          // TODO: Get NetAddr from `res.connection.remoteAddress` or `res.socket.remoteAddress`??
+          
           // Encode if necessary
+          let origMsg = msg;
           if (encode) msg = await Promise( (g, b) => zlib[encode](msg, (err, v) => err ? b(err) : g(v)) );
-          res.writeHead(code, { ...resHeaders, 'Content-Length': Buffer.byteLength(msg).toString(10) });
+          
+          let replyHeaders = { ...resHeaders, 'Content-Length': Buffer.byteLength(msg).toString(10) };
+          res.writeHead(code, replyHeaders);
           res.end(msg);
+          
+          this.sc(() => ({ event: 'tell', belowNetAddr: res.socket.remoteAddress, code, headers: replyHeaders, encode, msg: origMsg }));
           
         }
         
       } catch (err) {
         
         err.suppress();
-        this.sc(`Failed to respond with ${getFormName(keep ?? msg)}: ${keep ? keep.desc() : (msg?.slice?.(0, 100) ?? msg)}`, err);
+        this.sc.kid('err')(`Failed to respond with ${getFormName(keep ?? msg)}: ${keep ? keep.desc() : (msg?.slice?.(0, 100) ?? msg)}`, err);
         this.killRes({ res, code: 400, msg: 'Network misbehaviour' });
         
       } finally {
@@ -390,8 +401,10 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       try { res.writeHead(code, resHeaders); } catch (err) { err.suppress(); errs.push(err); }
       try { res.end(msg ?? skip);            } catch (err) { err.suppress(); errs.push(err); }
       
+      this.sc(() => ({ event: 'tell', belowNetAddr: res.socket.remoteAddress, code, headers: resHeaders, msg }));
+      
       if (errs.empty()) return;
-      this.sc(`Errors occurred trying to end response (with code ${code})`, ...errs.map(err => {
+      this.sc.kid('err')(`Errors occurred trying to end response (with code ${code})`, ...errs.map(err => {
         
         // Short output for premature stream closes (these simply mean the
         // response socket ended while the resource was streaming - so the
@@ -405,16 +418,13 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
     
     makeRoad(belowHut, params) { return (0, Form.HttpRoad)({ roadAuth: this, belowHut, ...params }); },
     
-    receivedRequestSc(req, body) {
+    receivedRequestRawSc(req, res, body) {
       
-      // TODO: Drift! This needs testing
-      
-      let { chatter, mode } = this.sc.params();
+      let sc = this.sc.kid('raw');
+      let { chatter, mode='synced' } = this.sc.params();
       if (!chatter) return;
       
       if (mode === 'synced') {
-        
-        res.explicitBody = null;
         
         let origEnd = res.end;
         res.end = (...args) => {
@@ -423,14 +433,13 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
           let { statusCode: code } = res;
           delete res.explicitBody;
           
-          
-          this.sc({
-            type: 'synced',
+          sc({
+            description: 'synced: the request was received, and a response was returned',
             req: {
               version: req.httpVersion,
               method: req.method,
               url: req.url,
-              headers: req.headers.map(v => isForm(v, Array) ? v : [ v ]),
+              headers: req.headers, //req.headers.map(v => (isForm(v, Array) && v.length === 1) ? v : [ v ]),
               body
             },
             res: {
@@ -439,7 +448,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
               version: req.httpVersion, // TODO: Is this necessarily the right version?
               headers: { ...res.getHeaders() }, // `res.getHeaders()` is a plain Object
               encode,
-              body: resBody
+              body: hasForm(resBody, Keep) ? resBody.desc() : resBody
             }
           });
           
@@ -449,8 +458,10 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         
       } else if (mode === 'immediate') {
         
-        this.sc({
-          type: 'immediate',
+        let reqResId = Math.random().toString(36).slice(2);
+        sc({
+          type: 'immediate: a request was received but no response has been returned yet',
+          reqResId,
           version: req.httpVersion,
           method: req.method,
           url: req.url,
@@ -458,22 +469,21 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
           body
         });
         
-        res.explicitBody = null;
-        
         let origEnd = res.end;
         res.end = (...args) => {
           
           let { body='', encode='unencoded' } = res.explicitBody ?? { body: args[0] };
           delete res.explicitBody;
           
-          this.sc({
-            type: 'res',
+          sc({
+            type: 'immediate: a response was returned for the request correlated to "resReqId"',
+            reqResId,
             code: res.statusCode,
             status: Form.getHttpStatusFromCode(code),
             version: req.httpVersion, // TODO: Is this necessarily the right version?
             headers: { ...res.getHeaders() }, // `res.getHeaders()` is a plain Object
             encode,
-            body
+            body: hasForm(body, Keep) ? body.desc() : resBody
           });
           
           return origEnd.call(res, ...args);
@@ -483,6 +493,13 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       }
       
     },
+    
+    $Comm: form({ name: 'HttpComm', props: (forms, Form) => ({
+      
+      init(req, res) { Object.assign(this, { req, res }); },
+      
+      
+    })}),
     
     $HttpRoad: form({ name: 'HttpRoad', has: { Road: RoadAuthority.Road }, props: (forms, Form) => ({
       init(args) {

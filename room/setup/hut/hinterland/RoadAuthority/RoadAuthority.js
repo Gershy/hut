@@ -9,7 +9,7 @@ global.rooms['setup.hut.hinterland.RoadAuthority'] = async () => {
     // work with duck-typing instead? (Or don't delete it but just never
     // reference it??) If so may want to simplify some functionality
     // e.g. parsing netAddr and port from netProc...
-    init({ aboveHut, protocol, netProc, compression=[], sc=subcon(`roadAuth.${protocol}`) }) {
+    init({ aboveHut, protocol, netProc, compression=[], sc=subcon(`road.${protocol}`) }) {
       
       /// {DEBUG=
       if (!aboveHut) throw Error('Api: must provide "aboveHut"');

@@ -50,7 +50,8 @@ global.rooms['setup.hut'] = async () => {
         `));
       /// =DEBUG}
       
-      subcon('road.traffic')(() => ({
+      let subconName = msg?.command.hasTail('.room') ? 'hut.comm.room' : 'hut.comm';
+      subcon(subconName)(() => ({
         type: 'comm',
         src: src?.desc() ?? null,
         trg: trg.desc(),
