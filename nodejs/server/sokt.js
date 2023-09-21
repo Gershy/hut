@@ -219,12 +219,17 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         
         forms.Road.init.call(this, args);
         Object.assign(this, {
+          sc: this.roadAuth.sc,
+          id: Math.random().toString(36).slice(2),
           socket,
           frames: [],
           size: 0,
           buff: Buffer.alloc(0),
           writeQueue: Promise.resolve()
         });
+        
+        this.sc(() => ({ event: 'init', id: this.id, belowHut: this.belowHut, netAddr: this.socket.remoteAddress }));
+        this.endWith(() => this.sc(() => ({ event: 'fini', id: this.id })));
         
         this.wsIncoming(initialMs, initialBuff);
         
@@ -242,7 +247,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         socket.on('error', errorFn = err => {
           
           gsc.kid('error')(err.mod(msg => `Socket error: ${msg}`));
-          session.end();
+          this.end();
           
         });
         
@@ -268,6 +273,8 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         
         let err = Error('');
         return this.writeQueue = this.writeQueue.then(() => Promise(rsv => {
+          
+          this.sc(() => ({ event: 'tell', id: this.id, op: opts.op,g msg: jsonToVal(opts.buff || opts.text) }));
           
           this.socket.write(Form.wsEncode(opts), cause => {
             if (cause) {
@@ -313,6 +320,8 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
             
             try         { msg = jsonToVal(msg); }
             catch (err) { msg = { command: msg.toString('utf8') }; }
+            
+            this.sc(() => ({ event: 'hear', id: this.id, op, msg }));
             
             // Here's where to consider opcodes other than 1 and 2
             // Note that 1 and 2 ("text" and "binary") are pretty both
