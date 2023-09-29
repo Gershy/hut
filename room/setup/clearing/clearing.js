@@ -593,6 +593,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   // - global.mapCmpToSrc
   // - global.keep
   // - global.conf
+  // - global.real
   
   /// {DEBUG=
   // Debug
@@ -898,20 +899,21 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   },
   uri: ({ path='', query }) => {
     
-    let maturity = conf('global.maturity');
-    
-    let cacheBust = null;
-    
-    // In "dev" use a random version to dodge the cache
-    if      (maturity === 'dev')   cacheBust = (Number.int32 * Math.random()).encodeStr(String.base32, 7);
-    
-    // In "beta" use process uid (refreshes once when Above restarts)
-    else if (maturity === 'beta')  cacheBust = conf('deploy.loft.uid');
-    
-    // TODO: How are we caching in alpha?
-    else if (maturity === 'alpha') cacheBust = null;
-    
-    return global.uriRaw({ path, cacheBust, query });
+    switch (conf('global.maturity')) {
+      
+      // In "dev" use a random version to dodge the cache
+      case 'dev':
+        return uriRaw({ path, query, cacheBust: (Number.int32 * Math.random()).encodeStr(String.base32, 7) });
+      
+        // In "beta" use process uid (refreshes once when Above restarts)
+      case 'beta':
+        return uriRaw({ path, query, cacheBust: conf('deploy.loft.uid') });
+      
+        // TODO: How are we caching in alpha?
+      case 'alpha':
+        return uriRaw({ path, query, cacheBust: null });
+      
+    }
     
   },
   
@@ -1283,7 +1285,7 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
     seek(diveToken, noSecondArg) {
       
       /// {DEBUG=
-      if (noSecondArg) throw Error(`Provide 1 arg`);
+      if (noSecondArg) throw Error(`Api: provide 1 arg to seek (use an array?)`);
       /// =DEBUG}
       
       let val = this;

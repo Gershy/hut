@@ -2,7 +2,6 @@
 
 require('../room/setup/clearing/clearing.js');
 
-let validComponentRegex = /^[a-zA-Z0-9!@][-a-zA-Z0-9!@._ ]*$/; // alphanum!@ followed by the same including ".", "-" (careful with "-" in regexes), "_", and " "
 let getUid = () => (Number.int32 * Math.random()).encodeStr(String.base32, 7);
 
 let fs = (fs => ({
@@ -15,6 +14,8 @@ let fs = (fs => ({
 
 let Filepath = form({ name: 'Filepath', props: (forms, Form) => ({
   
+  // alphanum!@ followed by the same including ".", "-" (careful with "-" in regexes), "_", and " "
+  $validComponentRegex: /^[a-zA-Z0-9!@][-a-zA-Z0-9!@._ ]*$/,
   $filteredComponentRegex: /^[.]+$/, // Remove components composed purely of "."
   
   init(vals, path=require('path')) {
@@ -46,7 +47,7 @@ let Filepath = form({ name: 'Filepath', props: (forms, Form) => ({
     denumerate(this, 'path');
     
   },
-  desc() { return [ '', '[file]', ...this.cmps ].join('/'); },
+  desc() { return this.cmps.length ? `/[file]/${this.cmps.join('/')}` : '/[file]'; },
   
   count() { return this.cmps.length; },
   kid(...fp) { return Filepath([ this.cmps, fp ]); },
@@ -58,9 +59,9 @@ let Filepath = form({ name: 'Filepath', props: (forms, Form) => ({
     
     if (!this.fspVal) {
       let fspVal = this.path.resolve('/', ...this.cmps);
-      /// {DEBUG=
+      /// {ASSERT=
       if (!/^([A-Z]+[:])?[/\\]/.test(fspVal)) throw Error(`${this.desc()} path doesn't start with optional drive indicator (e.g. "C:") followed by "/" or "\\"`).mod({ fsp: fspVal });
-      /// =DEBUG}
+      /// =ASSERT}
       this.fspVal = fspVal;
     }
     return this.fspVal;
@@ -93,7 +94,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     denumerate(this, 'locks');
     
   },
-  desc() { return `getFormName(this) @ ${this.fp.desc()}`; },
+  desc() { return `${getFormName(this)} @ ${this.fp.desc()}`; },
   
   // "x" implies these should be surrounded by "doLocked", and should be
   // preceded by a check that `fp` is in our jurisdiction
@@ -215,9 +216,9 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     // provided for this operation (once all collected Promises have
     // resolved we will be guaranteed we have a safely locked context!)
     let collLocks = [];
-    for (let lk0 of this.locks)
-      for (let lk1 of locks)
-        if (this.locksCollide(lk0, lk1)) { collLocks.push(lk0); break; }
+    for (let lock0 of this.locks)
+      for (let lock1 of locks)
+        if (this.locksCollide(lock0, lock1)) { collLocks.push(lock0); break; }
     
     // We've got our "prereq" Promise - now add a new Lock so any new
     // actions are blocked until `fn` completes
@@ -231,8 +232,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     let err = Error('');
     
     // Wait for all collisions to resolve...
-    let uid = getUid();
-    await Promise.all(collLocks.map(lk => lk.prm)); // Won't reject because it's a Promise.all over Locks, and no `Lock(...).prm` ever rejects!
+    await Promise.all(collLocks.map(lock => lock.prm)); // Won't reject because it's a Promise.all over Locks, and no `Lock(...).prm` ever rejects!
     
     // We now own the locked context!
     try           { return await fn(); }
@@ -412,7 +412,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     }});
     
   },
-  async getDataHeadStream(fp) {
+  getDataHeadStream(fp, forbid={}) {
     
     // A "head stream" goes into a file pointer's data storage. If the
     // file pointer is changed during the stream, writes which occur
@@ -439,8 +439,9 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
       
       let stream = fs.createWriteStream(fp.fsp());
       streamPrm.resolve(stream);
-      nodeLock.prm.resolve();
+      //nodeLock.prm.resolve(); // TODO: Before we were releasing this - but that should only happen after the stream ends??
       
+      // Don't allow the `doLocked` fn to finish until the stream is done!!
       await Promise((rsv, rjc) => {
         stream.on('close', rsv);
         stream.on('error', rjc);
@@ -452,7 +453,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     return streamPrm.then(stream => Object.assign(stream, { prm }));
     
   },
-  async getDataTailStream(fp) {
+  getDataTailStream(fp, forbid={}) {
     
     // A "tail stream" comes from a file pointer's data storage. Once a
     // stream has initialized, it seems unaffected even if the file
@@ -462,16 +463,46 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     
     this.checkFp(fp);
     
-    return this.doLocked({ name: 'getTailStream', locks: [{ type: 'nodeRead', fp }], fn: async () => {
+    let streamPrm = Promise.later();
+    
+    let nodeLock = { type: 'nodeRead', fp };
+    let prm = this.doLocked({ name: 'getTailStream', locks: [ nodeLock ], fn: async () => {
       
-      let stream = fs.createReadStream(fp.fsp());
-      stream.prm = Promise((rsv, rjc) => {
-        stream.on('close', rsv);
-        stream.on('error', err => (err.code !== 'ENOENT') ? rjc(err) : rsv());
-      });
-      return stream;
+      let type = await this.xGetType(fp);
+      if (type === null) return;
+      
+      if (type === 'leaf') {
+        
+        let stream = fs.createReadStream(fp.fsp());
+        streamPrm.resolve(stream); // Pass the initialized stream to the caller
+        
+        // Don't allow the `doLocked` fn to finish until the stream is done!!
+        await Promise((rsv, rjc) => {
+          stream.on('close', rsv);
+          stream.on('error', err => (err.code !== 'ENOENT') ? rjc(err) : rsv());
+        });
+        
+      }
+      
+      if (type === 'node') {
+        
+        // Return a stream which simply sends the directory listing as json to the writable
+        let prm = Promise.later();
+        streamPrm.resolve({ pipe: async writable => {
+          fs.readdir(fp.fsp()).then(dir => {
+            writable.end(valToJson(dir.filter(cmp => !forbid.has(cmp) || isForm(forbid[cmp], Object))));
+            prm.resolve();
+          });
+        }});
+        
+        // Wait for the directory read to be sent to the writable...
+        await prm;
+        
+      }
       
     }});
+    
+    return streamPrm.then(stream => Object.assign(stream, { prm }));
     
   },
   
@@ -559,6 +590,7 @@ let FsKeep = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => ({
     desc() { return getFormName(this); },
     access() { return this; },
     exists() { return true; },
+    getContentType() { return 'application/json'; },
     getContent() {
       
       let rand = a => a[Math.floor(Math.random() * a.length)];
@@ -570,10 +602,10 @@ let FsKeep = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => ({
       
       let password = '';
       while (password.length < 12) password += rand('abcdefghijklmnopqrstuvwxyz0123456789~!@#$%^&*()_+-={}[];:');
-      return valToJson({ username, password, directory: Form.honey });
+      return valToJson({ username, password, email: `${username}@protonmail.com`, directory: Form.honey });
       
     },
-    getContentByteLength() { return Buffer.bytelength(this.getContent()); },
+    getContentByteLength() { return Buffer.byteLength(this.getContent()); },
     streamable() { return true; },
     getHeadPipe() { return {}; }, // TODO: Mock this
     getTailPipe() { return ({ pipe: writable => writable.end(this.getContent()) }); }
@@ -590,24 +622,30 @@ let FsKeep = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => ({
     svg: 'image/svg+xml'
   },
   
-  init(trn, fp, forbid=null) { Object.assign(this, { trn, fp, forbid }); },
+  init(trn, fp, forbid={}) { Object.assign(this, { trn, fp, forbid }); },
   desc() { return this.fp.desc(); },
   access(names) {
     
-    try {
+    // Note that trying to log here with `gsc` may cause a stack overflow because `gsc` will want
+    // to log the line responsible for making the `gsc` call:
+    // - which initializes an Error and uses `Error(...).getInfo().trace`
+    // - which generates lines of formatted codepoints
+    // - where each line includes a formatted Keep name
+    // - which requires an instance of a Keep to format
+    // - and the Keep instance is obtained using this `access` method, closing the loop!!
+    
+    let accessFp = this.fp.kid(names); // This performs filepath component validation + sanitizing
+    let newCmps = accessFp.cmps.slice(this.fp.cmps.length);
+    let forbid = this.forbid;
+    for (let cmp of newCmps) {
+      let forbidCmp = forbid.at(cmp);
       
-      let fp = this.fp.kid(names);
-      if (this.forbid && this.forbid.has(fp.cmps[this.fp.count()])) throw Error('Forbidden').mod({ fp: this.fp.desc(), cmp: fp.cmps[this.fp.count()] });
-      
-      let FsKeepForm = (0, this.Form);
-      return FsKeepForm(this.trn, fp, null);
-      
-    } catch (err) {
-      
-      gsc('Couldn\'t access child keep', err);
-      return Form.honeypotKeep();
-      
+      // Any non-Object, truthy value for `forbidCmp` indicates the fp should be denied
+      if (forbidCmp && !isForm(forbidCmp, Object)) return Form.honeypotKeep;
+      forbid = forbidCmp ?? {};
     }
+    
+    return (0, this.Form)(this.trn, accessFp, forbid);
     
   },
   
@@ -662,9 +700,9 @@ let FsKeep = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => ({
       ? names.filter(name => !this.forbid.has(name))
       : names;
   },
-  async streamable() { return (await this.trn.getType(this.fp)) === 'leaf'; },
-  async getHeadPipe() { return this.trn.getDataHeadStream(this.fp); },
-  async getTailPipe() { return this.trn.getDataTailStream(this.fp); },
+  async streamable() { return true; return (await this.trn.getType(this.fp)) === 'leaf'; },
+  async getHeadPipe() { return this.trn.getDataHeadStream(this.fp, this.forbid); },
+  async getTailPipe() { return this.trn.getDataTailStream(this.fp, this.forbid); },
   iterateChildren(dbg=Function.stub) {
     
     // Returns { [Symbol.asyncIterator]: fn, close: fn }

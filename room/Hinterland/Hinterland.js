@@ -256,9 +256,11 @@ global.rooms['Hinterland'] = async () => {
       };
       let aboveScp = Scope(Src(), aboveHooks, (_, dep) => {
         this.above({
+          pfx: this.prefix,
           record: loftRec,
           real: hinterlandReal,
           addPreloadRooms: hereHut.addPreloadRooms.bind(hereHut),
+          addCommandHandler: (command, fn) => hereHut.makeCommandHandler(pfx(command), fn),
           ...utils
         }, dep);
       });
@@ -282,6 +284,7 @@ global.rooms['Hinterland'] = async () => {
           belowHut.followRec(loftRec);
           let lofterRh = handleBelowLofter(loftRec, belowHut, dep);
           this.below({
+            pfx: this.prefix,
             record: loftRec,
             real: hinterlandReal,
             lofterRh: lofterRh,
@@ -306,6 +309,7 @@ global.rooms['Hinterland'] = async () => {
       tmp.endWith(Scope(loftRh, belowHooks, (loftRec, dep) => {
         let lofterRh = handleBelowLofter(loftRec, hereHut, dep);
         this.below({
+          pfx: this.prefix,
           record: loftRec,
           real: hinterlandReal,
           lofterRh: lofterRh,

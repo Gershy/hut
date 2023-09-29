@@ -79,21 +79,20 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   
   let HttpKeep = form({ name: 'HttpKeep', has: { Keep }, props: (forms, Form) => ({
     init(uri) { Object.assign(this, { uri }); },
-    getUri() { return this.uri; }
+    getUri() { return this.uri; },
+    desc() { return `${window.location.protocol.slice(0, -1)}//${this.uri.slice(1)}`; }
   })});
   
   // Some maturities use cache-busting for every asset request, but we want to avoid requesting the
   // same asset multiple times with different cache-busting values; therefore we cache locally
-  let seenHttpKeeps = Map();
-  
   global.getMs = () => performance.timeOrigin + performance.now();
-  global.keep = diveToken => {
+  global.keep = Object.assign(diveToken => {
     let dive = token.dive(diveToken);
     let key = `/${dive.join('/')}`;
-    let keep = seenHttpKeeps.get(key);
-    if (!keep) seenHttpKeeps.add(key, keep = HttpKeep(uri({ path: 'asset', query: { dive: key } })));
+    let keep = global.keep.keeps.get(key);
+    if (!keep) global.keep.keeps.add(key, keep = HttpKeep(uri({ path: 'asset', query: { dive: key } })));
     return keep;
-  };
+  }, { keeps: Map() });
   global.conf = (diveToken, def=null) => {
     
     // Resolve nested Arrays and period-delimited Strings
@@ -268,6 +267,31 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
     if (/^[\s]+$/.test(body.textContent)) body.textContent = '';
     
     global.real = Real({ prefix: 'foundation', name: 'root', tech, tree: Real.Tree(), node: body });
+    
+    let clipboard = window.navigator.clipboard;
+    global.clipboard = clipboard
+      ? {
+        set: val => {
+          if (hasForm(val, Real)) {
+            // Set selection to encompass the Real
+            window.getSelection().removeAllRanges();
+            let range = window.document.createRange();
+            range.selectNodeContents(val.node);
+            window.getSelection().addRange(range);
+            
+            // Resolve the Real to its text
+            val = val.node.textContent;
+          }
+          
+          /// {DEBUG=
+          if (!isForm(val, String)) throw Error('Api: value must resolve to String').mod({ val });
+          /// =DEBUG}
+          
+          return clipboard.writeText(val.trim()).then(() => true, err => false);
+        },
+        get: () => clipboard.readText()
+      }
+      : { set: () => false, get: () => '' };
     
   })();
   

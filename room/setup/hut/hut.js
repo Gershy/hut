@@ -51,12 +51,11 @@ global.rooms['setup.hut'] = async () => {
       /// =DEBUG}
       
       let subconName = msg?.command.hasTail('.room') ? 'hut.comm.room' : 'hut.comm';
-      subcon(subconName)(() => ({
-        type: 'comm',
+      subcon(subconName)(() => ([{
         src: src?.desc() ?? null,
         trg: trg.desc(),
         msg: hasForm(msg, Keep) ? msg.desc() : msg
-      }));
+      }]));
       
       if (!src && trg.isAfar) throw Error(`Can't tell TrgAfarHut when SrcHut is null`);
       if (!src) return trg.processCommand({ src: null, road: null, reply: null, ms, msg });
@@ -164,7 +163,8 @@ global.rooms['setup.hut'] = async () => {
     },
     makeCommandHandler(command, fn) {
       /// {DEBUG=
-      if (this.commandHandlers.has(command)) throw Error(`Pre-existing command handler for "${command}"`);
+      if (!fn) throw Error('Api: must provide "fn"');
+      if (this.commandHandlers.has(command)) throw Error(`Api: pre-existing command handler for "${command}"`);
       /// =DEBUG}
       
       let tmp = Tmp({ desc: () => `CommandSrc(${this.desc()} -> "${command}")`, fn });
@@ -184,7 +184,7 @@ global.rooms['setup.hut'] = async () => {
       
       let run = () => {
         let ch = this.commandHandlers.get(comm.msg.command);
-        if (!ch) throw Error(`Api: unrecognized command`).mod({ hut: this.desc(), comm });
+        if (!ch) throw Error(`Api: invalid command`).mod({ hut: this.desc(), comm });
         return ch.fn(comm);
       };
       
@@ -198,7 +198,7 @@ global.rooms['setup.hut'] = async () => {
         /// {ABOVE=
         // Above should inform Below of the Error
         comm.reply?.({ command: 'error', msg: {
-          detail: err.message.startsWith('Api: ') ? err.message : 'Server error',
+          detail: err.message.startsWith('Api: ') ? err.message : 'Api: sorry - experiencing issues',
           echo: comm.msg
         }});
         /// =ABOVE}
@@ -209,7 +209,8 @@ global.rooms['setup.hut'] = async () => {
     processCommand(comm) {
       
       // Similar to runCommandHandler, but allows a Hut to delegate to some other Hut - overall,
-      // some Hut(...).runCommandHandler should wind up getting called!
+      // some `Hut(...).runCommandHandler` (but not necessarily `this.runCommandHandler`) should
+      // wind up getting called
       
       throw Error('Not implemented');
       
@@ -885,7 +886,7 @@ global.rooms['setup.hut'] = async () => {
       if (fromScratch) {
         
         /// {DEBUG=
-        subcon('hut.below.sync')(`${this.desc()} is syncing from scratch`);
+        subcon('hut.comm.below')({ belowHut: this, status: 'syncing from scratch' });
         /// =DEBUG}
         
         // Reset version and clear the current sync-delta, refreshing it

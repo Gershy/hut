@@ -1,5 +1,10 @@
 'use strict';
 
+// Little dot: '\u00b7'
+// Big dot: '\u2022'
+// Broken pipe: '\u00a6'
+// Ellipsis: '\u2026'
+
 require('../room/setup/clearing/clearing.js');
 let util = require('util');
 let { rootTransaction: rootTrn, Filepath, FsKeep } = require('./filesys.js');
@@ -90,61 +95,177 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     global.subconOutput = (...args) => global.subconOutput.buffered.push(args); // Buffer everything
     global.subconOutput.buffered = [];
     
-    // Define `global.formatAnyValue`
-    let inspectSym = Symbol.for('nodejs.util.inspect.custom');
-    Error.prototype[inspectSym] = function() { return this.desc() };
-    
-    let reformat = (val, seen=Map()) => {
+    let modCode = (...codes) => '\u001b[' + codes.map(c => c.toString(10)).join(';') + 'm';
+    let modMapping = {
       
-      if ([ String, Number, Boolean, RegExp ].some(F => isForm(val, F))) return val;
-        
+      // https://stackoverflow.com/a/41407246/830905
+      
+      red:       '\u001b[31m',
+      green:     '\u001b[32m',
+      yellow:    '\u001b[33m',
+      blue:      '\u001b[34m',
+      
+      subtle:    '\u001b[2m',
+      
+      bold:      '\u001b[1m',
+      italic:    '\u001b[3;22m',
+      underline: '\u001b[4;22m',
+      
+      rgbRed: '\u001b[38;2;255;0;0m', // Must be 38, then 2, then the next 3 are R,G,B
+      
+      reset:     '\u001b[0m'
+    };
+    let ansi = (str, modName) => `${modMapping[modName]}${str}${modMapping.reset}`;
+    let remAnsi = (str) => str.replace(/\u{1b}\[[^a-zA-Z]+[a-zA-Z]/ug, '');
+    let bolded = Map();
+    let bold = (str, b = bolded.get(str)) => b || (bolded.set(str, b = ansi(str, 'bold')), b);
+    
+    // Define `global.formatAnyValue`
+    let format = (val, opts={}, d=0, pfx='', seen=Map()) => {
+      
+      // `opts.d` is the maximum depth; the "<limit>" indicator will be returned beyond it
+      // `d` is the current depth
+      // `opts.w` is the initial width
+      // `pfx` is the string which will precede the first line of any output from this `format`
+      // call; it should be considered in order to break excessively long lines
+      
+      let pfxLen = pfx.length;
+      
+      if (val === undefined) return ansi('undefined', 'green');
+      if (val === null) return ansi('null', 'green');
+      
+      if (isForm(val, String)) return ansi(`'${val.replaceAll('\n', '\\n')}'`, 'green');
+      if (isForm(val, Number)) return ansi(`${val}`, 'green');
+      if (isForm(val, Boolean)) return ansi(val ? 'T' : 'F', 'green');
+      
+      if (d > opts.d) return ansi('<limit>', 'red');
+      
       if (seen.has(val)) return seen.get(val);
       
-      if (hasForm(val, Function)) {
-        let str = val.toString().split('\n').map(ln => ln.trim()).join(' ');
-        if (str.length > 60) str = str.slice(0, 59) + '\u2026';
-        let result = { [inspectSym](d, opts) { return opts.stylize(`[fn: ${val.name}] ${str}`, 'special'); } };
-        seen.set(val, result);
-        return result;
-      }
-      
-      if (isForm(val?.desc, Function)) {
-        let result = { [inspectSym](d, opts) { return opts.stylize(val.desc(), 'special'); } };
-        seen.set(val, result);
-        return result;
-      }
-      
-      if (isForm(val, Array)) {
-        let mapped = [];
-        seen.set(val, mapped);
+      if (Object.getPrototypeOf(val) === null) {
         
-        for (let v of val) mapped.push(reformat(v, seen));
-        return mapped;
+        seen.set(val, '<cyc> PlainObject(...)');
+        seen.set(val, str);
+        let str = `PlainObject ${format({ ...val }, opts, d, 'PlainObject ', seen)}`;
+        return str;
+        
+      }
+      
+      if (hasForm(val, Function)) {
+        
+        let str = 'Fn: ' + val.toString().split('\n').map(ln => ln.trim() ?? skip).join(' ');
+        
+        let maxW = Math.max(8, opts.w - pfxLen - d * 4 - 1); // Subtract 1 for the trailing ","
+        if (str.length > maxW) str = str.slice(0, maxW - 1) + '\u2026';
+        
+        str = ansi(str, 'blue');
+        
+        seen.set(val, str);
+        return str;
+        
+      }
+      
+      if (isForm(val, Set)) {
+        
+        seen.set(val, '<cyc> Set(...)');
+        let str = `Set ${format([ ...val ], opts, d, 'Set ', seen)}`;
+        seen.set(val, str);
+        return str;
+        
+      }
+      
+      if (isForm(val, Map)) {
+        
+        seen.set(val, '<cyc> Map(...)');
+        let str = `Map ${format(Object.fromEntries(val), opts, d, 'Map ', seen)}`;
+        seen.set(val, str);
+        return str;
+        
       }
       
       if (isForm(val, Object)) {
-        let mapped = {};
-        seen.set(val, mapped);
         
-        for (let [ k, v ] of val) mapped[k] = reformat(v, seen);
-        return mapped;
+        if (val.empty()) return bold('{}');
+        
+        seen.set(val, '<cyc> { ... }');
+        let keyLen = Math.max(...val.toArr((v, k) => k.length));
+        
+        let str = (() => {
+          
+          let formatted = val.map((v, k) => format(v, opts, d + 1, `${k.padTail(keyLen, ' ')}: `, seen));
+          
+          let oneLine = `${bold('{')} ${formatted.toArr((v, k) => `${k}${bold(':')} ${v}`).join(bold(',') + ' ')} ${bold('}')}`;
+          let canOneLine = true
+            && !oneLine.has('\n')
+            && remAnsi(oneLine).length < (opts.w - d * 4);
+          if (canOneLine) return oneLine;
+          
+          let multiLineItems = formatted.toArr((v, k) => {
+            
+            let paddingAmt = keyLen - k.length;
+            let padding = '';
+            if (paddingAmt) padding += ' ';
+            padding += '-'.repeat(Math.max(paddingAmt - 1, 0));
+            let paddedKey = k + ansi(padding, 'subtle');
+            let entry = `${paddedKey}${bold(':')} ${v}`;
+            return entry.indent(ansi('\u00a6', 'subtle') + '   ')
+            
+          });
+          let multiLine = multiLineItems.valSort(v => v.length + (v.split('\n').length - 1) * 3).join(bold(',') + '\n')
+          
+          return `${bold('{')}\n${multiLine}\n${bold('}')}`;
+          
+        })();
+        
+        return str;
+        seen.set(val, str);
+        
       }
       
-      seen.set(val, val);
-      return val;
+      if (isForm(val, Array)) {
+        
+        if (val.empty()) return bold('[]');
+        
+        seen.set(val, '<cyc> [ ... ]');
+        
+        let str = (() => {
+          
+          let formatted = val.map(v => format(v, opts, d + 1, '', seen));
+          
+          let oneLine = `${bold('[')} ${formatted.join(bold(',') + ' ')} ${bold(']')}`;
+          let canOneLine = true
+            && !oneLine.has('\n')
+            && remAnsi(oneLine).length < (opts.w - d * 4);
+          if (canOneLine) return oneLine;
+          
+          let multiLine = formatted.map(v => v.indent(ansi('\u00a6', 'subtle') + '   ')).join(bold(',') + '\n');
+          return `${bold('[')}\n${multiLine}\n${bold(']')}`;
+          
+        })();
+        
+        seen.set(val, str);
+        return str;
+        
+      }
+      
+      if (isForm(val?.desc, Function)) {
+        
+        let str = ansi(val.desc(), 'blue');
+        seen.set(val, str);
+        return str;
+        
+      }
+      
+      let formName = getFormName(val);
+      seen.set(val, `<cyc> ${formName}(...)`);
+      let str = `${ansi(formName, 'blue')} ${format({ ...val }, opts, d, `${formName} `, seen)}`;
+      seen.set(val, str);
+      return str;
       
     };
-    global.formatAnyValue = (val, { colours=true, colors=colours, depth=10 }={}) => {
-      
-      try {
-        let doReformat = false;
-        if (doReformat) val = reformat(val);
-        return util.inspect(val, { colors, depth });
-      } catch (err) {
-        console.log('WHOA', err, val);
-        return util.inspect(val, { colors, depth });
-      }
-      
+    
+    global.formatAnyValue = (val, { colours=true, width=conf('global.terminal.width'), depth=7 }={}) => {
+      return format(val, { colours, w: width, d: depth });
     };
     
   };
@@ -202,14 +323,18 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     
     let rootFsKeep = FsKeep(rootTrn, Filepath([]));
     let hutKeep = await hutKeepPrm;
+    let millKeep = hutKeep.seek('mill');
+    hutKeep.forbid = { mill: 1, '.git': 1, '.gitignore': 1 };
+    
     let rootKeep = RootKeep({
       
       'file': rootFsKeep,
       'file:root': rootFsKeep,
+      'file:hut':  hutKeep,
       'file:repo': hutKeep,
-      'file:mill': hutKeep.seek('mill'),
+      'file:mill': millKeep,
       'file:code:src': hutKeep.seek('room'),
-      'file:code:cmp': hutKeep.seek('mill.cmp')
+      'file:code:cmp': millKeep.seek('cmp')
       
     });
     
@@ -519,6 +644,10 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           }})
         });
         confyGlb.kids.therapy = ConfyNullable(ConfySet());
+        
+        confyGlb.kids.terminal = ConfySet({ kids: {
+          width: ConfyVal({ settle: 'num', def: () => 140 })
+        }});
         
         // Environment values include:
         // - "device": metadata about this device running Hut
@@ -952,13 +1081,17 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       // The index in the stack trace which is the callsite that invoked
       // the subcon call (gets overwritten later when therapy requires
       // calling subcons from deeper stack depths)
-      let { buffered } = global.subconOutput;
       global.subcon.relevantTraceIndex = 2;
       global.subconOutput = (sc, ...args) => { // Stdout; check "chatter" then format and output
         
         /// {DEBUG=
-        let trace = Error('trace').getInfo().trace;
+        // TODO: Wrapping this in DEBUG does nothing; this file doesn't get compiled!
+        let trace = sc.params().chatter ? Error('trace').getInfo().trace : null;
         /// =DEBUG}
+        
+        let leftColW = 28;
+        let terminalW = global.conf('global.terminal.width');
+        let rightColW = Math.max(terminalW - leftColW - 2, 30); // `- 2` considers the "| " divide between L/R cols
         
         thenAll(args.map(arg => isForm(arg, Function) ? arg(sc) : arg), args => {
           
@@ -970,8 +1103,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           // Format args if formatter is available
           if (format) args = args.map(arg => format(arg, sc));
           
-          let leftColW = 28;
-          let depth = 10;
+          let depth = 7;
           if (isForm(args[0], String) && /^[!][!][0-9]+$/.test(args[0])) {
             depth = parseInt(args[0].slice(2), 10);
             args = args.slice(1);
@@ -981,17 +1113,19 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           
           let leftLns = [ `[${sc.term.slice(-leftColW)}]`, now ];
           let rightLns = args.map(v => {
-            if (!isForm(v, String)) v = formatAnyValue(v, { depth });
+            if (!isForm(v, String)) v = formatAnyValue(v, { depth, width: rightColW });
             return v.split(/\r?\n/);
           }).flat();
           
-          let call = trace[global.subcon.relevantTraceIndex];
+          /// {DEBUG=
+          let call = trace?.[global.subcon.relevantTraceIndex];
           call = call?.file && `${token.dive(call.file).at(-1)} ${call.row}:${call.col}`;
           if (call) {
             let extraChars = call.length - leftColW;
             if (extraChars > 0) call = call.slice(extraChars + 1) + '\u2026';
             leftLns.push(call);
           }
+          /// =DEBUG}
           
           let logStr = Math.max(leftLns.length, rightLns.length).toArr(n => {
             let l = (leftLns[n] || '').padTail(leftColW);
@@ -999,7 +1133,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
             return l + vertDash() + ' ' + r;
           }).join('\n');
           
-          let topLine = (28).toArr(horzDash).join('') + junction() + (50).toArr(horzDash).join('');
+          let topLine = leftColW.toArr(horzDash).join('') + junction() + (1 + rightColW).toArr(horzDash).join('');
           console.log(topLine + '\n' + logStr);
           
         });
@@ -1008,10 +1142,10 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       
     };
     
+    let t = getMs();
+    
     await resolveConf()
       .then(async () => {
-        
-        let t = getMs();
         
         // Grab a reference the buffered logs written before we configured
         let { buffered } = global.subconOutput;
@@ -1038,7 +1172,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           
         } else {
           
-          let { buffered } = global.subconOutput;
+          let { buffered=[] } = global.subconOutput;
           global.subconOutput.buffered = null;
           global.subconOutput = (sc, ...args) => console.log('\n' + [ // Panic output
             `SUBCON: "${sc.term}"`,
@@ -1062,7 +1196,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     
   };
   
-  { // Enable `global.(getCompiledKeep|mapCmpToSrc|getRooms)`
+  { // Enable `global.(getCmpKeep|mapCmpToSrc|getRooms)`
     
     let srcKeep = keep('[file:code:src]');
     let cmpKeep = keep('[file:code:cmp]');
@@ -1072,20 +1206,20 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     // are always synced up regardless of the bearing; Hut by default
     // expects to run at multiple bearings, so there are no "default"
     // values for bearing-specific features! (They should always be
-    // passed when calling `getCompiledCode` from a particular context!)
+    // passed when calling `getCmpCode` from a particular context!)
     let defaultFeatures = {
       debug:  conf('global.maturity') === 'dev',
       assert: conf('global.maturity') === 'dev',
       ...conf('global.features')
     };
-    let getCompiledCode = async (keep, features=Object.stub) => {
+    let getCmpCode = async (keep, features=Object.stub) => {
       
-      // Take a Keep containing source code and return compiled code and
-      // all data necessary to map compiled codepoints; note we DON'T
-      // write any data to any other Keep! (that's `getCompiledKeep`!!)
+      // Take a Keep containing source code and return compiled code and all data necessary to map
+      // compiled codepoints; note we DON'T write to any Keep! (that's done by `getCmpKeep`)
       
       let t = getMs();
       
+      // TODO: Why lowercase the value??
       features = Set({ ...defaultFeatures, ...features }.toArr((v, k) => v ? k.lower() : skip));
       
       /// {DEBUG=
@@ -1097,7 +1231,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       let content = await keep.getContent('utf8');
       if (!content) throw Error(`Api: no sourcecode available from ${keep.desc()}`);
       
-      let srcLines = content.split('\n'); // TODO: What about \r??
+      let srcLines = content.split('\n'); // TODO: What about \r?? Is that a concern?
       
       // Matches, e.g., '{BEL/OW=', '{ABO/VE=', etc.
       let featureHeadReg = /[{]([a-zA-Z]+)[=]/i;
@@ -1241,15 +1375,13 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       return { lines: filteredLines, offsets };
       
     };
-    global.getCompiledKeep = async (bearing, roomDive) => {
+    global.getCmpKeep = async (bearing, roomDive) => {
       
-      // Returns a Keep representing the compiled code associated with
-      // some Room. Note an optimal function signature here would simply
-      // be `bearing, srcKeep` - but it's easier to accept a PARTIAL
-      // DiveToken. Note it should be partial to reference both the src
-      // and cmp Keeps. Accepting a full DiveToken or Keep would make it
-      // awkward to reference the corresponding compiled Keep! Should
-      // probably just write something like `async srcKeepToCmpKeep`...
+      // Returns a Keep representing the compiled code associated with some Room. Note an optimal
+      // function signature here would simply be `bearing, srcKeep` - but it's easier to accept a
+      // PARTIAL DiveToken. A partial dive can be used to reference both the src and cmp Keeps.
+      // Accepting a full DiveToken or Keep would make it awkward to reference the corresponding
+      // compiled Keep! Should probably just write something like `async srcKeepToCmpKeep`...
       
       roomDive = token.dive(roomDive);
       
@@ -1257,7 +1389,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       if (await cmpKeep.exists()) return cmpKeep;
       
       let srcKeep = keep([ 'file:code:src', ...roomDive, `${roomDive.at(-1)}.js` ]);
-      let { lines, offsets } = await getCompiledCode(srcKeep, {
+      let { lines, offsets } = await getCmpCode(srcKeep, {
         above: [ 'above', 'between' ].has(bearing),
         below: [ 'below', 'between' ].has(bearing)
       });
@@ -1382,7 +1514,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
             let namePcs = name.split('.');
             let roomSrcKeep = srcKeep.access([ ...namePcs, `${namePcs.at(-1)}.js` ]);
             
-            let { lines, offsets } = await getCompiledCode(roomSrcKeep, {
+            let { lines, offsets } = await getCmpCode(roomSrcKeep, {
               above: [ 'above', 'between' ].has(bearing),
               below: [ 'below', 'between' ].has(bearing)
             });

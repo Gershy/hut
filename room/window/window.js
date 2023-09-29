@@ -1,6 +1,6 @@
 global.rooms['window'] = foundation => ({ open: async () => {
   
-  let modCode = (...codes) => codes.map(v => `\x1b[${v}m`).join('');
+  let modCode = (...codes) => codes.map(v => `\u001b[${v}m`).join('');
   let modMapping = {
     red: modCode(91, 39),
     green: modCode(92, 39),
@@ -833,7 +833,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
   let applyMods = (text, mods) => {
     if (mods.empty()) return text;
     let modPrefix = mods.toArr(v => modMapping[v]).join('');
-    return `${modPrefix}${text}\x1b[0m`;
+    return `${modPrefix}${text}${modMapping.reset}`;
   };
   
   let asciiPicker = await (async () => {

@@ -1,11 +1,11 @@
 'use strict';
 
-// TODO: Compression? Cpu load vs packet size?
-
 require('../../room/setup/clearing/clearing.js');
 let crypto = require('crypto');
 
 module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthority => {
+  
+  // TODO: Compression? Cpu load vs packet size?
   
   return form({ name: 'SoktRoadAuthority', has: { RoadAuthority }, props: (forms, Form) => ({
     
@@ -274,7 +274,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         let err = Error('');
         return this.writeQueue = this.writeQueue.then(() => Promise(rsv => {
           
-          this.sc(() => ({ event: 'tell', id: this.id, op: opts.op,g msg: jsonToVal(opts.buff || opts.text) }));
+          this.sc(() => ({ event: 'tell', id: this.id, op: opts.op, msg: jsonToVal(opts.buff || opts.text) }));
           
           this.socket.write(Form.wsEncode(opts), cause => {
             if (cause) {
@@ -348,11 +348,14 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         
         // Initiate saying goodbye (https://www.rfc-editor.org/rfc/rfc6455#section-7.4.1)
         //let sayGoodbyePrm = this.wsWrite({ op: 8, code: 1000, text: `Goodbye friend :')` });
-        let sayGoodbyePrm = this.wsWrite({ op: 8, code: 1000, text: `Goodbye friend \ud83e\udd72` });
+        let sayGoodbyePrm = this.wsWrite({ op: 8, code: 1000, text: valToJson({
+          command: 'error',
+          text: `Goodbye friend \ud83e\udd72` // ":')"
+        })});
         
         // End without destroying the socket - this could interfere with saying goodbye!
         let socket = this.socket;
-        this.socket = { destroy: Function.stub };
+        this.socket = { destroy: Function.stub, end: Function.stub, write: Function.stub };
         this.end();
         
         // Manually clean up the socket once we're done saying goodbye

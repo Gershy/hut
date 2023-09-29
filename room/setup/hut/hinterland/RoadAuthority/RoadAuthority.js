@@ -54,7 +54,7 @@ global.rooms['setup.hut.hinterland.RoadAuthority'] = async () => {
       },
       desc() {
         // TODO: pass NetworkAddress to `aboveHut.getBelowHutAndRoad`
-        let netAddr = belowHut.getKnownNetAddrs()[0];
+        let netAddr = this.belowHut.getKnownNetAddrs()[0];
         return `${getFormName(this)}(${this.roadAuth.desc()} <-> ${netAddr} / ${this.belowHut.hid})`;
       },
       currentCost() { throw Error('Not implemented'); },

@@ -79,7 +79,9 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       try         { await comm.resultPrm; }
       catch (err) { comm.kill({ err }); return; }
       
-      let { belowNetAddr, body, cookie, path, query, fragment } = comm.context;
+      // Note `comm.context.cookie` is ignored; we're only looking at `comm.context.hutCookie`
+      // which contains parsed data from the "hut" cookie
+      let { belowNetAddr, body, hutCookie, path, query, fragment } = comm.context;
       
       // - Compile the full `msg`
       // - `msg.trn` defaults to "anon"
@@ -90,8 +92,9 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         // Note that `query` needs to take priority over `hutCookie` - otherwise a client with a
         // cookie set won't be able to simply spoof their hid via the query
         // TODO: What about the rest of `cookie`? We ignore everything but `cookie.hut`
-        ...cookie, ...query, ...body
+        ...hutCookie, ...query, ...body
       };
+      if (msg.command === 'favicon.ico') msg.command = 'html.icon'; // TODO: Breaks if the prefix isn't "html" - consider `this.aboveHut.type.getPrefix()`
       if (msg.command === 'hutify') msg.trn = 'sync';
       
       // These can't be confined to DEBUG blocks - Server must always be
@@ -332,7 +335,10 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
             
             // `keep` gets piped to the response; it may be compressed
             
-            this.res.writeHead(200, resHeaders);
+            this.res.writeHead(200, {
+              'Content-Disposition': 'inline',
+              ...resHeaders
+            });
             
             let pipe = await keep.getTailPipe();
             if (encode) {
@@ -433,6 +439,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         }
         
         this.context.cookie = cookie;
+        this.context.hutCookie = hutCookie;
         
         // STEP 3: URL
         
