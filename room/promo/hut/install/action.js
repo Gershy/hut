@@ -46,8 +46,8 @@ async (res) => {
       '',
       '=================================',
       'Installed hut! Try executing:',
-      `> cd ${path.join(...local)}`,
-      '> node hut.js internal.test.test1',
+      `> cd "${path.join(...local)}"`,
+      '> node hut.js "internal.test.test1"',
       '================================='
     ].join('\n'));
     

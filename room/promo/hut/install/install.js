@@ -74,9 +74,9 @@ global.rooms['promo.hut.install'] = async (installKeep) => {
       stlReal.addReal('step2', { text: '2. Navigate to desired parent dir', Text: { size: textSizes[1] } });
       stlReal.addReal('step3', { text: '3. Paste into your terminal:',      Text: { size: textSizes[1] } });
       stlReal.addReal('reminder', {
-        text: '(Always verify wild code before running!)',
         Geom: { w: 'calc(70vmin + 30vmax)' },
-        Text: { size: textSizes[3], spacing: { v: '0.4vh' } }
+        Text: { size: textSizes[3], spacing: { v: '0.4vh' } },
+        text: '(Always verify wild code before running!)'
       });
       let textReal = stlReal.addReal('text', {
         Text: { size: textSizes[2], spacing: 'calc(5px + 0.5vw)' },
@@ -84,15 +84,13 @@ global.rooms['promo.hut.install'] = async (installKeep) => {
         Press: { flat: false, pressFn: async () => clipboard.set(textReal) }
       });
       stlReal.addReal('reminder', {
-        text: 'This downloads and runs a js script downloading everything you need to use Hut!',
         Geom: { w: 'calc(70vmin + 30vmax)' },
-        Text: { size: textSizes[3], spacing: { v: '0.4vh' } }
+        Text: { size: textSizes[3], spacing: { v: '0.4vh' } },
+        text: 'This downloads and runs a js script downloading everything you need to use Hut!'
       });
       
       dep(install.valueSrc.route(url => textReal.mod({
         text: url
-          //? `node -e "(async(u)=>(eval(await(await fetch(u)).text()))(u))('${url}')`
-          //? `node -e "(u=>fetch(u).then(r=>r.text().then(t=>eval(t)(u))))('${url}')"`
           ? `node -e "fetch('${url}').then(r=>r.text().then(t=>eval(t)(r)))"`
           : '-- loading --'
       })));
