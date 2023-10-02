@@ -1,4 +1,4 @@
-global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.axis1dItem'] = () => ({
+global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.axis1d.item'] = () => ({
   install: (real, layout, cleanupTmp) => {},
   render: (real, layout) => {
     

@@ -25,7 +25,6 @@ global.rooms['literature'] = async () => {
       let tmp = Tmp();
       tmp.endWith(experience.addCommandHandler('abcd', ({ ms, reply, road, msg, src }) => {
         
-        // HEEERE: Hit this with localhost/doc.abcd !!!!
         reply({ msg: 'HELLO' });
         
       }));

@@ -1,4 +1,4 @@
-global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBrowserHabitat', props: () => ({
+global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabitat', props: () => ({
   
   // TODO: All road names should be overridable - in fact if there are
   // multiple HtmlBrowserHabitat instances, no two should share a road
@@ -6,7 +6,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
   // for all road names, but "hutify" won't work if prefixed. Maybe the
   // best solution requires changing how the Hut form handles "hutify"
   
-  init({ prefix='html', name='hut', rootRoadSrcName='hutify', ...moreOpts }={}) {
+  init({ name='hut', ...moreOpts }={}) {
     
     // Consider prefixed Habitat command names vs. the initial request to `http://localhost`;
     // removing the prefix would mean no 2 habitats could support the same command names - e.g.
@@ -43,9 +43,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       multiUserSim,
       /// =ABOVE}
       
-      prefix,
-      name,
-      rootRoadSrcName,
+      name
       
     });
     
@@ -68,8 +66,23 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       'logic.Scope'
     ]);
     
-    // Omit "trn" to have it default to "anon" (cacheable)
-    cmd(this.rootRoadSrcName, async ({ src, reply, msg }) => {
+    // TODO: "hut:icon" and "hut:room" are GENERIC commands and should probably be implemented in
+    // "setup.hut" instead!
+    cmd('hut:icon', msg => msg.reply(keep('/[file:repo]/room/setup/asset/hut.ico')));
+    cmd('hut:room', async ({ src, reply, msg }) => {
+      
+      let room;
+      try         { room = token.dive(msg?.room); }
+      catch (err) { throw Error(`Api: invalid room name`).mod({ room: msg.room }); }
+      
+      try { reply(await getCmpKeep('below', room)); } catch (err) {
+        gsc(err.mod(msg => `Failed to get compiled keep: ${msg}`));
+        reply(`'use strict';global.rooms['${msg.room}']=()=>{throw Error('Api: no room named "${msg.room}"');}`);
+      }
+      
+    });
+    
+    cmd('hut:hutify', async ({ src, reply, msg }) => {
       
       // TODO: Useragent detection at this point could theoretically
       // replace the following content with a different html body that
@@ -83,7 +96,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       let initComm = src.consumePendingSync({ fromScratch: true });
       
       let roomScript = (room, loadType='async') => {
-        let src = uri({ path: `${this.prefix}.room`, query: { room } });
+        let src = uri({ path: `hut:room`, query: { room } });
         return `<script ${loadType} src="${src}" data-room="${room}"></script>`;
       };
       
@@ -108,7 +121,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
             <meta charset="utf-8">
             <title>${this.name.split('.').slice(-1)[0].upper()}</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <link rel="shortcut icon" type="image/x-icon" href="${uri({ path: this.prefix + '.icon' })}">
+            <link rel="shortcut icon" type="image/x-icon" href="${uri({ path: 'hut:icon' })}">
             <style>
               html, body, body * {
                 position: relative; display: flex;
@@ -139,7 +152,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
             
             ${preloadRooms.toArr(n => roomScript(n, 'async')).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
 
-            <link rel="stylesheet" type="text/css" href="${uri({ path: this.prefix + '.css' })}">
+            <link rel="stylesheet" type="text/css" href="${uri({ path: 'html:css' })}">
             
             <script>Object.assign(global,{rawConf:JSON.parse('${valToJson({
               
@@ -161,20 +174,8 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       `));
       
     });
-    cmd(`${this.prefix}.icon`, msg => msg.reply(keep('/[file:repo]/room/setup/asset/hut.ico')));
-    cmd(`${this.prefix}.room`, async ({ src, reply, msg }) => {
-      
-      let room;
-      try         { room = token.dive(msg?.room); }
-      catch (err) { throw Error(`Api: invalid room name`).mod({ room: msg.room }); }
-      
-      try { reply(await getCmpKeep('below', room)); } catch (err) {
-        gsc(err.mod(msg => `Failed to get compiled keep: ${msg}`));
-        reply(`'use strict';global.rooms['${msg.room}']=()=>{throw Error('Api: no room named "${msg.room}"');}`);
-      }
-      
-    });
-    cmd(`${this.prefix}.css`, async ({ src, reply, msg }) => {
+    
+    cmd(`html:css`, async ({ src, reply, msg }) => {
       
       reply(String.multiline(`
         @keyframes focusControl {
@@ -217,8 +218,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
       `));
       
     });
-    
-    this.multiUserSim && cmd(`${this.prefix}.multi`, async ({ src, reply, msg }) => {
+    this.multiUserSim && cmd('html:multi', async ({ src, reply, msg }) => {
       
       let { num='4', w='400', h='400', textSize='100%' } = msg;
       
@@ -244,7 +244,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
             <meta charset="utf-8">
             <title>${this.name.split('.').slice(-1)[0].upper()}</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <link rel="shortcut icon" type="image/x-icon" href="${uri({ path: this.prefix + '.icon' })}">
+            <link rel="shortcut icon" type="image/x-icon" href="${uri({ path: 'hut:icon' })}">
             <style>
               body, html { padding: 0; margin: 0; }
               body { margin: 2px; text-align: center; }

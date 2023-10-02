@@ -52,7 +52,7 @@ global.rooms[roomName] = () => then(getRoom('setup.hut.hinterland.RoadAuthority'
           
           let netTell = valToJson({ trn: 'async', hid: this.belowHut.hid, ...msg });
           let stuffHeader = netTell.length < 100 && Form.headerValueRegex.test(netTell);
-          let res = await fetch('/bp', {
+          let res = await fetch('/hut:bp', {
             method: 'POST',
             headers: stuffHeader
               ? { 'Content-Type': 'application/json; charset=utf-8', 'X-Hut-Msg': netTell }

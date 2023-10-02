@@ -622,7 +622,7 @@ global.rooms['collabowrite'] = async foundation => {
                 
                 if (votable) {
                   
-                  let voteAct = dep(hut.enableAction(`vote/${idea.uid}`, () => {
+                  let voteAct = dep(hut.enableAction(`vote.${idea.uid}`, () => {
                     hut.addRecord('vote', [ room, roomAccount, idea ]);
                   }));
                   dep(ideaReal.addReal('vote', [

@@ -90,7 +90,7 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
     let dive = token.dive(diveToken);
     let key = `/${dive.join('/')}`;
     let keep = global.keep.keeps.get(key);
-    if (!keep) global.keep.keeps.add(key, keep = HttpKeep(uri({ path: 'asset', query: { dive: key } })));
+    if (!keep) global.keep.keeps.add(key, keep = HttpKeep(uri({ path: 'hut:asset', query: { dive: key } })));
     return keep;
   }, { keeps: Map() });
   global.conf = (diveToken, def=null) => {
@@ -138,7 +138,7 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
         // attribute as they are always async
         script = document.createElement('script');
         script.setAttribute('type', 'text/javascript');
-        script.setAttribute('src', global.uri({ path: 'html.room', query: { type: 'room', room: name } }));
+        script.setAttribute('src', global.uri({ path: 'hut:room', query: { type: 'room', room: name } }));
         script.setAttribute('data-room', name);
         document.head.appendChild(script);
         

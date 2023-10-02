@@ -11,7 +11,7 @@ global.rooms['Hinterland'] = async () => {
     // Hinterland is the space in which multiple Huts interact according
     // to the rules of the AboveHut
     
-    $prefixer: (pfx, term) => term.has('.') ? term : `${pfx}.${term}`,
+    $prefixer: (pfx, term, delim='.') => term.has(delim) ? term : `${pfx}${delim}${term}`, // Note that (only) CommandHandlers use ":" as `delim` instead of "."
     $makeUtils: (prefix, hut, recMan, pfx=Form.prefixer.bound(prefix)) => ({
       
       // The Loft defined by `this.above` and `this.below` should be
@@ -63,7 +63,7 @@ global.rooms['Hinterland'] = async () => {
       // can be found on a Record!!
       
       addFormFn: (term, ...args) => recMan.addFormFn(pfx(term), ...args),
-      enableKeep: (term, keep) => hut.enableKeep(pfx(term), keep),
+      enableKeep: (term, keep) => hut.enableKeep(prefix, pfx(term), keep),
       getKeep: (diveToken) => {
         let pcs = token.dive(diveToken);
         let pfxDiveToken = [ '', pfx(pcs[0]), ...pcs.slice(1) ].join('/');
@@ -214,7 +214,7 @@ global.rooms['Hinterland'] = async () => {
           // the Chooser ends, causing `lofterExistsChooser.srcs.off` to trigger
           if (tmp.off() || lofterRh.off()) return;
           
-          let makeLofterAct = belowHut.enableAction(`${this.prefix}.makeLofter`, () => {
+          let makeLofterAct = belowHut.enableAction(`${this.prefix}:makeLofter`, () => {
             /// {ABOVE=
             // Allow multiple "makeLofter" requests - ignore if the Lofter exists already!
             if (lofterRh.hrecs.size) return;
@@ -260,7 +260,7 @@ global.rooms['Hinterland'] = async () => {
           record: loftRec,
           real: hinterlandReal,
           addPreloadRooms: hereHut.addPreloadRooms.bind(hereHut),
-          addCommandHandler: (command, fn) => hereHut.makeCommandHandler(pfx(command), fn),
+          addCommandHandler: (command, fn) => hereHut.makeCommandHandler(pfx(command, ':'), fn),
           ...utils
         }, dep);
       });
@@ -289,7 +289,7 @@ global.rooms['Hinterland'] = async () => {
             real: hinterlandReal,
             lofterRh: lofterRh,
             lofterRelHandler: lofterRh,
-            enableAction: (term, ...args) => belowHut.enableAction(pfx(term), ...args),
+            enableAction: (term, ...args) => belowHut.enableAction(pfx(term, ':'), ...args),
             ...Form.makeUtils(this.prefix, belowHut, recMan, pfx)
           }, dep);
         });
@@ -314,7 +314,7 @@ global.rooms['Hinterland'] = async () => {
           real: hinterlandReal,
           lofterRh: lofterRh,
           lofterRelHandler: lofterRh,
-          enableAction: (term, ...args) => hereHut.enableAction(pfx(term), ...args),
+          enableAction: (term, ...args) => hereHut.enableAction(pfx(term, ':'), ...args),
           ...utils
         }, dep);
       }));

@@ -50,8 +50,7 @@ global.rooms['setup.hut'] = async () => {
         `));
       /// =DEBUG}
       
-      let subconName = msg?.command.hasTail('.room') ? 'hut.comm.room' : 'hut.comm';
-      subcon(subconName)(() => ([{
+      subcon(msg?.command === 'hut:room' ? 'hut.comm.room' : 'hut.comm')(() => ([{
         src: src?.desc() ?? null,
         trg: trg.desc(),
         msg: hasForm(msg, Keep) ? msg.desc() : msg
@@ -132,7 +131,7 @@ global.rooms['setup.hut'] = async () => {
       
       // TODO: "bp" is taking on new meaning - really it's just a "dummy" Comm - in the context of
       // http, "dummy" can conveniently be used to denote "bank poll"
-      this.makeCommandHandler('bp', comm => { /* do nothing */ });
+      this.makeCommandHandler('hut:bp', comm => { /* do nothing */ });
       
     },
     desc() { return `${this.isHere ? 'Here' : 'Afar'}${forms.Record.desc.call(this)}`; },
@@ -142,7 +141,7 @@ global.rooms['setup.hut'] = async () => {
     
     getKnownNetAddrs() { throw Error('Not implemented'); },
     getBestRoadFor(trg) { throw Error('Not implemented'); },
-    getLoftPrefix() {
+    getDefaultLoftPrefix() {
       // Note that any `Hut(...).type.getPrefix()` will be "hut", which is totally unrelated to the
       // Loft that Hut is attached to - this method returns the prefix of the relevant Loft!
       throw Error('Not implemented');
@@ -334,7 +333,7 @@ global.rooms['setup.hut'] = async () => {
       }));
       
       /// {ABOVE=
-      this.makeCommandHandler('asset', async ({ src, msg: { dive: diveToken }, reply }) => {
+      this.makeCommandHandler('hut:asset', async ({ src, msg: { dive: diveToken }, reply }) => {
         
         // Expects `chain` to begin with an "Enabled Keep"
         
@@ -350,7 +349,7 @@ global.rooms['setup.hut'] = async () => {
       /// =ABOVE}
       
     },
-    getLoftPrefix() { return this.deployConf.loft.prefix; },
+    getDefaultLoftPrefix() { return this.deployConf.loft.prefix; },
     getBelowHutAndRoad({ roadAuth, trn, hid=null, params }) {
       
       // Returns a BelowHut with a Road for the given Authority
@@ -475,8 +474,7 @@ global.rooms['setup.hut'] = async () => {
     addPreloadRooms(deps) { for (let dep of deps) this.preloadRooms.add(dep); },
     enableKeep(term, keep) {
       
-      // Adds a Keep to `this.enabledKeeps`; this makes it available as
-      // AboveHuts expose such Keeps via a CommandHandler named "asset"
+      // Adds a Keep to `this.enabledKeeps` - exposes it via a CommandHandler named "asset"
       
       if (isForm(keep, String)) keep = global.keep(keep);
       
@@ -562,7 +560,7 @@ global.rooms['setup.hut'] = async () => {
       });
       
       /// {BELOW=
-      this.makeCommandHandler('sync', ({ src, msg, reply }) => {
+      this.makeCommandHandler('hut:sync', ({ src, msg, reply }) => {
         
         let err = Error('');
         try {
@@ -608,7 +606,7 @@ global.rooms['setup.hut'] = async () => {
       
     },
     
-    getLoftPrefix() { return this.aboveHut.getLoftPrefix(); },
+    getDefaultLoftPrefix() { return this.aboveHut.getDefaultLoftPrefix(); },
     
     getBestRoadFor(trg) {
       
@@ -912,7 +910,7 @@ global.rooms['setup.hut'] = async () => {
       let content = { add, upd, rem }.map(v => v.empty() ? skip : v);
       if (content.empty()) return null;
       
-      return { command: 'sync', v: this.syncTellVersion++, content };
+      return { command: 'hut:sync', v: this.syncTellVersion++, content };
       
     },
     strike() {
@@ -965,7 +963,7 @@ global.rooms['setup.hut'] = async () => {
         
         /// {BELOW=
         // HereBelowHuts send heartbeats to be kept alive by Above
-        if (this.isHere) this.tell({ trg: this.aboveHut, msg: { command: 'bp' } });
+        if (this.isHere) this.tell({ trg: this.aboveHut, msg: { command: 'hut:bp' } });
         /// =BELOW}
         
         /// {ABOVE=
