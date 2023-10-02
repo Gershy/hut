@@ -33,16 +33,16 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.text'] = () => ({
       textOverflow: 'ellipsis',
       
       // Convert hut-style Realism to css
-      textAlign: { fwd: 'left', bwd: 'right', mid: 'center', justify: 'justify' }[layout.align]
+      textAlign: { fwd: 'left', bwd: 'right', mid: 'center', fit: 'justify' }[layout.align]
       
     });
     
     // TODO: This is really more "anchoring" than "alignment"
     Object.assign(span.style, {
-      fwd:     { textAlign: 'left',   marginRight: 'auto', marginBottom: 'auto' },
-      bwd:     { textAlign: 'right',  marginLeft: 'auto', marginBottom: 'auto' },
-      mid:     { textAlign: 'center', margin: 'auto' },
-      justify: { textAlign: 'center', margin: 'auto' },
+      fwd: { textAlign: 'left',   marginRight: 'auto', marginBottom: 'auto' },
+      bwd: { textAlign: 'right',  marginLeft: 'auto', marginBottom: 'auto' },
+      mid: { textAlign: 'center', margin: 'auto' },
+      fit: { textAlign: 'center', margin: 'auto' },
     }[layout.align]);
     
     let { h, v, line } = layout.spacing;

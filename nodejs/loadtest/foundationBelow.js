@@ -221,6 +221,7 @@ let makeIpcServer = ({ aboveHut, belowHut, procConnectedToAbove }) => {
   
   let server = makeIpcServer({ aboveHut, belowHut, procConnectedToAbove: process });
   server.src.route(session => {
+    // TODO: `seenOnRoad` no longer exists!! Use `getBelowHutAndRoad` instead??
     belowHut.seenOnRoad(server, session);
     session.hear.route(({ ms, msg }) => {
       aboveHut.tell({ trg: belowHut, road: session, ms, msg });

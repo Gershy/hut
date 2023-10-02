@@ -46,9 +46,16 @@ global.rooms['promo.hut.install'] = async (installKeep) => {
       
       let deploy = conf('deploy').find(deploy => deploy.loft.name === 'promo.hut.install').val;
       let { host: { netIden, netAddr, protocols } } = deploy;
-      let { port, compression } = protocols.find(p => p.name === 'http').val;
       
-      let url = `http${netIden.secureBits ? 's' : ''}://${netAddr}:${port}/${experience.pfx}.js`;
+      // TODO: Support anything other than http?? Maybe consider all available protocols and rank
+      // them in some order of accessibility
+      let { port } = protocols.find(p => p.name === 'http').val;
+      
+      let protocol = `http${netIden.secureBits ? 's' : ''}`;
+      let isDefaultPort = (protocol === 'https' && port === 443) || (protocol === 'http' && port === 80);
+      let url = isDefaultPort
+        ? `${protocol}://${netAddr}/${experience.pfx}.js`
+        : `${protocol}://${netAddr}:${port}/${experience.pfx}.js`;
       install.setValue(url);
       /// =ABOVE}
       
@@ -69,12 +76,11 @@ global.rooms['promo.hut.install'] = async (installKeep) => {
         Geom: { w: '100%', h: '92%', x: '0', y: '-4%' },
         Axis1d: { axis: 'y', dir: '+', mode: 'compactCenter' }
       }));
-      stlReal.addReal('title', { text: 'Hut Installation',                  Text: { size: textSizes[0] } });
-      stlReal.addReal('step1', { text: '1. Install Nodejs (18.0.0 and up)', Text: { size: textSizes[1] } });
-      stlReal.addReal('step2', { text: '2. Navigate to desired parent dir', Text: { size: textSizes[1] } });
-      stlReal.addReal('step3', { text: '3. Paste into your terminal:',      Text: { size: textSizes[1] } });
+      stlReal.addReal('title', { Text: { size: textSizes[0] }, text: 'Hut Installation'                  });
+      stlReal.addReal('step1', { Text: { size: textSizes[1] }, text: '1. Install Nodejs (18.0.0 and up)' });
+      stlReal.addReal('step2', { Text: { size: textSizes[1] }, text: '2. Navigate to desired parent dir' });
+      stlReal.addReal('step3', { Text: { size: textSizes[1] }, text: '3. Paste into your terminal:'      });
       stlReal.addReal('reminder', {
-        Geom: { w: 'calc(70vmin + 30vmax)' },
         Text: { size: textSizes[3], spacing: { v: '0.4vh' } },
         text: '(Always verify wild code before running!)'
       });
@@ -84,9 +90,8 @@ global.rooms['promo.hut.install'] = async (installKeep) => {
         Press: { flat: false, pressFn: async () => clipboard.set(textReal) }
       });
       stlReal.addReal('reminder', {
-        Geom: { w: 'calc(70vmin + 30vmax)' },
         Text: { size: textSizes[3], spacing: { v: '0.4vh' } },
-        text: 'This downloads and runs a js script downloading everything you need to use Hut!'
+        text: 'This gets and runs a js script which gets everything you need to use Hut!'
       });
       
       dep(install.valueSrc.route(url => textReal.mod({

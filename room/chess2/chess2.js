@@ -26,10 +26,8 @@ global.rooms['chess2'] = async chess2Keep => {
   let pieceStyle = 'classic';
   let layoutStyle = 'classic';
   let moveMs = (isDev ? 13 : 60) * 1000;
-  let enterMs = (isDev ? 0.1 : 2) * 1000;
   let matchmakeMs = (isDev ? 1 : 5) * 1000;
-  let tsM2 = 'calc(70% + 0.78vmin)';
-  let tsM1 = 'calc(75% + 0.82vmin)';
+  let tsM1 = 'calc(70% + 0.78vmin)';
   let ts00 = 'calc(80% + 0.85vmin)';
   let tsP1 = 'calc(90% + 1.00vmin)';
   let lay = {
@@ -634,7 +632,7 @@ global.rooms['chess2'] = async chess2Keep => {
         }));
         
         lofterlessReal.addReal('title', lay.text('Entering Chess2...', tsP1));
-        lofterlessReal.addReal('title', lay.link('(Stuck? Try clicking here...)', '/?hid=reset', { mode: 'replace', size: tsM2 }));
+        lofterlessReal.addReal('title', lay.link('(Stuck? Try clicking here...)', '/?hid=reset', { mode: 'replace', size: tsM1 }));
         /// =BELOW}
         
       };
@@ -653,7 +651,7 @@ global.rooms['chess2'] = async chess2Keep => {
         chillReal.addReal('queue', lay.button('Find a match!', () => changeStatusAct.act({ status: 'queue' })));
         chillReal.addReal('learn', lay.button('How to play', () => changeStatusAct.act({ status: 'learn' })));
         chillReal.addReal('gap', lay.gap());
-        chillReal.addReal('item', lay.text('(Chess2 is in beta and improving!)', tsM2));
+        chillReal.addReal('item', lay.text('(Chess2 is in beta and improving!)', tsM1));
         
         let numLoftersSrc = dep(chess2.getValuePropSrc('numLofters'));
         dep(numLoftersSrc.route(num => numLoftersReal.mod({ text: `Players online: ${num}` })));
@@ -688,7 +686,7 @@ global.rooms['chess2'] = async chess2Keep => {
         learnReal.addReal('item', lay.textFwd('- If both players pass simultaneously the game ends in a draw'));
         learnReal.addReal('item', lay.gap());
         learnReal.addReal('item', lay.text('Chess2 by Gershom Maes'));
-        learnReal.addReal('item', lay.link('(Hut framework also by Gershom Maes)', 'https://github.com/Gershy/hut', { size: tsM2 }));
+        learnReal.addReal('item', lay.link('(Hut framework also by Gershom Maes)', 'https://github.com/Gershy/hut', { size: tsM1 }));
         learnReal.addReal('item', lay.gap());
         learnReal.addReal('item', lay.button('Go back', () => changeStatusAct.act({ status: 'chill' })));
         learnReal.addReal('item', lay.gap('3em'));

@@ -257,10 +257,8 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
         
       },
       getLayoutTech: name => {
-        let [ pc0, ...pcs ] = name.split(/[.$]/);
-        name = pc0[0].lower() + pc0.slice(1);
-        name += pcs.map(pc => pc[0].upper() + pc.slice(1)).join('');
-        return getRoom(`${hutifyPath}.layoutTech.${name}`)
+        let pcs = name.split(/[.$]/).map(cmp => cmp[0].lower() + cmp.slice(1));
+        return getRoom(`${hutifyPath}.layoutTech.${pcs.join('.')}`);
       }
     };
     let body = document.body;
@@ -287,7 +285,7 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
           if (!isForm(val, String)) throw Error('Api: value must resolve to String').mod({ val });
           /// =DEBUG}
           
-          return clipboard.writeText(val.trim()).then(() => true, err => false);
+          return clipboard.writeText(val.trim()).then(() => true, () => false);
         },
         get: () => clipboard.readText()
       }

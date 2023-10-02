@@ -43,7 +43,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.textInput'] = () => (
       fontStyle: layout.style.has('italic') ? 'italic' : '',
       
       // Convert hut-style Realism to css
-      textAlign: { fwd: 'left', bwd: 'right', mid: 'center', justify: 'justify' }[layout.align]
+      textAlign: { fwd: 'left', bwd: 'right', mid: 'center', fit: 'justify' }[layout.align]
       
     });
     

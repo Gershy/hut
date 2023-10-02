@@ -24,8 +24,8 @@ global.rooms['reality.layout.Axis1d'] = async () => {
       return tmp;
     },
     
-    $Item: form({ name: 'Axis1d.Item', has: { Layout }, props: (forms, Axis1d$Item) => ({
-      init(axis1d) { this.axis1d = axis1d; },
+    $Item: form({ name: 'Axis1d.Item', has: { Layout }, props: (forms, Form) => ({
+      init(axis1d) { Object.assign(this, { axis1d }); },
       install(real) {
         let tmp = Tmp();
         let { mode, axis } = this.axis1d;

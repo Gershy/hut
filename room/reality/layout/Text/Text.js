@@ -4,7 +4,7 @@ global.rooms['reality.layout.Text'] = async () => {
   return form({ name: 'Text', has: { Layout }, props: (forms, Form) => ({
     
     /// {DEBUG=
-    $alignOpts: 'fwd,bwd,mid,justify'.split(','),
+    $alignOpts: 'fwd,bwd,mid,fit'.split(','), /* "fit" = "justify" */
     $styleOpts: 'bold,italic'.split(','),
     /// =DEBUG}
     

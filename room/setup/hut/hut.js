@@ -142,6 +142,11 @@ global.rooms['setup.hut'] = async () => {
     
     getKnownNetAddrs() { throw Error('Not implemented'); },
     getBestRoadFor(trg) { throw Error('Not implemented'); },
+    getLoftPrefix() {
+      // Note that any `Hut(...).type.getPrefix()` will be "hut", which is totally unrelated to the
+      // Loft that Hut is attached to - this method returns the prefix of the relevant Loft!
+      throw Error('Not implemented');
+    },
     
     enableAction(command, fn) {
       
@@ -298,7 +303,10 @@ global.rooms['setup.hut'] = async () => {
             heartbeatMs: this.deployConf.host.heartbeatMs,
             protocols: this.deployConf.host.protocols
           },
-          loft: this.deployConf.loft
+          loft: {
+            prefix: this.deployConf.loft.prefix,
+            name: this.deployConf.loft.name
+          }
         }
         
       };
@@ -342,6 +350,7 @@ global.rooms['setup.hut'] = async () => {
       /// =ABOVE}
       
     },
+    getLoftPrefix() { return this.deployConf.loft.prefix; },
     getBelowHutAndRoad({ roadAuth, trn, hid=null, params }) {
       
       // Returns a BelowHut with a Road for the given Authority
@@ -598,37 +607,9 @@ global.rooms['setup.hut'] = async () => {
       /// =BELOW}
       
     },
-        
-    seenOnRoad(server, road) {
-      
-      if (!server) throw Error(`Api: must supply "server"`);
-      if (!road) throw Error(`Api: must supply "road"`);
-      
-      if (!this.roads.has(server)) {
-        
-        // Add the Road; if all Roads end the Hut ends too
-        this.roads.add(server, road);
-        road.endWith(() => {
-          this.roads.rem(server);
-          if (this.roads.empty()) this.end();
-        });
-        
-        /// {ABOVE=
-        // If this is the 1st Road for this BelowHut init a "hut.owned"
-        // relationship BelowHut and AboveHut; note this relationship is
-        // only initiated ABOVE, as BELOW the relationship is synced
-        // from ABOVE
-        if (this.roads.size === 1) this.aboveHut.type.manager.addRecord({
-          type: 'hut.owned',
-          group: { above: this.aboveHut, below: this },
-          uid: `!owned@${this.aboveHut.hid}@${this.hid}`
-        });
-        /// =ABOVE}
-        
-      }
-      if (this.roads.get(server) !== road) throw Error(`Api: duplicate road for "${server.desc()}"`);
-      
-    },
+    
+    getLoftPrefix() { return this.aboveHut.getLoftPrefix(); },
+    
     getBestRoadFor(trg) {
       
       /// {DEBUG=

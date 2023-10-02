@@ -183,6 +183,18 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         
       }
       
+      if (isForm(val?.desc, Function)) {
+        
+        try {
+          let str = ansi(val.desc(), 'blue');
+          seen.set(val, str);
+          return str;
+        } catch (err) {
+          // Ignore any errors from calling `val.desc`
+        }
+        
+      }
+      
       if (isForm(val, Object)) {
         
         if (val.empty()) return bold('{}');
@@ -243,14 +255,6 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           
         })();
         
-        seen.set(val, str);
-        return str;
-        
-      }
-      
-      if (isForm(val?.desc, Function)) {
-        
-        let str = ansi(val.desc(), 'blue');
         seen.set(val, str);
         return str;
         
@@ -324,7 +328,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     let rootFsKeep = FsKeep(rootTrn, Filepath([]));
     let hutKeep = await hutKeepPrm;
     let millKeep = hutKeep.seek('mill');
-    hutKeep.forbid = { mill: 1, '.git': 1, '.gitignore': 1 };
+    hutKeep.forbid = { mill: 1, '.git': 1 };
     
     let rootKeep = RootKeep({
       

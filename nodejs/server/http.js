@@ -87,15 +87,19 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       // - `msg.trn` defaults to "anon"
       // - if `msg.command === 'hutify'`, `msg.trn` is set to "sync"
       let msg = {
-        hid: null, command: path || 'hutify', trn: 'anon',
-        path, fragment,
+        hid: null, trn: 'anon', command: path || 'hutify',
+        // path, // TODO: consider including `path`?? Or simply interpret it to a command?
+        // fragment, // TODO: consider including `fragment`?? But do browsers ever send it??
         // Note that `query` needs to take priority over `hutCookie` - otherwise a client with a
         // cookie set won't be able to simply spoof their hid via the query
         // TODO: What about the rest of `cookie`? We ignore everything but `cookie.hut`
         ...hutCookie, ...query, ...body
       };
-      if (msg.command === 'favicon.ico') msg.command = 'html.icon'; // TODO: Breaks if the prefix isn't "html" - consider `this.aboveHut.type.getPrefix()`
+      
+      if (msg.command === 'favicon.ico') msg.command = 'icon';
       if (msg.command === 'hutify') msg.trn = 'sync';
+      
+      if (!msg.command.has('.')) msg.command = `${this.aboveHut.getLoftPrefix()}.${msg.command}`;
       
       // These can't be confined to DEBUG blocks - Server must always be
       // wary of malformatted remote queries!
@@ -443,8 +447,8 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         
         // STEP 3: URL
         
-        // Note: browsers may not send the fragment to the server even if it shows in the url bar
-        // Slice "/" off path, "?" off query and "#" off fragment
+        // Note: browsers may not send the fragment to the server even if it shows in the url bar!
+        // Need to slice leading "/" off path, leading "?" off query and leading "#" off fragment
         let [ , path, query='', fragment='' ] = req.url.match(/^([/][^?#]*)([?][^#]*)?([#].*)?$/);
         [ path, query, fragment ] = [ path, query, fragment ].map(v => v.slice(1));
         
