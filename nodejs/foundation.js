@@ -1389,10 +1389,10 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       
       roomDive = token.dive(roomDive);
       
-      let cmpKeep = keep([ 'file:code:cmp', bearing, ...roomDive, `${roomDive.at(-1)}.js` ]);
+      let cmpKeep = keep([ '[file:code:cmp]', bearing, ...roomDive, `${roomDive.at(-1)}.js` ]);
       if (await cmpKeep.exists()) return cmpKeep;
       
-      let srcKeep = keep([ 'file:code:src', ...roomDive, `${roomDive.at(-1)}.js` ]);
+      let srcKeep = keep([ '[file:code:src]', ...roomDive, `${roomDive.at(-1)}.js` ]);
       let { lines, offsets } = await getCmpCode(srcKeep, {
         above: [ 'above', 'between' ].has(bearing),
         below: [ 'below', 'between' ].has(bearing)

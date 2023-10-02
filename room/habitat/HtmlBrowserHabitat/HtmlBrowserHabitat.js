@@ -8,6 +8,30 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
   
   init({ prefix='html', name='hut', rootRoadSrcName='hutify', ...moreOpts }={}) {
     
+    // Consider prefixed Habitat command names vs. the initial request to `http://localhost`;
+    // removing the prefix would mean no 2 habitats could support the same command names - e.g.
+    // "icon" could not be supported by both HtmlBrowserHabitat and TerminalHabitat. Really, such
+    // a Command should be generic anyways - it just serves the binary composing the icon, and
+    // should theoretically be completely agnostic of the client. I think there are three cases to
+    // consider if the Commands of Habitats are going to be refactored:
+    // 1. "Habitat-Specific Commands" - this would include the "html.css" command, which only has
+    //    meaning to a client which can render css
+    // 2. "Habitat-Generic Commands" - this includes "html.icon" and "html.room"; any Habitat will
+    //    need to serve the binary of its corresponding icon, and js code defining the Room (even
+    //    the functionality to convert invalid room requests to valid json responses, but which
+    //    throw the relevant Error, could be considered generic behaviour)
+    // 3. "Initializer Commands" - these need to be invoked by a totally uninitiated client who
+    //    knows nothing other than the server running Hut; such clients cannot be expected to
+    //    provide any info about which Habitat they are using (e.g. initial requests from Browser
+    //    and Terminal Habitats will both simply be unqualified requests for the domain) - somehow
+    //    the server or the Hut (preferrably the Hut?) will need to decide which Habitat to use in
+    //    case multiple Habitats are supported and the client request is unqualified!
+    // 
+    // Note that currently, only the "hutify" command is un-prefixed; the HtmlBrowserHabitat will
+    // always try to include it on the AboveHut; if some other Habitat has already included it, the
+    // attempt will simply fail and completely crash. Note that some ideally "generic" Commands are
+    // set up using the overly-specific "html" prefix.
+    
     /// {ABOVE=
     let { multiUserSim=null } = moreOpts;
     if (multiUserSim === null) multiUserSim = conf('global.maturity') === 'dev';
@@ -139,9 +163,6 @@ global.rooms['habitat.HtmlBrowserHabitat'] = foundation => form({ name: 'HtmlBro
     });
     cmd(`${this.prefix}.icon`, msg => msg.reply(keep('/[file:repo]/room/setup/asset/hut.ico')));
     cmd(`${this.prefix}.room`, async ({ src, reply, msg }) => {
-      
-      // TODO: Watch out for traversal with room name??
-      // TODO: Parameterize debug??
       
       let room;
       try         { room = token.dive(msg?.room); }
