@@ -63,7 +63,7 @@ global.rooms['Hinterland'] = async () => {
       // can be found on a Record!!
       
       addFormFn: (term, ...args) => recMan.addFormFn(pfx(term), ...args),
-      enableKeep: (term, keep) => hut.enableKeep(prefix, pfx(term), keep),
+      enableKeep: (term, keep) => hut.enableKeep(pfx(term), keep),
       getKeep: (diveToken) => {
         let pcs = token.dive(diveToken);
         let pfxDiveToken = [ '', pfx(pcs[0]), ...pcs.slice(1) ].join('/');
