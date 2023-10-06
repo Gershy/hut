@@ -32,7 +32,7 @@ let Filepath = form({ name: 'Filepath', props: (forms, Form) => ({
       .flat(1)                         // Finally flatten into flat list of components
       
     let illegalCmp = vals.find(val => Form.filteredComponentRegex.test(val)).val;
-    if (illegalCmp) throw Error(`Illegal file component provided`).mod({ illegalCmp });
+    if (illegalCmp) throw Error('Api: illegal file component provided').mod({ illegalCmp });
     
     // Use `path.resolve`; first component being "/" ensures working
     // directory is always ignored; final result is split by "/" and "\"
@@ -60,7 +60,7 @@ let Filepath = form({ name: 'Filepath', props: (forms, Form) => ({
     if (!this.fspVal) {
       let fspVal = this.path.resolve('/', ...this.cmps);
       /// {ASSERT=
-      if (!/^([A-Z]+[:])?[/\\]/.test(fspVal)) throw Error(`${this.desc()} path doesn't start with optional drive indicator (e.g. "C:") followed by "/" or "\\"`).mod({ fsp: fspVal });
+      if (!/^([A-Z]+[:])?[/\\]/.test(fspVal)) throw Error('Api: path doesn\'t start with optional drive indicator (e.g. "C:") followed by "/" or "\\"').mod({ fp: this, fsp: fspVal });
       /// =ASSERT}
       this.fspVal = fspVal;
     }
@@ -70,7 +70,7 @@ let Filepath = form({ name: 'Filepath', props: (forms, Form) => ({
   * getLineage(fp) {
     
     // Yield every Filepath from `this` up to (excluding) `fp`
-    if (!this.contains(fp)) throw Error('Provided Filepath isn\'t a child');
+    if (!this.contains(fp)) throw Error('Api: provided Filepath isn\'t a child');
     
     let ptr = this;
     while (!ptr.equals(fp)) {
@@ -112,7 +112,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     if (stat.isFile())      return 'leaf';
     if (stat.isDirectory()) return 'node';
     
-    throw Error(`Unexpected filesystem entity`).mod({ stat });
+    throw Error('Api: unexpected filesystem entity').mod({ stat });
     
   },
   async xSwapLeafToNode(fp, { tmpCmp=`~${getUid()}` }={}) {
@@ -156,9 +156,9 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
   },
   
   checkFp(fp) {
-    if (!isForm(fp, Filepath)) throw Error(`Must provide Filepath (got ${getFormName(fp)})`);
-    if (!this.fp.contains(fp)) throw Error(`Fp ${fp.desc()} is outside ${this.desc()}`);
-    if (fp.cmps.any(cmp => cmp === '~')) throw Error(`${fp.desc()} includes "~" component`);
+    if (!isForm(fp, Filepath)) throw Error(`Api: fp must be Filepath; got ${getFormName(fp)})`);
+    if (!this.fp.contains(fp)) throw Error('Api: fp is not contained within the transaction').mod({ fp, trn: this });
+    if (fp.cmps.any(cmp => cmp === '~')) throw Error('Api: fp must not contain "~" component').mod({ fp });
   },
   locksCollide(lock0, lock1) {
     
@@ -200,16 +200,18 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     
     if (collTypeKey === 'subtreeWrite/subtreeWrite') {
       
+      // Conflict if either node contains the other; at first this intuitively feels like subtree
+      // writes will almost always lock each other out, but this intuition is wrong!
       return lock0.fp.contains(lock1.fp) || lock1.fp.contains(lock0.fp);
       
     }
     
-    throw Error(`Collision type "${collTypeKey}" not implemented`);
+    throw Error(`Api: collision type "${collTypeKey}" not implemented`);
     
   },
   async doLocked({ name='?', locks=[], fn }) {
     
-    if (!locks.length) throw Error(`Provide at least one Lock`);
+    if (!locks.length) throw Error('Api: provide at least one Lock');
     for (let lock of locks) if (!lock.has('prm')) lock.prm = Promise.later();
     
     // Collect all pre-existing locks that collide with any of the locks
@@ -722,7 +724,7 @@ module.exports = {
     let testFp = Filepath(__dirname).par(1).kid([ 'mill', 'mud' ]);
     let trn = FilesysTransaction(testFp);
     let sanitySize = Math.round(300 * sanityMult);
-    if (sanitySize < 3) throw Error(`Sanity mult is too low`);
+    if (sanitySize < 3) throw Error('Api: sanity mult is too low');
     
     try {
       
@@ -779,16 +781,16 @@ module.exports = {
             
             try {
               let fsp = Filepath(inp, path).fsp();
-              throw Error(`Case was meant to fail`).mod({ name, inp, exp, fsp });
+              throw Error('Case was meant to fail').mod({ name, inp, exp, fsp });
             } catch (err) {
-              if (!exp.test(err.message)) throw Error(`Failure expected, but unexpected error message`).mod({ name, inp, errMsg: err.message, exp });
+              if (!exp.test(err.message)) throw Error('Failure expected, but unexpected error message').mod({ name, inp, errMsg: err.message, exp });
               continue;
             }
             
           } else {
             
             let fsp = Filepath(inp, path).fsp();
-            if (fsp !== exp) throw Error(`Failed`).mod({ name, inp, exp, fsp });
+            if (fsp !== exp) throw Error('Failed').mod({ name, inp, exp, fsp });
             
           }
           

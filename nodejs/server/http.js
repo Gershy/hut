@@ -213,7 +213,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         this.sc(() => ({ event: 'kill', id: this.context.id, err, res: { code, headers, msg } }));
         
         if (errs.empty()) return;
-        this.sc.kid('err')(`Errors while killing response`, {
+        this.sc.kid('err')('Errors while killing response', {
           id: this.context.id,
           res: { code, headers, msg },
           errs: errs.map(err => {
@@ -275,7 +275,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         }
         
         /// {DEBUG=
-        if (!keep && ![ String, Buffer ].some(F => isForm(msg, F))) throw Error(`Message must resolve to Keep, String, or Buffer`);
+        if (!keep && ![ String, Buffer ].some(F => isForm(msg, F))) throw Error('Api: message must resolve to Keep, String, or Buffer');
         /// =DEBUG}
         
         // Only try to encode if the value isn't precompressed, there are
@@ -331,7 +331,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         };
         
         let timeout = setTimeout(() => {
-          gsc.kid('error')(`Stream timed out before reply`);
+          gsc.kid('error')('Stream timed out before reply');
           this.kill({ code: 500, msg: 'Api: sorry - experiencing issues' });
         }, 5000); // Stream needs to complete in 5000ms
         

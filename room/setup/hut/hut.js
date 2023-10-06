@@ -1,4 +1,5 @@
 /// <reference path="./../../../ts/hut.d.ts"/>
+
 global.rooms['setup.hut'] = async () => {
   
   let { Record } = await getRoom('record');
@@ -335,12 +336,15 @@ global.rooms['setup.hut'] = async () => {
       /// {ABOVE=
       this.makeCommandHandler('hut:asset', async ({ src, msg: { dive: diveToken }, reply }) => {
         
-        // Expects `chain` to begin with an "Enabled Keep"
+        // First component of `dive` must be the namespace
+        // Second component must be the "enabled Keep term" (same term provided to `enableKeep`)
+        // The rest of the components initiate a dive from that enable Keep
         
         let dive = token.dive(diveToken);
         
-        let [ term, ...innerDive ] = dive;
-        let keep = this.enabledKeeps.get(term)?.seek(innerDive) ?? null;
+        // Handle namespaced assets by treating the first component as the prefix
+        let [ pfx, term, ...innerDive ] = dive;
+        let keep = this.enabledKeeps.get(`${pfx}:${term}`)?.seek(innerDive) ?? null;
         if (!await keep?.exists()) throw Error(`Api: invalid asset chain`).mod({ dive: diveToken });
         
         reply(keep);
@@ -472,9 +476,11 @@ global.rooms['setup.hut'] = async () => {
       
     },
     addPreloadRooms(deps) { for (let dep of deps) this.preloadRooms.add(dep); },
-    enableKeep(term, keep) {
+    enableKeep(prefix, term, keep) {
       
       // Adds a Keep to `this.enabledKeeps` - exposes it via a CommandHandler named "asset"
+      
+      let pfxTerm = `${prefix}:${term}`;
       
       if (isForm(keep, String)) keep = global.keep(keep);
       
@@ -483,9 +489,9 @@ global.rooms['setup.hut'] = async () => {
       if (!isForm(term, String)) throw Error(`Api: "term" must be String; got ${getFormName(term)}`);
       /// =DEBUG}
       
-      if (this.enabledKeeps.has(term)) throw Error(`Api: already enabled Keep termed "${term}"`);
-      this.enabledKeeps.add(term, keep);
-      return Tmp(() => this.enabledKeeps.rem(term));
+      if (this.enabledKeeps.has(pfxTerm)) throw Error(`Api: already enabled Keep termed "${pfxTerm}"`);
+      this.enabledKeeps.add(pfxTerm, keep);
+      return Tmp(() => this.enabledKeeps.rem(pfxTerm));
       
     },
     /// =ABOVE}
@@ -919,11 +925,14 @@ global.rooms['setup.hut'] = async () => {
     
     /// =ABOVE}
     
-    getKeep(diveToken) {
+    getKeep(prefix, diveToken) {
       
       let dive = token.dive(diveToken);
+      
+      gsc({ dive });
+      
       /// {BELOW=
-      return global.keep(dive);
+      return global.keep([ prefix, ...dive ]);
       /// =BELOW} {ABOVE=
       return this.aboveHut.enabledKeeps.get(dive[0]).seek(dive.slice(1));
       /// =ABOVE}

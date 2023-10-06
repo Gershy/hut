@@ -49,7 +49,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
     
   },
   
-  async prepare(hut) {
+  prepare(hut) {
     
     /// {ABOVE=
     
@@ -73,7 +73,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
       
       let room;
       try         { room = token.dive(msg?.room); }
-      catch (err) { throw Error(`Api: invalid room name`).mod({ room: msg.room }); }
+      catch (err) { throw Error('Api: invalid room name').mod({ room: msg.room }); }
       
       try { reply(await getCmpKeep('below', room)); } catch (err) {
         gsc(err.mod(msg => `Failed to get compiled keep: ${msg}`));
@@ -82,6 +82,9 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
       
     });
     
+    // TODO: Need to use the "hut" namespace because the nodejs http server makes "hut:hutify" the
+    // default command if none is detected in the http request (which is always the case for any
+    // user freshly navigating to the site!)
     cmd('hut:hutify', async ({ src, reply, msg }) => {
       
       // TODO: Useragent detection at this point could theoretically
@@ -96,7 +99,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
       let initComm = src.consumePendingSync({ fromScratch: true });
       
       let roomScript = (room, loadType='async') => {
-        let src = uri({ path: `hut:room`, query: { room } });
+        let src = uri({ path: 'hut:room', query: { room } });
         return `<script ${loadType} src="${src}" data-room="${room}"></script>`;
       };
       
@@ -175,7 +178,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
       
     });
     
-    cmd(`html:css`, async ({ src, reply, msg }) => {
+    cmd('html:css', async ({ src, reply, msg }) => {
       
       reply(String.multiline(`
         @keyframes focusControl {

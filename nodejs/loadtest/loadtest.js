@@ -3,7 +3,7 @@
 require('../../room/setup/clearing/clearing.js');
 
 // Requires "dev" maturity because needs to supply own hut id
-if (conf('global.maturity') !== 'dev') throw Error(`Api: "loadtest" feature requires "global.maturity" to be "dev"`);
+if (conf('global.maturity') !== 'dev') throw Error('Api: "loadtest" feature requires "global.maturity" to be "dev"');
 
 let cp = require('child_process');
 let path = require('path');
@@ -115,8 +115,8 @@ let makeServer = ({ getSessionKey }) => {
   };
   
   let tmp = Tmp({
-    desc: () => `ipc://localhost:0`,
-    protocol: 'ipc', netProc: `localhost:0`, netAddr: 'localhost', port: 0,
+    desc: () => 'ipc://localhost:0',
+    protocol: 'ipc', netProc: 'localhost:0', netAddr: 'localhost', port: 0,
     makeSession, serverOpen, serverShut,
     src: Src(), // Sends `session` Objects
     server: null,

@@ -88,11 +88,11 @@ global.rooms['hasten'] = async foundation => {
           
           let run = {
             makeUser: a => a.act(),
-            renameUser: a => a.act({ name: `TAS` }),
+            renameUser: a => a.act({ name: 'TAS' }),
             confirmUser: a => a.act(),
             joinTeam: a => a.act({ code: '' }),
             toggleTeamStatus: a => a.act(),
-            submitTeamMessage: a => a.act({ text: `TAS BOI` }),
+            submitTeamMessage: a => a.act({ text: 'TAS BOI' }),
             makeWorld: a => a.act()
           }[act.name.split('.')[1]];
           

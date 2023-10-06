@@ -334,7 +334,7 @@ global.rooms['collabowrite'] = async foundation => {
             
             args = { ...makeRoomFields.map(v => v.def), ...args };
             
-            if (!args.name) throw Error(`"name" is required`);
+            if (!args.name) throw Error('Api: "name" is required');
             if (!args.desc) args.desc = '<no description>';
             
             let room = hut.addRecord('room', { cw, creator: persona.m('account') }, {
@@ -531,7 +531,7 @@ global.rooms['collabowrite'] = async foundation => {
             let ideaChooser = dep(Chooser.noneOrSome(ideaRh));
             dep.scp(ideaChooser.srcs.off, (noIdea, dep) => {
               
-              let submitAction = dep(hut.enableAction(`submit`, ({ text }) => {
+              let submitAction = dep(hut.enableAction('submit', ({ text }) => {
                 hut.addRecord('idea', [ room, roomAccount ], text);
               }));
               

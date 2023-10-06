@@ -113,8 +113,8 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
     args = args.map(arg => isForm(arg, Function) ? arg() : arg).sift();
     if (!args.length) return;
     console.log(
-      `%c${getDate().padTail(80, ' ')}\n${sc.term.padTail(80, ' ')}`,
-      'background-color: rgba(0, 0, 0, 0.2);',
+      `%c${getDate().padTail(60, ' ')}\n${('[' + sc.term + ']').padTail(60, ' ')}`,
+      'background-color: #dadada;font-weight: bold;',
     );
     console.log(...args.map(a => isForm(a?.desc, Function) ? a.desc() : a));
     
@@ -125,7 +125,7 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
     return thenAll(names.toObj(name => {
       
       /// {DEBUG=
-      if (!name) throw err.mod({ msg: `A name was null` });
+      if (!name) throw err.mod({ msg: 'Api: null room name' });
       /// =DEBUG}
       
       // Deferred rooms embedded in initial html don't emit "load" event
@@ -301,7 +301,7 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
     
     // TODO: Support multiple tabs! (Probably with a SharedWorker)
     let { localStorage: storage } = window;
-    if (!storage) throw Error(`No "localStorage" available`);
+    if (!storage) throw Error('Api: no localStorage available');
     
     // Set our view under the hid; end this Foundation if the value ever
     // changes (indicating another Foundation has taken over)
@@ -397,7 +397,7 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   let initComm = conf('initComm');
   if (initComm) belowHut.processCommand({ src: aboveHut, msg: initComm });
   
-  await loft.open({ sc: global.subcon('loft'), hereHut: belowHut, rec: aboveHut });
+  await loft.open({ sc: global.subcon('loft'), prefix: conf('deploy.loft.prefix'), hereHut: belowHut, rec: aboveHut });
   
   gsc(`Loft opened after ${(getMs() - performance.timeOrigin).toFixed(2)}ms`);
   

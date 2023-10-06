@@ -22,6 +22,7 @@ let processExitSrc = Src();
     
     let err = Error(`Process explicitly exited (${code})`);
     processExitSrc.route(() => gsc(err));
+    processExitSrc.route(() => process.stdout.write('\u001b[0m'));
     return process.exitNow(code);
   };
   
@@ -359,7 +360,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       global.conf = (diveToken, def='TODOhijklmno') => {
         
         let v = token.diveOn(diveToken, globalConf, def).val;
-        if (v === 'TODOhijklmno') throw Error(`Api: bad conf dive token`).mod({ diveToken });
+        if (v === 'TODOhijklmno') throw Error('Api: bad conf dive token').mod({ diveToken });
         return v;
         
       };
@@ -690,13 +691,13 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
             }}),
             keep: ConfyVal({ settle: 'str', def: null }),
             secureBits: ConfyVal({ settle: 'num', fn: (bits, chain) => {
-              if (!bits.isInteger()) throw Error(`requires an integer`);
-              if (bits < 0) throw Error(`requires a value >= 0`);
+              if (!bits.isInteger()) throw Error('requires an integer');
+              if (bits < 0) throw Error('requires a value >= 0');
               return bits;
             }}),
             email: ConfyVal({ settle: 'str', fn: email => {
               email = email.trim();
-              if (!/^[^@]+[@][^.]+[.][^.]/.test(email)) throw Error(`must be a valid email`);
+              if (!/^[^@]+[@][^.]+[.][^.]/.test(email)) throw Error('must be a valid email');
               return email;
             }}),
             password: ConfyVal({ settle: 'str', def: null }),
@@ -835,7 +836,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
             tailOp: ({ chain, conf: protocols }) => {
               
               if (isForm(protocols, Object) && protocols.empty())
-                throw Error(`requires at least 1 protocol`);
+                throw Error('requires at least 1 protocol');
               
               return protocols;
               
@@ -1364,7 +1365,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           + filteredLines[headInd].replace(/[ ]*['"`]use strict['"`];[ ]*/, ''); // TODO: Replace all instances? Or just the 1st??
           
         // End the scope for requirement #1
-        filteredLines[tailInd] += (`};`);
+        filteredLines[tailInd] += ('};');
         
       }
       
@@ -1445,7 +1446,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         // appended/prepended to the first/last lines.
         let escQt = '\\' + `'`;
         let escEsc = '\\' + '\\';
-        let headEvalStr = `eval([`;
+        let headEvalStr = 'eval([';
         let tailEvalStr = `].join('\\n'));`;
         
         lines = lines.map(ln => `'` + ln.replace(/\\/g, escEsc).replace(/'/g, escQt) + `',`); // Ugly trailing comma
@@ -1637,7 +1638,8 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       let netIden = NetworkIdentity(netIdenConf);
       let secure = netIden.secureBits > 0;
       
-      // Subcon for Deployment depends on whether it's Therapy
+      // Subcon for Deployment depends on whether it's Therapy - the Therapy room *must* use the
+      // stub subcon - otherwise there would be horrific circular logging implications!
       let deploySc = loftConf.name === 'therapy' ? global.subconStub : global.subcon([]);
       
       // Initialize a Bank based on `keep`
@@ -1788,6 +1790,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       let loft = await getRoom(loftConf.name);
       let loftTmp = await loft.open({
         sc: deploySc.kid(`loft.${loftConf.prefix}`),
+        prefix: loftConf.prefix,
         hereHut: aboveHut,
         netIden
       });

@@ -1,6 +1,8 @@
 /// <reference path="./ts/hut.d.ts"/>
 'use strict';
 
+process.stdout.write('\u001b[0m');
+
 // Make Errors better! (https://v8.dev/docs/stack-trace-api)
 Error.prepareStackTrace = (err, callSites) => {
   
@@ -96,7 +98,7 @@ require('./nodejs/foundation.js')({ hutFp: __dirname, conf: (() => { // Parse co
         // those with "=" represent key-value pairs; those with ":="
         // represent key-value pairs with eval'd values
         let isEval = arg.has(':=');
-        let [ k, v=null ] = arg.cut(isEval ? ':=' : '=');
+        let [ k, v=null ] = arg.cut(isEval ? ':=' : '=').map(v => v.trim());
         if (v === null) [ k, v ] = [ 'deploy.0.loft.name', k ];
         
         arg = { [k]: isEval ? eval(`(${v})`) : v };

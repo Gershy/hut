@@ -350,7 +350,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         //let sayGoodbyePrm = this.wsWrite({ op: 8, code: 1000, text: `Goodbye friend :')` });
         let sayGoodbyePrm = this.wsWrite({ op: 8, code: 1000, text: valToJson({
           command: 'error',
-          text: `Goodbye friend \ud83e\udd72` // ":')"
+          text: 'Goodbye friend \ud83e\udd72' // ":')"
         })});
         
         // End without destroying the socket - this could interfere with saying goodbye!

@@ -1,5 +1,5 @@
 global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.axis1d.item'] = () => ({
-  install: (real, layout, cleanupTmp) => {},
+  install: () => {},
   render: (real, layout) => {
     
     let style = real.node.style;

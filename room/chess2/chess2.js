@@ -228,7 +228,7 @@ global.rooms['chess2'] = async chess2Keep => {
           
         }).val;
         
-        if (!gudRook) throw Error(`No rook found for castling... yikes`);
+        if (!gudRook) throw Error('No rook found for castling... yikes');
         
         // Move king to target location
         pieceMoves[gudColour].add({ piece: gudKing, col: trgCol, row: trgRow });
@@ -517,15 +517,15 @@ global.rooms['chess2'] = async chess2Keep => {
             
             round.end();
              
-            if ( wAlive && !bAlive) addRecord(`outcome`, [ match ], { winner: 'white', reason: 'checkmate' });
-            if (!wAlive &&  bAlive) addRecord(`outcome`, [ match ], { winner: 'black', reason: 'checkmate' });
-            if (!wAlive && !bAlive) addRecord(`outcome`, [ match ], { winner: null, reason: 'stalemate' });
-            if ( wAlive &&  bAlive) addRecord(`round`, [ match ], { ms: Date.now() }); // Game continues!
+            if ( wAlive && !bAlive) addRecord('outcome', [ match ], { winner: 'white', reason: 'checkmate' });
+            if (!wAlive &&  bAlive) addRecord('outcome', [ match ], { winner: 'black', reason: 'checkmate' });
+            if (!wAlive && !bAlive) addRecord('outcome', [ match ], { winner: null, reason: 'stalemate' });
+            if ( wAlive &&  bAlive) addRecord('round',   [ match ], { ms: Date.now() }); // Game continues!
             
           } else {
             
             round.end();
-            addRecord(`outcome`, [ match ], { winner: null, reason: 'lethargy' });
+            addRecord('outcome', [ match ], { winner: null, reason: 'lethargy' });
             
           }
           
@@ -919,7 +919,7 @@ global.rooms['chess2'] = async chess2Keep => {
             
           } else if (reason === 'stalemate') {
             
-            text = `Stalemate!`
+            text = 'Stalemate!';
             
           } else if (reason === 'cowardice') {
             
@@ -927,7 +927,7 @@ global.rooms['chess2'] = async chess2Keep => {
             
           } else if (reason === 'lethargy') {
             
-            text = `Neither player made a move!\nStalemate!`;
+            text = 'Neither player made a move!\nStalemate!';
             
           } else if (reason === 'resign') {
             
@@ -996,21 +996,21 @@ global.rooms['chess2'] = async chess2Keep => {
                 if (type === 'pass') return addRecord('roundMove', { 0: round, 1: matchLofter, 'piece?': null });
                 
                 let { trg } = move;
-                if (!trg) throw Error(`Api: must supply "trg"`).mod({ move });
+                if (!trg) throw Error('Api: must supply "trg"').mod({ move });
                 
                 let { piece: pieceUid } = move;
                 let pieces = await match.withRh('piece', 'all');
                 let piece = pieces.find(piece => piece.uid === pieceUid).val;
                 
-                if (!piece) throw Error(`Api: invalid piece uid`).mod({ move });
-                if (piece.getValue('wait') > 0) throw Error(`Api: piece must wait`).mod({ move });
+                if (!piece) throw Error('Api: invalid piece uid').mod({ move });
+                if (piece.getValue('wait') > 0) throw Error('Api: piece must wait').mod({ move });
                 
                 let vm = getValidMoves(makeBoard(pieces), matchLofter, piece)
                   .find(vm => vm.col === trg.col && vm.row === trg.row)
                   .val;
                 
                 // Ensure the provided move is a valid move
-                if (!vm) throw Error(`Api: invalid move!`);
+                if (!vm) throw Error('Api: invalid move!');
                 
                 let { col, row, cap } = vm;
                 

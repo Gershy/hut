@@ -250,7 +250,7 @@ global.rooms['fly.models'] = async foundation => {
       if (val.has('nx') && val.has('ny'))       calc = () => val.slice([ 'nx', 'ny', 'dist' ]);
       else if (val.has('tx') && val.has('ty'))  calc = Form.carteParams.bound(val.tx, val.ty);
       else if (val.has('ang'))                  calc = Form.polarParams.bound(val.ang, val.dist);
-      else                                      calc = () => { throw Error(`Supply either "tx" and "ty", or "ang"`); };
+      else                                      calc = () => { throw Error('Api: supply "tx" and "ty", or "ang"'); };
       
       let { nx, ny, dist, ang=Math.atan2(nx, ny) / (Math.PI * 2) } = calc();
       return {}.gain(...arr, { aMs, ax, ay, vel, acl, nx, ny, dist, ang });
@@ -1552,7 +1552,7 @@ global.rooms['fly.models'] = async foundation => {
       
       initProps: utils.fa(forms, 'initProps', (i, arr, val) => {
         let { x, y, ax=x, ay=y, spd=100, delayMs=0, phase=0, swingHz=0, swingAmt=0 } = val;
-        if (swingHz < 0) throw Error(`Negative "swingHz" param; use negative "swingAmt" instead`);
+        if (swingHz < 0) throw Error('Api: negative "swingHz" param; use negative "swingAmt" instead');
         return {}.gain(...arr, { ax, ay, spd, delayMs, phase, swingHz, swingAmt });
       }),
       initSyncs: utils.fa(forms, 'initSyncs', (i, arr) => [ 'ax', 'ay', 'spd', 'delayMs', 'phase', 'swingHz', 'swingAmt' ].gain(...arr)),
@@ -1672,7 +1672,7 @@ global.rooms['fly.models'] = async foundation => {
     
     initProps: utils.fa(forms, 'initProps', (i, arr, val) => {
       let { x, y, ax=x, ay=y, spd=100, delayMs=0, phase=0, swingHz=0, swingAmt=0 } = val;
-      if (swingHz < 0) throw Error(`Negative "swingHz" param; use negative "swingAmt" instead`);
+      if (swingHz < 0) throw Error('Api: negative "swingHz" param; use negative "swingAmt" instead');
       return {}.gain(...arr, { ax, ay, spd, delayMs, phase, swingHz, swingAmt });
     }),
     initSyncs: utils.fa(forms, 'initSyncs', (i, arr) => [ 'ax', 'ay', 'spd', 'delayMs', 'phase', 'swingHz', 'swingAmt' ].gain(...arr)),
@@ -2316,7 +2316,7 @@ global.rooms['fly.models'] = async foundation => {
         try {
           visible = isBounded && geom.doCollideRect(ud.bounds.total, geom.containingRect(bound));
         } catch (err) {
-          gsc(`Bad bound:`, { type: ent.getValue('type'), bound, ent });
+          gsc('Bad bound:', { type: ent.getValue('type'), bound, ent });
         }
         
         if (visible && !ent.sprite) {

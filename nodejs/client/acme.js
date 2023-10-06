@@ -88,8 +88,8 @@ module.exports = form({ name: 'AcmeHttpClient', props: (forms, Form) => ({
         // an "externalAccountBinding" property
         
         let { kid, hmac } = eab;
-        if (!kid) throw Error(`Missing eab.kid`);
-        if (!hmac) throw Error(`Missing eab.hmac`);
+        if (!kid) throw Error('Missing eab.kid');
+        if (!hmac) throw Error('Missing eab.hmac');
         
         let header = nonce
           ? { alg: 'HS256', url, nonce, kid }

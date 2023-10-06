@@ -27,9 +27,9 @@ module.exports = {
     if (path === null) path = '';
     if (!path.hasHead('/')) path = `/${path}`;
     
-    if (!proto) throw Error(`null proto`);
-    if (!host) throw Error(`null host`);
-    if (!port) throw Error(`null port`);
+    if (!proto) throw Error('null proto');
+    if (!host) throw Error('null host');
+    if (!port) throw Error('null port');
     
     addr = (port !== module.exports.defaultPorts[proto])
       ? `${proto}://${host}:${port}${path}`

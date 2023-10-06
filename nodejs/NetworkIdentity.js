@@ -64,12 +64,12 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
     if (details.has('geo')) {
       let vals = details.geo.split('.');
-      if (vals.length > 6) throw Error(`Should have max 6 "geo" components`);
+      if (vals.length > 6) throw Error('Should have max 6 "geo" components');
       Object.assign(details, vals.toObj((v, i) => [ `geo${i}`, v.trim() || '' ]));
     }
     if (details.has('org')) {
       let vals = details.org.split('.');
-      if (vals.length > 6) throw Error(`Should have max 6 "org" components`);
+      if (vals.length > 6) throw Error('Should have max 6 "org" components');
       Object.assign(details, vals.toObj((v, i) => [ `org${i}`, v.trim() || '' ]));
     }
     
@@ -172,8 +172,8 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
     if ([ String, Array ].any(C => isForm(keep, C))) keep = global.keep(keep);
     
-    if (secureBits && secureBits < 512) throw Error(`Use at least 512 secure bits`);
-    if (!isForm(name, String) || !name) throw Error(`Must provide "name"`);
+    if (secureBits && secureBits < 512) throw Error('Use at least 512 secure bits');
+    if (!isForm(name, String) || !name) throw Error('Must provide "name"');
     if (keep && !keep.Form) throw Error(`"keep" must be a Keep (got ${getFormName(keep)})`);
     
     let { osslShellName='openssl', requirePhysicalSafety=false } = more;
@@ -303,7 +303,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     let lastChunk = null;
     let timeoutFn = () => {
       proc.kill();
-      proc.emit('error', Error(`Timeout`).mod({ lastChunk: lastChunk && lastChunk.toString('utf8') }))
+      proc.emit('error', Error('Timeout').mod({ lastChunk: lastChunk && lastChunk.toString('utf8') }))
     };
     let timeout = setTimeout(timeoutFn, timeoutMs);
     
@@ -390,7 +390,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     // TODO: Where does `this.details.password` go??
     
     let [ commonName, ...altNames ] = networkAddresses;
-    if (!commonName) throw Error(`Supply at least 1 NetworkAddress`)
+    if (!commonName) throw Error('Supply at least 1 NetworkAddress')
     
     gsc('DETAILS', this.details);
     
@@ -452,7 +452,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   },
   async getOsslPub({ prv }={}) {
     
-    if (!prv)                                     throw Error(`Must supply "prv" to get pub!`);
+    if (!prv)                                     throw Error('Must supply "prv" to get pub!');
     if (![ String, Buffer ].has(prv.constructor)) throw Error(`"prv" must be String or Buffer (got ${getFormName(prv)})`);
     
     let prvFp = await Form.setFp(prv);
@@ -477,7 +477,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     // certificate provider needs to fulfill the request in order for
     // any sense of "ownership" to be established
     
-    if (!prv)                                     throw Error(`Must supply "prv" to get csr!`);
+    if (!prv)                                     throw Error('Must supply "prv" to get csr!');
     if (![ String, Buffer ].has(prv.constructor)) throw Error(`"prv" must be String or Buffer (got ${getFormName(prv)})`);
     
     let config = this.getOsslConfigFileContent();
@@ -503,8 +503,8 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     // We consider `prv` to be the private key of a cert authority, and
     // we use that ca to sign the cert request `csr`
     
-    if (!prv) throw Error(`Must supply prv to get a crt!`);
-    if (!csr) throw Error(`Must supply csr to get a crt!`);
+    if (!prv) throw Error('Must supply prv to get a crt!');
+    if (!csr) throw Error('Must supply csr to get a crt!');
     
     let [ prvFp, csrFp ] = await Promise.all([
       Form.setFp(prv),
@@ -525,7 +525,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   },
   async getOsslDetails({ csr, crt }) {
     
-    if (csr && crt) throw Error(`Provide only one of "csr" and "crt"!`);
+    if (csr && crt) throw Error('Provide only one of "csr" and "crt"!');
     
     let pemFp = await Form.setFp(csr || crt);
     
@@ -902,7 +902,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
                   server.listen(80, addr); // TODO: Listen on 0.0.0.0? Or on `addr`? (Can we get more specific about where the acme server will get in touch with us?)
                 });
                 tmp.endWith(() => {
-                  server.close(err => err && sc(`Failed to close Server used for acme http-01 challenge :(`, err));
+                  server.close(err => err && sc('Failed to close Server used for acme http-01 challenge :(', err));
                 });
                 
               }
@@ -928,10 +928,10 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
               // sufficient; the ca might perform multiple challenge
               // requests - so we can't stop serving the challenge until
               // we've polled the Authorization to be valid!)
-              sc(`Waiting to respond to challenge...`);
+              sc('Waiting to respond to challenge...');
               await challengePrm;
               
-              sc(`Responded to challenge! Waiting for Authorization to become "valid"`);
+              sc('Responded to challenge! Waiting for Authorization to become "valid"');
               return await getValidAuthResByPolling(auth);
               
             } finally {
@@ -993,7 +993,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
           
           sc(`Finalizing order ${orderUrl}`, { csr });
           let finalizeRes = await account.query({ addr: orderRes.body.finalize, body: { csr: acmeCsr }});
-          if (finalizeRes.code >= 400) throw Error(`UGH failed to finalize`).mod({ res: finalizeRes });
+          if (finalizeRes.code >= 400) throw Error('UGH failed to finalize').mod({ res: finalizeRes });
           
           sc('Order finalized; it is expected to process and then go valid!', { finalizeRes });
           orderRes.body.status = 'processing'; // Assume the Order is now processing - could also consider `orderRes = await account.query({ addr: orderUrl });`, but that involves needless(?) overhead
@@ -1013,8 +1013,8 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       
       if (orderRes.body.status !== 'valid') throw Error(`Order still isn't valid :(`).mod({ orderRes });
       
-      sc(`FINAL ORDER:`, { orderRes });
-      sc(`Getting crt...`);
+      sc('FINAL ORDER:', { orderRes });
+      sc('Getting crt...');
       return (await account.query({ addr: orderRes.body.certificate })).body;
       
     });

@@ -11,7 +11,7 @@ global.rooms['Hinterland'] = async () => {
     // Hinterland is the space in which multiple Huts interact according
     // to the rules of the AboveHut
     
-    $prefixer: (pfx, term, delim='.') => term.has(delim) ? term : `${pfx}${delim}${term}`, // Note that (only) CommandHandlers use ":" as `delim` instead of "."
+    $prefixer: (pfx, term, delim='.') => term.hasHead(`${pfx}${delim}`) ? term : `${pfx}${delim}${term}`, // Note that (only) CommandHandlers use ":" as `delim` instead of "."
     $makeUtils: (prefix, hut, recMan, pfx=Form.prefixer.bound(prefix)) => ({
       
       // The Loft defined by `this.above` and `this.below` should be
@@ -60,15 +60,11 @@ global.rooms['Hinterland'] = async () => {
       // +----------------------------+------------------------------------------------------------------
       
       // Note that none of these should conflict with properties that
-      // can be found on a Record!!
+      // can be found on a Record!! (TODO: Why? Delete comment?)
       
       addFormFn: (term, ...args) => recMan.addFormFn(pfx(term), ...args),
-      enableKeep: (term, keep) => hut.enableKeep(pfx(term), keep),
-      getKeep: (diveToken) => {
-        let pcs = token.dive(diveToken);
-        let pfxDiveToken = [ '', pfx(pcs[0]), ...pcs.slice(1) ].join('/');
-        return hut.getKeep(pfxDiveToken);
-      },
+      enableKeep: (term, keep) => hut.enableKeep(prefix, term, keep),
+      getKeep: diveToken => hut.getKeep(prefix, diveToken),
       addRecord: (...args /* type, group, value, uid, volatile | { type, group, value, uid, volatile } */) => {
         
         // TODO: need to test everything with Collabowrite!! I NEED TO KNOW if Persona can be
@@ -94,9 +90,13 @@ global.rooms['Hinterland'] = async () => {
     
     init({ prefix=null, habitats=[], recordForms={}, above=Function.stub, below=Function.stub, ...args }) {
       
+      // Note that a Room intiating Hinterland will supply a default prefix
+      // Note that a foundation running potentially multiple Rooms may override that prefix by
+      // passing some other (potentially config-dependent) prefix to `Hinterland(...).open`
+      
       /// {DEBUG=
-      if (!habitats.count()) throw Error(`Api: supply at least 1 habitat`);
-      if (!prefix) throw Error(`Api: must supply "prefix"`);
+      if (!habitats.count()) throw Error('Api: supply at least 1 habitat');
+      if (!prefix) throw Error('Api: must supply "prefix"');
       /// =DEBUG}
       
       Object.assign(this, { prefix, habitats, recordForms, above, below });
@@ -110,7 +110,7 @@ global.rooms['Hinterland'] = async () => {
     },
     
     /// {LOADTEST=
-    async setupBelowLoadtesting({ belowHut, loftRh, belowHooks }) {
+    async setupBelowLoadtesting({ prefix=this.prefix, belowHut, loftRh, belowHooks }) {
       
       let TimerSrc = await getRoom('logic.TimerSrc');
       
@@ -118,7 +118,7 @@ global.rooms['Hinterland'] = async () => {
       
       tmp.endWith(Scope(loftRh, belowHooks, (loft, dep) => {
         
-        dep.scp(belowHut, `${this.prefix}.lofter`, (lofter, dep) => {
+        dep.scp(belowHut, `${prefix}.lofter`, (lofter, dep) => {
           
           this.loadtestConf.fn({ belowHut, loft, lofter, dep });
           
@@ -131,16 +131,16 @@ global.rooms['Hinterland'] = async () => {
     },
     /// =LOADTEST}
     
-    async open({ sc, hereHut, rec=hereHut }) {
+    async open({ sc, prefix=this.prefix, hereHut, rec=hereHut }) {
       
       let tmp = Tmp();
       
       let recMan = rec.type.manager;
-      let pfx = Form.prefixer.bound(this.prefix);
+      let pfx = Form.prefixer.bound(prefix);
       
-      // This "utils" will get used both ABOVE and BELOW (note ABOVE
-      // needs to instantiate a 2nd "utils" for each AfarBelowHut)
-      let utils = Form.makeUtils(this.prefix, hereHut, recMan, pfx);
+      // This "utils" will get used both ABOVE and BELOW (note ABOVE needs to instantiate a 2nd
+      // "utils" for each AfarBelowHut)
+      let utils = Form.makeUtils(prefix, hereHut, recMan, pfx);
       
       // Prepare all habitats
       await Promise.all(this.habitats.map( async hab => tmp.endWith(await hab.prepare(hereHut)) ));
@@ -205,7 +205,7 @@ global.rooms['Hinterland'] = async () => {
       let resolveHrecs = (tmp, dep) => tmp.rec?.Form?.['~forms']?.has(Record) ? tmp.rec : tmp;
       let handleBelowLofter = (loftRec, belowHut, dep) => {
         
-        let lofterRh = dep(belowHut.relHandler(`${this.prefix}.lofter`));
+        let lofterRh = dep(belowHut.relHandler(`${prefix}.lofter`));
         let lofterExistsChooser = dep(Chooser.noneOrSome(lofterRh));
         
         dep.scp(lofterExistsChooser.srcs.off, (noPlayer, dep) => {
@@ -214,11 +214,11 @@ global.rooms['Hinterland'] = async () => {
           // the Chooser ends, causing `lofterExistsChooser.srcs.off` to trigger
           if (tmp.off() || lofterRh.off()) return;
           
-          let makeLofterAct = belowHut.enableAction(`${this.prefix}:makeLofter`, () => {
+          let makeLofterAct = belowHut.enableAction(`${prefix}:makeLofter`, () => {
             /// {ABOVE=
             // Allow multiple "makeLofter" requests - ignore if the Lofter exists already!
             if (lofterRh.hrecs.size) return;
-            let lofter = recMan.addRecord(`${this.prefix}.lofter`, [ belowHut, loftRec ]);
+            let lofter = recMan.addRecord(`${prefix}.lofter`, [ belowHut, loftRec ]);
             belowHut.followRec(lofter);
             /// =ABOVE}
           });
@@ -256,7 +256,7 @@ global.rooms['Hinterland'] = async () => {
       };
       let aboveScp = Scope(Src(), aboveHooks, (_, dep) => {
         this.above({
-          pfx: this.prefix,
+          pfx: prefix,
           record: loftRec,
           real: hinterlandReal,
           addPreloadRooms: hereHut.addPreloadRooms.bind(hereHut),
@@ -284,13 +284,13 @@ global.rooms['Hinterland'] = async () => {
           belowHut.followRec(loftRec);
           let lofterRh = handleBelowLofter(loftRec, belowHut, dep);
           this.below({
-            pfx: this.prefix,
+            pfx: prefix,
             record: loftRec,
             real: hinterlandReal,
             lofterRh: lofterRh,
             lofterRelHandler: lofterRh,
             enableAction: (term, ...args) => belowHut.enableAction(pfx(term, ':'), ...args),
-            ...Form.makeUtils(this.prefix, belowHut, recMan, pfx)
+            ...Form.makeUtils(prefix, belowHut, recMan, pfx)
           }, dep);
         });
         
@@ -309,7 +309,7 @@ global.rooms['Hinterland'] = async () => {
       tmp.endWith(Scope(loftRh, belowHooks, (loftRec, dep) => {
         let lofterRh = handleBelowLofter(loftRec, hereHut, dep);
         this.below({
-          pfx: this.prefix,
+          pfx: prefix,
           record: loftRec,
           real: hinterlandReal,
           lofterRh: lofterRh,
@@ -325,6 +325,7 @@ global.rooms['Hinterland'] = async () => {
       
       let isBelow = isForm(hereHut, hut.BelowHut);
       if (isBelow && hereHut.isLoadtestBot) tmp.endWith(await this.setupBelowLoadtesting({
+        prefix,
         belowHut: hereHut,
         loftRh,
         belowHooks: {

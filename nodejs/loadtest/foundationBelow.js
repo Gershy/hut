@@ -168,7 +168,7 @@ let makeIpcServer = ({ aboveHut, belowHut, procConnectedToAbove }) => {
   
   let server = Tmp({
     protocol: 'ipc', netProc: 'localhost:0',
-    desc: () => `ipc://localhost:0`,
+    desc: () => 'ipc://localhost:0',
     src: Src()
   });
   

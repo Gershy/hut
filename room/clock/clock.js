@@ -20,8 +20,8 @@ global.rooms['clock'] = async foundation => {
         manageEndMsSrc = true; // We created the Src - we need to manage it!
         endMsSrc = MemSrc(endMsSrc);
       }
-      if (!isForm(endMsSrc, MemSrc)) throw Error(`"endMsSrc" must be MemSrc (got ${getFormName(endMs)})`);
-      if (!endMsSrc.srcFlags.memory) throw Error(`The "endMsSrc" Src must supply an immediate value`);
+      if (!isForm(endMsSrc, MemSrc)) throw Error(`Api: "endMsSrc" must be MemSrc (got ${getFormName(endMs)})`);
+      if (!endMsSrc.srcFlags.memory) throw Error('Api: "endMsSrc" must supply an immediate value');
       if (!real) throw Error(`Can't omit "real"`);
       
       // Note that `real` is meant to be "tabula rasa", initialized by the consuming Room. It will

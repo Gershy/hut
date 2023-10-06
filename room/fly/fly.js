@@ -344,10 +344,10 @@ global.rooms['fly'] = async foundation => {
               // Find lobby; ensure no more than 4 players per lobby
               
               let lobby = await flyRec.rh('fly.lobby').findRec(rec => rec.getValue('code') === code);
-              if (!lobby) throw Error(`Invalid code`);
+              if (!lobby) throw Error('Api: invalid code');
               
               let lobbyPlayers = await lobby.rh('fly.lobbyPlayer').getRecs();
-              if (lobbyPlayers.count() >= 4) throw Error(`Lobby full`);
+              if (lobbyPlayers.count() >= 4) throw Error('Api: lobby full');
               
               hut.addRecord('fly.lobbyPlayer', [ lobby, myPlayer ], { modelTerm: null });
               
@@ -451,7 +451,7 @@ global.rooms['fly'] = async foundation => {
               
               /// {ABOVE=
               let levelName = levels.find(v => v.password === password).key;
-              if (!levelName) throw Error(`Invalid password`);
+              if (!levelName) throw Error('Api: invalid password');
               console.log(`Lobby ${myLobby.desc()} set to ${levelName}`);
               myLobby.setValue({ levelMetadata: getLevelMetadata(levelName) });
               /// =ABOVE}
