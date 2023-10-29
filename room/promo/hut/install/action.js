@@ -2,22 +2,27 @@
 async (res) => {
   
   let url = res.url;
-  let pfx = url.split('/').at(-1).split('.')[0];
+  //let pfx = url.split('/').at(-1).split('.')[0];
   
   let [ fs, http, path ] = [ 'fs', 'http', 'path' ].map(require);
-  let hosting = url.split(/[?#]/)[0];
+  let [ , protocol, hostAndPort, urlPath ] = url.match(/^([^:]+)[:][/][/]([^/]+)[/]?(.*)/);
+  let hosting = `${protocol}://${hostAndPort}`;
+  console.log({ hosting });
+  
   let copy = async function*(local, remote, seen=new Set()) {
     
     let remoteStr = remote.join('/');
     if (seen.has(remoteStr)) return;
     seen.add(remoteStr);
     
-    let url = `${hosting}?command=${pfx}.item&pcs=${remoteStr}`;
+    let url = `${hosting}/item?pcs=${remoteStr}`;
     let res = await new Promise(r => http.get(url, r));
-    let chunks = []; res.on('data', d => chunks.push(d));
+    let chunks = [];
+    res.on('data', d => chunks.push(d));
     await new Promise(r => res.on('end', r));
     
     let data = Buffer.concat(chunks);
+    
     try {
       let children = JSON.parse(data);
       if (children?.constructor !== Array) throw Error('Sad');

@@ -526,6 +526,7 @@ global.rooms['record'] = async () => {
     async mod({ filter=null, offset, limit }) {
       
       // Change the parameterization for this RelHandler - this means that any previous Hrecs may
+      // be ended due to changed filters/limits/offsets
       
       /// {DEBUG=
       if (filter && !hasForm(filter, Function)) throw Error(`Api: "filter" must be a Function (got ${getFormName(filter)})`);
@@ -707,10 +708,12 @@ global.rooms['record'] = async () => {
       return this.activeSignal['~prm'];
     },
     async getRecs() {
+      // TODO: Could use `global.then` and take off the `async` keyword
       await this.ready();
       return this.hrecs.toArr(hrec => hrec.rec);
     },
     async getRec() {
+      // TODO: Could use `global.then` and take off the `async` keyword
       await this.ready();
       for (let hrec of this.hrecs.values()) return hrec.rec;
       return null;
@@ -1046,21 +1049,20 @@ global.rooms['record'] = async () => {
       if (fixed && !opts.empty()) throw Error(`Pretty sure if fixed, opts must be empty!`);
       /// =DEBUG}
       
-      // If `fixed === false`, `key` must be a value that isn't already
-      // set in `this.relHandlers`. Note we must maintain a reference
-      // even to "unfixed"/"dynamic" RelHandlers, as in order to
-      // correctly propagate newly created Records to their Members we
-      // must iterate all RelHandlers of all Members in memory.
+      // If `fixed === false`, `key` must be a value that isn't already set in `this.relHandlers`.
+      // Note we must maintain a reference even to "unfixed"/"dynamic" RelHandlers, as in order to
+      // correctly propagate newly created Records to their Members we must iterate all RelHandlers
+      // of all Members in memory.
       // 
-      // Note that both Type and Term need to be included in the unique
-      // key. If only Term were provided, the following:
+      // Note that both Type and Term need to be included in the unique key. If only Term were
+      // provided, the following:
       // 
       //    | // Note `loftRec.type.name === 'eg.loft'`
       //    | loftRec.relHandler({ type: 'eg.type1' });
       //    | loftRec.relHandler({ type: 'eg.type2' });
       // 
-      // would create the same key: "eg.loft/0:Infinity" (because both
-      // Types Group `loftRec` under the same Term, e.g. "eg.loft")
+      // would create the same key: "eg.loft/0:Infinity" (because both Types Group `loftRec` under
+      // the same Term, e.g. "eg.loft")
       // 
       // If only Type were provided, the following:
       //  
@@ -1072,12 +1074,11 @@ global.rooms['record'] = async () => {
       //    | myA1.relHandler({ type: 'eg.b', term: 'a1' }); // Expected hrecs: [ myB1 ]
       //    | myA1.relHandler({ type: 'eg.b', term: 'a2' }); // Expected hrecs: [ myB2 ]
       // 
-      // would create the same key: "eg.b/0:Infinity" (the RelHandlers
-      // are more specific than just the Type: it must be the Type PLUS
-      // its link via a specific Term. Need to capture this information
-      // in the `key`, or else a pre-existing RelHandler for a separate,
-      // unrelated Term (but coincidentally same Type) could be returned
-      // when we want a RelHandler for the same Type, but distinct Term)
+      // would create the same key: "eg.b/0:Infinity" (the RelHandlers are more specific than just
+      // the Type: it must be the Type PLUS its link via a specific Term. Need to capture this
+      // information in the `key`, or else a pre-existing RelHandler for a separate, unrelated Term
+      // (but coincidentally same Type) could be returned when we want a RelHandler for the same
+      // Type, but distinct Term)
       let key = fixed
         ? `${type.name}/${term}/${offset}:${limit}`
         : `${type.name}/${term}/u:${Math.random().toString(16).slice(2)}`;
@@ -1101,7 +1102,7 @@ global.rooms['record'] = async () => {
       
     },
     rh(args) { return this.relHandler(args); },
-    async withRh(...args /* Same args as relHandler but Object takes "fn" prop, and simple list can end with Function */) {
+    withRh(...args /* Same args as relHandler but Object takes "fn" prop, and simple list can end with Function */) {
       
       let fn = null;
       let rhArgs = null;
@@ -1109,7 +1110,7 @@ global.rooms['record'] = async () => {
       if (args.length === 1) {
         
         /// {DEBUG=
-        if (!isForm(args[0], Object)) throw Error(`Single argument must be Object`);
+        if (!isForm(args[0], Object)) throw Error(`Api: single argument must be Object; got ${getFormName(args[0])}`);
         /// =DEBUG}
         
         let { fn: fn0='all', ...rhArgs0 } = args[0];
@@ -1118,7 +1119,7 @@ global.rooms['record'] = async () => {
         
       } else {
         
-        fn = args.slice(-1)[0];
+        fn = args.at(-1);
         rhArgs = args.slice(0, -1);
         
       }
@@ -1134,8 +1135,19 @@ global.rooms['record'] = async () => {
       if (!hasForm(fn, Function)) throw Error(`"fn" should be Function but got ${getFormName(fn)}`).mod({ fn });
       
       let rh = this.rh(...rhArgs);
-      try     { return await fn(rh); }
-      finally { rh.end(); }
+      
+      // TODO: Using `global.safe` + `global.then` removes need for `async`??:
+      let result;
+      try { result = fn(rh); } catch (err) { rh.end(); throw err; }
+      
+      return then(result,
+        val => (rh.end(), val),
+        err => (rh.end(), err.propagate())
+      );
+      
+      // TODO: Is the above a fine replacement for this?
+      //try     { return await fn(rh); }
+      //finally { rh.end(); }
       
     },
     

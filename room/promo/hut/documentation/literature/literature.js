@@ -2,7 +2,7 @@ global.rooms['promo.hut.documentation.literature'] = async () => {
   
   let { Literature, Content } = await getRoom('literature');
   
-  let content = Content({ name: 'hut', desc: 'Hut' });
+  let content = Content({ name: 'root', desc: 'Hut' });
   
   content.seek('news').desc                          = 'News';
   

@@ -52,7 +52,7 @@ global.rooms[roomName] = () => then(getRoom('setup.hut.hinterland.RoadAuthority'
           
           let netTell = valToJson({ trn: 'async', hid: this.belowHut.hid, ...msg });
           let stuffHeader = netTell.length < 100 && Form.headerValueRegex.test(netTell);
-          let res = await fetch('/hut:bp', {
+          let res = await fetch('/=hut:bp', {
             method: 'POST',
             headers: stuffHeader
               ? { 'Content-Type': 'application/json; charset=utf-8', 'X-Hut-Msg': netTell }
@@ -72,6 +72,9 @@ global.rooms[roomName] = () => then(getRoom('setup.hut.hinterland.RoadAuthority'
         } catch (cause) {
           // TODO: Retry logic!
           let ignore = cause.message.has('abort') && !this.roadAuth.active;
+          
+          gsc({ cause });
+          
           if (!ignore) err.propagate({ cause, msg: 'Http failed (maybe network problems, server down?)', netTell: msg });
         }
         this.activeReqs--;

@@ -138,7 +138,7 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
         // attribute as they are always async
         script = document.createElement('script');
         script.setAttribute('type', 'text/javascript');
-        script.setAttribute('src', global.uri({ path: 'hut:room', query: { type: 'room', room: name } }));
+        script.setAttribute('src', global.uri({ path: '=hut:room', query: { type: 'room', room: name } }));
         script.setAttribute('data-room', name);
         document.head.appendChild(script);
         

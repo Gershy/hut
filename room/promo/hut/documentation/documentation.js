@@ -13,12 +13,16 @@ global.rooms['promo.hut.documentation'] = async docKeep => {
     above: async (experience, dep) => {
       
       /// {ABOVE=
-      dep(literature.activate(experience));
+      
+      dep(literature.activateAbove(experience));
+      
       /// =ABOVE}
       
     },
     below: async (experience, dep) => {
       
+      experience.real.addLayout('Geom', { w: '100%', h: '100%' });
+      experience.real.addLayout('Decal', { colour: '#6050f0' });
       
       
     }

@@ -934,7 +934,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
             prefix: ConfyVal({ settle: 'str',
               def: ({ getValue }) => getValue('[rel].[par].name').slice(0, 2),
               fn: pfx => {
-                if (!/^[a-z][a-z0-9]{0,4}$/.test(pfx)) throw Error('requires lowercase alphanumeric string beginning with alphabetic character and max 5 chars');
+                if (!/^[a-z][a-z0-9]{0,8}$/.test(pfx)) throw Error('requires lowercase alphanumeric string beginning with alpha character and max 8 chars');
                 return pfx;
               }
             }),
@@ -1783,7 +1783,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       // so that Sessions are put in contact with the Hut
       for (let server of servers) netIden.addServer(server);
       
-      let runOnNetworkTmp = netIden.runOnNetwork();
+      let runOnNetworkTmp = netIden.runOnNetwork(loftConf.name);
       activateTmp.endWith(runOnNetworkTmp);
       await runOnNetworkTmp.prm;
       

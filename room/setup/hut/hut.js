@@ -344,6 +344,9 @@ global.rooms['setup.hut'] = async () => {
         
         // Handle namespaced assets by treating the first component as the prefix
         let [ pfx, term, ...innerDive ] = dive;
+        
+        gsc({ diveToken, pfx, term, innerDive });
+        
         let keep = this.enabledKeeps.get(`${pfx}:${term}`)?.seek(innerDive) ?? null;
         if (!await keep?.exists()) throw Error(`Api: invalid asset chain`).mod({ dive: diveToken });
         
@@ -374,6 +377,7 @@ global.rooms['setup.hut'] = async () => {
         
         let belowNetAddr = params.at('belowNetAddr') ?? '???:???:???:???';
         let anonRoad = {
+          belowNetAddr,
           tellAfar: msg => { throw Error('OWwwowoaowoasss'); },
           desc: () => `AnonRoad(${roadAuth.desc()} <-> ${belowNetAddr} / !anon)`
         };
@@ -928,8 +932,6 @@ global.rooms['setup.hut'] = async () => {
     getKeep(prefix, diveToken) {
       
       let dive = token.dive(diveToken);
-      
-      gsc({ dive });
       
       /// {BELOW=
       return global.keep([ prefix, ...dive ]);

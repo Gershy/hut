@@ -14,8 +14,7 @@ global.rooms['promo.hut.install'] = async (installKeep) => {
       
       // Make sure to use non-admin file access to control access
       let installScriptKeep = installKeep.seek('/action.js');
-      dep(experience.enableKeep('install', installScriptKeep));
-      dep(experience.addCommandHandler('js', ({ reply }) => reply(installScriptKeep)));
+      dep(experience.addCommandHandler('install', ({ reply }) => reply(installScriptKeep)));
       
       let { record: install } = experience;
       
@@ -54,8 +53,8 @@ global.rooms['promo.hut.install'] = async (installKeep) => {
       let protocol = `http${netIden.secureBits ? 's' : ''}`;
       let isDefaultPort = (protocol === 'https' && port === 443) || (protocol === 'http' && port === 80);
       let url = isDefaultPort
-        ? `${protocol}://${netAddr}/${experience.pfx}.js`
-        : `${protocol}://${netAddr}:${port}/${experience.pfx}.js`;
+        ? `${protocol}://${netAddr}/install`
+        : `${protocol}://${netAddr}:${port}/install`;
       install.setValue(url);
       /// =ABOVE}
       
@@ -91,7 +90,7 @@ global.rooms['promo.hut.install'] = async (installKeep) => {
       });
       stlReal.addReal('reminder', {
         Text: { size: textSizes[3], spacing: { v: '0.4vh' } },
-        text: 'This gets and runs a js script which gets everything you need to use Hut!'
+        text: 'This gets and runs a js script which downloads everything you need to use Hut!'
       });
       
       dep(install.valueSrc.route(url => textReal.mod({

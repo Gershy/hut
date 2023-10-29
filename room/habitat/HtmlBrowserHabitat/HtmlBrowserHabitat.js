@@ -69,7 +69,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
     // TODO: "hut:icon" and "hut:room" are GENERIC commands and should probably be implemented in
     // "setup.hut" instead!
     cmd('hut:icon', msg => msg.reply(keep('/[file:repo]/room/setup/asset/hut.ico')));
-    cmd('hut:room', async ({ src, reply, msg }) => {
+    cmd('hut:room', async ({ reply, msg }) => {
       
       let room;
       try         { room = token.dive(msg?.room); }
@@ -77,7 +77,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
       
       try { reply(await getCmpKeep('below', room)); } catch (err) {
         gsc(err.mod(msg => `Failed to get compiled keep: ${msg}`));
-        reply(`'use strict';global.rooms['${msg.room}']=()=>{throw Error('Api: no room named "${msg.room}"');}`);
+        reply(`'use strict';global.rooms['${msg.room}']=()=>{throw Error('Api: unable to load room "${msg.room}"');}`);
       }
       
     });
@@ -99,7 +99,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
       let initComm = src.consumePendingSync({ fromScratch: true });
       
       let roomScript = (room, loadType='async') => {
-        let src = uri({ path: 'hut:room', query: { room } });
+        let src = uri({ path: '=hut:room', query: { room } });
         return `<script ${loadType} src="${src}" data-room="${room}"></script>`;
       };
       
@@ -124,7 +124,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
             <meta charset="utf-8">
             <title>${this.name.split('.').slice(-1)[0].upper()}</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <link rel="shortcut icon" type="image/x-icon" href="${uri({ path: 'hut:icon' })}">
+            <link rel="shortcut icon" type="image/x-icon" href="${uri({ path: '=hut:icon' })}">
             <style>
               html, body, body * {
                 position: relative; display: flex;
@@ -155,7 +155,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
             
             ${preloadRooms.toArr(n => roomScript(n, 'async')).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
 
-            <link rel="stylesheet" type="text/css" href="${uri({ path: 'html:css' })}">
+            <link rel="stylesheet" type="text/css" href="${uri({ path: '=html:css' })}">
             
             <script>Object.assign(global,{rawConf:JSON.parse('${valToJson({
               
@@ -247,7 +247,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
             <meta charset="utf-8">
             <title>${this.name.split('.').slice(-1)[0].upper()}</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <link rel="shortcut icon" type="image/x-icon" href="${uri({ path: 'hut:icon' })}">
+            <link rel="shortcut icon" type="image/x-icon" href="${uri({ path: '=hut:icon' })}">
             <style>
               body, html { padding: 0; margin: 0; }
               body { margin: 2px; text-align: center; }

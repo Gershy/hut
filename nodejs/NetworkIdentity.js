@@ -1070,7 +1070,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   },
   
   addServer(server) { this.servers.add(server); },
-  runOnNetwork() {
+  runOnNetwork(term = '<unknown>') {
     
     // TODO: (?) Certify every NetworkAddress in `this.servers`
     
@@ -1127,14 +1127,14 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     /// =DEBUG}
     
     sc(''
-      + `Opening the following (${this.secureBits ? 'secure' : 'unsafe'}) hosts:\n`
+      + `Opening "${term}" using (${this.secureBits ? 'secure' : 'unsafe'}) hosts:\n`
       + portServers.toArr((servers, port) => {
           return `Port ${port}:\n` + servers.toArr(s => `  - ${s.protocol}://${s.netAddr}:${port}`).join('\n')
         }).join('\n')
     );
     
     tmp.endWith(() => sc(''
-      + `Shutting the following (${this.secureBits ? 'secure' : 'unsafe'}) hosts:\n`
+      + `Shutting "${term}" using (${this.secureBits ? 'secure' : 'unsafe'}) hosts:\n`
       + portServers.toArr((servers, port) => {
           return `Port ${port}:\n` + servers.toArr(s => `  - ${s.protocol}://${s.netAddr}:${port}`).join('\n')
         }).join('\n')

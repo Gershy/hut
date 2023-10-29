@@ -81,44 +81,40 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       
       // Note `comm.context.cookie` is ignored; we're only looking at `comm.context.hutCookie`
       // which contains parsed data from the "hut" cookie
-      let { belowNetAddr, body, hutCookie, path, query, fragment } = comm.context;
+      let { belowNetAddr, body, hutCookie, path, query /*, fragment */ } = comm.context;
       
-      // - Compile the full `msg`
-      // - `msg.trn` defaults to "anon"
-      // - if `msg.command === 'hutify'`, `msg.trn` is set to "sync"
-      let msg = {
-        hid: null, trn: 'anon', command: path || 'hut:hutify',
-        // path, // TODO: consider including `path`?? Or simply interpret it to a command?
-        // fragment, // TODO: consider including `fragment`?? But do browsers ever send it??
-        // Note that `query` needs to take priority over `hutCookie` - otherwise a client with a
-        // cookie set won't be able to simply spoof their hid via the query
-        // TODO: What about the rest of `cookie`? We ignore everything but `cookie.hut`
-        ...hutCookie, ...query, ...body
-      };
+      let payload = { ...hutCookie, ...query, ...body };
+      if (!payload.has('command')) {
+        // Note that `path` beginning with "/" indicates "untraditional" hut-specific usage
+        if      (path.startsWith('='))   payload.command = path.slice(1).replace(/[/]+/g, '.');
+        else if (path === 'favicon.ico') payload.command = 'hut:icon';
+        else                             payload.command = 'hut:hutify';
+      }
       
-      if (msg.command === 'favicon.ico') msg.command = 'hut:icon';
-      if (msg.command === 'hut:hutify') msg.trn = 'sync';
+      //gsc({ ctx: comm.context, payload });
       
-      // Any command without a ":" prefix is interpreted to be directed at the default Loft,
-      // according to the AboveHut
-      if (!msg.command.has(':')) msg.command = `${this.aboveHut.getDefaultLoftPrefix()}:${msg.command}`;
+      // Unprefixed commands are interpreted towards the default Loft, according to the AboveHut
+      if (!payload.command.has(':')) payload.command = `${this.aboveHut.getDefaultLoftPrefix()}:${msg.command}`;
       
-      // These can't be confined to DEBUG blocks - Server must always be
-      // wary of malformatted remote queries!
-      let { hid=null, trn } = msg;
+      // The "hutify" command should always be "sync"
+      if      (payload.command === 'hut:hutify') payload.trn = 'sync';
+      // "trn" defaults to "sync" - clients can save server effort by specifying "anon"
+      else if (!payload.has('trn'))              payload.trn = 'sync';
+      
+      // These can't be confined to DEBUG blocks - must always detect malformatted remote queries!
+      let { hid=null, trn } = payload;
       if (!/^(?:anon|sync|async)$/.test(trn))   return comm.kill({ code: 400, msg: 'Api: invalid "trn"' });
-      if (hid === '')                           return comm.kill({ code: 400, msg: 'Api: "hid" may not be an empty string' });
       if (hid !== null && !isForm(hid, String)) return comm.kill({ code: 400, msg: 'Api: invalid "hid"' });
+      if (hid === '')                           return comm.kill({ code: 400, msg: 'Api: invalid "hid"' });
       
       let { belowHut, road } = safe(
         () => this.aboveHut.getBelowHutAndRoad({ roadAuth: this, trn, hid, params: { belowNetAddr } }),
         err => { comm.kill({ err }); throw err.mod(msg => `Failed to get BelowHut and Road: ${msg}`); }
       );
       
-      if ([ 'anon', 'sync' ].has(trn)) { // "anon" and "sync" are simple to handle
+      if ([ 'anon', 'sync' ].has(trn)) { // "anon" and "sync" are handled simply: without banking
         
-        // `trn` is "sync" (or "anon", implying "sync") - the reply must
-        // correspond to the request; hangs until `reply` is called!
+        // This response must correspond to the request; request hangs until `reply` is called!
         
         /// {DEBUG= (TODO: I think you could argue this belongs under DEBUG??)
         let syncTimeout = setTimeout(() => {
@@ -136,27 +132,25 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
             /// =DEBUG}
             comm.send(msg);
           },
-          msg
+          msg: payload
         });
         
       }
       
       if (road.off()) return comm.destroy('Request received after Road ended');
       
-      // If we made it here, this trn is "async" - the concept of
-      // "reply" breaks down here; the request and response are
-      // independent; there is no rush to respond via `res`!
-      this.aboveHut.hear({ src: belowHut, road, ms, msg });
+      // If we made it here, this trn is "async" - the concept of "reply" breaks down here; the
+      // request and response are independent; there is no rush to respond using `res`!
+      this.aboveHut.hear({ src: belowHut, road, ms, msg: payload });
       
       // If there's a pending Tell send it immediately using `res`!
       let pendingMsg = road.queueMsg.shift();
       if (pendingMsg) return comm.send(pendingMsg);
       
-      // No immediate use for `res`; bank it! Note that if `res` closes
-      // for an unexpected reason, we need to unbank it (remove it from
-      // the queue). We use a "queued" flag to potentially
-      // avoid the O(n) remove operation, as the "close" event always
-      // fires, but often `res` will have already been unbanked!
+      // No immediate use for `res`; bank it! Note that if `res` closes for an unexpected reason we
+      // need to unbank it (remove it from the queue). We use a "queued" flag to potentially avoid
+      // the O(n) remove operation, as the "close" event always fires, but often `res` will have
+      // already been unbanked!
       road.queueRes.add(Object.assign(comm, { queued: true }));
       let abortFn = () => res.queued && road.queueRes.rem(comm);
       req.once('close', abortFn);
@@ -454,7 +448,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         let [ , path, query='', fragment='' ] = req.url.match(/^([/][^?#]*)([?][^#]*)?([#].*)?$/);
         [ path, query, fragment ] = [ path, query, fragment ].map(v => v.slice(1));
         
-        path = path.replace(/^[!][^/]+[/]*/, ''); // Ignore cache-busting component and leading slashes
+        path = path.replace(/^[!][^/]+[/]*/, ''); // Ignore cache-busting component and following slashes
         query = query ? query.split('&').toObj(pc => [ ...pc.cut('='), true /* default key-only value to flag */ ]) : {};
         
         Object.assign(this.context, { path, query, fragment });
