@@ -386,6 +386,7 @@ global.rooms['setup.hut'] = async () => {
           hid: '!anon', isHere: false, isAfar: true,
           desc: () => `AnonHut(${belowNetAddr})`, // TODO: Include NetworkAddress in desc (from roadAuth)
           roads: Map([ [ roadAuth,  anonRoad ] ]),
+          consumePendingSync: () => Error('Api: invalid anon operation').propagate(),
           
           // AnonBelowHuts can only trigger AboveHut handlers
           runCommandHandler: comm => this.runCommandHandler(comm),

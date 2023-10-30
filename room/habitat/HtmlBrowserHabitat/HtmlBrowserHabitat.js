@@ -87,20 +87,18 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
     // user freshly navigating to the site!)
     cmd('hut:hutify', async ({ src, reply, msg }) => {
       
-      // TODO: Useragent detection at this point could theoretically
-      // replace the following content with a different html body that
-      // requests, e.g., IE9-compatible resources
+      // TODO: Useragent detection at this point could theoretically replace the following content
+      // with a different html body that requests, e.g., IE9-compatible resources
       
-      // The AfarHut immediately has its state reset, requiring a full
-      // sync to update. Then this full sync is consumed here, to be
-      // included within the html response (the initial html and sync
-      // data will always arrive together)
+      // The AfarHut immediately has its state reset, requiring a full sync to update. Then this
+      // full sync is consumed here, to be included within the html response (the initial html and
+      // sync data will always arrive together)
       
       let initComm = src.consumePendingSync({ fromScratch: true });
       
-      let roomScript = (room, loadType='async') => {
-        let src = uri({ path: '=hut:room', query: { room } });
-        return `<script ${loadType} src="${src}" data-room="${room}"></script>`;
+      let roomScript = (scriptLoadStrategy='async', room) => {
+        let src = uri({ path: '-hut:room', query: { room } });
+        return `<script ${scriptLoadStrategy} src="${src}" data-room="${room}"></script>`;
       };
       
       let belowConf = hut.getBelowConf();
@@ -124,7 +122,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
             <meta charset="utf-8">
             <title>${this.name.split('.').slice(-1)[0].upper()}</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <link rel="shortcut icon" type="image/x-icon" href="${uri({ path: '=hut:icon' })}">
+            <link rel="shortcut icon" type="image/x-icon" href="${uri({ path: '-hut:icon' })}">
             <style>
               html, body, body * {
                 position: relative; display: flex;
@@ -138,10 +136,10 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
               body > * { width: 100%; height: 100%; }
             </style>
             
-            ${roomScript('setup.clearing', 'defer') /* Note we want these deferred scripts to appear as early as possible so they can begin downloading */}
-            ${roomScript('setup.hut.hinterland.RoadAuthority', 'defer')}
-            ${roomScript('habitat.HtmlBrowserHabitat.hutify.foundation', 'defer')}
-            ${protocolRooms.toArr(n => roomScript(n, 'defer')).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
+            ${roomScript('defer', 'setup.clearing') /* Note we want these deferred scripts to appear as early as possible so they can begin downloading */}
+            ${roomScript('defer', 'setup.hut.hinterland.RoadAuthority')}
+            ${roomScript('defer', 'habitat.HtmlBrowserHabitat.hutify.foundation')}
+            ${protocolRooms.toArr(n => roomScript('defer', n)).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
             <script>
               Object.assign(window.global = window, { rooms: Object.create(null) });
               let evtSrc = EventTarget.prototype;
@@ -153,9 +151,9 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
               window.addEventListener('DOMContentLoaded', e=>rooms['habitat.HtmlBrowserHabitat.hutify.foundation']().init(e));
             </script>
             
-            ${preloadRooms.toArr(n => roomScript(n, 'async')).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
+            ${preloadRooms.toArr(n => roomScript('async', n)).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
 
-            <link rel="stylesheet" type="text/css" href="${uri({ path: '=html:css' })}">
+            <link rel="stylesheet" type="text/css" href="${uri({ path: '-html:css' })}">
             
             <script>Object.assign(global,{rawConf:JSON.parse('${valToJson({
               
@@ -247,7 +245,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
             <meta charset="utf-8">
             <title>${this.name.split('.').slice(-1)[0].upper()}</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <link rel="shortcut icon" type="image/x-icon" href="${uri({ path: '=hut:icon' })}">
+            <link rel="shortcut icon" type="image/x-icon" href="${uri({ path: '-hut:icon' })}">
             <style>
               body, html { padding: 0; margin: 0; }
               body { margin: 2px; text-align: center; }

@@ -83,29 +83,35 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       // which contains parsed data from the "hut" cookie
       let { belowNetAddr, body, hutCookie, path, query /*, fragment */ } = comm.context;
       
-      let payload = { ...hutCookie, ...query, ...body };
-      if (!payload.has('command')) {
-        // Note that `path` beginning with "/" indicates "untraditional" hut-specific usage
-        if      (path.startsWith('='))   payload.command = path.slice(1).replace(/[/]+/g, '.');
-        else if (path === 'favicon.ico') payload.command = 'hut:icon';
-        else                             payload.command = 'hut:hutify';
+      let msg = { ...hutCookie, ...query, ...body };
+      let hasCmd = msg.has('command');
+      let pathEmbedsCmd = !hasCmd && /^[+-]/.test(path);
+      if (pathEmbedsCmd) {
+        
+        // Http path beginning with "-" or "+" indicates a usage of the url path to specify the Hut
+        // command; "-" indicates an "anon" request, and "+" indicates "sync"
+        let char0 = path[0];
+        msg.command = path.slice(1).replace(/[/]+/g, '.');
+        msg.trn = { '+': 'sync', '-': 'anon' }[char0];
+        
+      } else {
+        
+        if      (!hasCmd && path === 'favicon.ico') Object.assign(msg, { command: 'hut:icon', trn: 'anon' });
+        else if (!hasCmd)                           Object.assign(msg, { command: 'hut:hutify', trn: 'sync' });
+        
+        // "trn" defaults to "sync"; clients can save server effort by specifying "anon"
+        if (!msg.has('trn')) msg.trn = 'sync';
+        
       }
       
-      //gsc({ ctx: comm.context, payload });
-      
       // Unprefixed commands are interpreted towards the default Loft, according to the AboveHut
-      if (!payload.command.has(':')) payload.command = `${this.aboveHut.getDefaultLoftPrefix()}:${msg.command}`;
-      
-      // The "hutify" command should always be "sync"
-      if      (payload.command === 'hut:hutify') payload.trn = 'sync';
-      // "trn" defaults to "sync" - clients can save server effort by specifying "anon"
-      else if (!payload.has('trn'))              payload.trn = 'sync';
+      if (!msg.command.has(':')) msg.command = `${this.aboveHut.getDefaultLoftPrefix()}:${msg.command}`;
       
       // These can't be confined to DEBUG blocks - must always detect malformatted remote queries!
-      let { hid=null, trn } = payload;
-      if (!/^(?:anon|sync|async)$/.test(trn))   return comm.kill({ code: 400, msg: 'Api: invalid "trn"' });
-      if (hid !== null && !isForm(hid, String)) return comm.kill({ code: 400, msg: 'Api: invalid "hid"' });
-      if (hid === '')                           return comm.kill({ code: 400, msg: 'Api: invalid "hid"' });
+      let { hid=null, trn } = msg;
+      if (![ 'anon', 'sync', 'async' ].has(trn)) return comm.kill({ code: 400, msg: 'Api: invalid "trn"' });
+      if (hid !== null && !isForm(hid, String))  return comm.kill({ code: 400, msg: 'Api: invalid "hid"' });
+      if (hid === '')                            return comm.kill({ code: 400, msg: 'Api: invalid "hid"' });
       
       let { belowHut, road } = safe(
         () => this.aboveHut.getBelowHutAndRoad({ roadAuth: this, trn, hid, params: { belowNetAddr } }),
@@ -132,7 +138,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
             /// =DEBUG}
             comm.send(msg);
           },
-          msg: payload
+          msg
         });
         
       }
@@ -141,7 +147,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       
       // If we made it here, this trn is "async" - the concept of "reply" breaks down here; the
       // request and response are independent; there is no rush to respond using `res`!
-      this.aboveHut.hear({ src: belowHut, road, ms, msg: payload });
+      this.aboveHut.hear({ src: belowHut, road, ms, msg });
       
       // If there's a pending Tell send it immediately using `res`!
       let pendingMsg = road.queueMsg.shift();
@@ -393,7 +399,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         
         // STEP 1: BODY
         
-        let body = req.headers['x-hut-msg'];
+        let body = req.headers.at('x-hut-msg');
         if (!body) {
           
           let bodyPrm = Promise.later();
@@ -448,7 +454,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         let [ , path, query='', fragment='' ] = req.url.match(/^([/][^?#]*)([?][^#]*)?([#].*)?$/);
         [ path, query, fragment ] = [ path, query, fragment ].map(v => v.slice(1));
         
-        path = path.replace(/^[!][^/]+[/]*/, ''); // Ignore cache-busting component and following slashes
+        path = path.replace(/^[!][^/]+[/]?/, ''); // Ignore cache-busting component and up to 1 following slash
         query = query ? query.split('&').toObj(pc => [ ...pc.cut('='), true /* default key-only value to flag */ ]) : {};
         
         Object.assign(this.context, { path, query, fragment });

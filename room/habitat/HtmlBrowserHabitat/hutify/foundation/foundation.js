@@ -78,9 +78,9 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   window.evt('blur', () => bc.remove('focus'));
   
   let HttpKeep = form({ name: 'HttpKeep', has: { Keep }, props: (forms, Form) => ({
-    init(uri) { Object.assign(this, { uri }); },
-    getUri() { return this.uri; },
-    desc() { return `${window.location.protocol.slice(0, -1)}//${this.uri.slice(1)}`; }
+    init({ path, query }) { Object.assign(this, { path, query }); },
+    getUri() { return global.uri(this); },
+    desc() { return global.uri(this); }
   })});
   
   // Some maturities use cache-busting for every asset request, but we want to avoid requesting the
@@ -90,7 +90,7 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
     let dive = token.dive(diveToken);
     let key = `/${dive.join('/')}`;
     let keep = global.keep.keeps.get(key);
-    if (!keep) global.keep.keeps.add(key, keep = HttpKeep(uri({ path: 'hut:asset', query: { dive: key } })));
+    if (!keep) global.keep.keeps.add(key, keep = HttpKeep({ path: '+hut:asset', query: { dive: key } }));
     return keep;
   }, { keeps: Map() });
   global.conf = (diveToken, def=null) => {
@@ -138,7 +138,7 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
         // attribute as they are always async
         script = document.createElement('script');
         script.setAttribute('type', 'text/javascript');
-        script.setAttribute('src', global.uri({ path: '=hut:room', query: { type: 'room', room: name } }));
+        script.setAttribute('src', global.uri({ path: '-hut:room', query: { type: 'room', room: name } }));
         script.setAttribute('data-room', name);
         document.head.appendChild(script);
         

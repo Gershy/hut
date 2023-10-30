@@ -6,7 +6,6 @@
 // Ellipsis: '\u2026'
 
 require('../room/setup/clearing/clearing.js');
-let util = require('util');
 let { rootTransaction: rootTrn, Filepath, FsKeep } = require('./filesys.js');
 let NetworkIdentity = require('./NetworkIdentity.js');
 
@@ -53,13 +52,13 @@ let niceRegex = (...args /* flags, niceRegexStr | niceRegexStr */) => {
   // Allows writing self-documenting regular expressions
   
   let [ flags, str ] = (args.length === 2) ? args : [ '', args[0] ];
-  
   let lns = str.split('\n').map(line => line.trimTail());
+  
   let cols = Math.max(...lns.map(line => line.length)).toArr(col => Set(lns.map(ln => ln[col])));
   cols.each(col => col.size > 1 && col.rem(' '));
   
   /// {DEBUG=
-  for (let [ num, col ] of cols.entries()) if (col.size > 1) throw Error(`Conflicting values at column ${num}: [${[ ...col ].join('')}]`);
+  for (let [ num, col ] of cols.entries()) if (col.size > 1) throw Error(`Conflicting chars at column ${num}: [${[ ...col ].join('')}]`);
   /// =DEBUG}
   
   return RegExp(cols.map(col => [ ...col ][0]).join(''), flags);
@@ -78,8 +77,8 @@ let captureLineCommentRegex = niceRegex(String.baseline(`
 
 // Avoid "/*" within Strings; capture terminating "*/" on the same line
 let captureInlineBlockCommentRegex = niceRegex('g', String.baseline(`
-  | (?<=                                           )
-  |     ^(?:     |           |           |       )* [ ]*         [^*]|[*][^/]
+  | (?<=                                           )                                 
+  |     ^(?:     |           |           |       )* [ ]*         [^*]|[*][^/]        
   |         [^'"] ['][^']*['] ["][^"]*["] #[^#]*#       [/][*](?:            )*[*][/]
 `).replace(/#/g, '`')); // Simple way to include literal "`" in regex
 

@@ -76,7 +76,7 @@ Object.assign(global, {
     
     $$: 'has:hasOwnProperty',
     
-    at(k) { return this.has(k) ? this[k] : skip; },
+    at(k, def=skip) { return this.has(k) ? this[k] : def; },
     each(fn) { for (let [ k, v ] of this) fn(v, k); },
     map(fn) { // Iterator: (val, key) => val
       let ret = Object.assign({}, this);
@@ -892,7 +892,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   // Urls
   uriRaw: ({ path='', cacheBust, query }) => {
     let url = '';
-    if (cacheBust)               url =  `/!${cacheBust}`;
+    if (cacheBust)               url += `/!${cacheBust}`;
     if (path)                    url += `/${path}`;
     if (query && !query.empty()) url += '?' + query.toArr((v, k) => `${k}=${v}`).join('&'); // Note: DON'T encode here!
     return url;
