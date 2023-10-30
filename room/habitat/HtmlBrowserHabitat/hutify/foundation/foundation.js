@@ -397,6 +397,8 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   let initComm = conf('initComm');
   if (initComm) belowHut.processCommand({ src: aboveHut, msg: initComm });
   
+  gsc({ locus: conf('locus') });
+  
   await loft.open({ sc: global.subcon('loft'), prefix: conf('deploy.loft.prefix'), hereHut: belowHut, rec: aboveHut });
   
   gsc(`Loft opened after ${(getMs() - performance.timeOrigin).toFixed(2)}ms`);

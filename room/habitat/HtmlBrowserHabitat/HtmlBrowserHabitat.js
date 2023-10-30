@@ -102,10 +102,13 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
       };
       
       let belowConf = hut.getBelowConf();
+      
+      // Determine all Rooms related to processing protocols
       let protocolsDef = belowConf.deploy.host.protocols;
       let protocolRooms = Set(protocolsDef.toArr(v => v.protocol))
         .toArr(v => `habitat.HtmlBrowserHabitat.hutify.protocol.${v}`);
       
+      // Determine all Rooms with habitat-specific Layout logic
       let preloadRooms = [ ...hut.preloadRooms ];
       for (let r of preloadRooms) {
         if (!r.hasHead('reality.layout.')) continue;
@@ -113,7 +116,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
         preloadRooms.push(`habitat.HtmlBrowserHabitat.hutify.layoutTech.${r[0].lower()}${r.slice(1)}`);
       }
       
-      let { textSize='100%' } = msg;
+      let { textSize='100%', locus=null } = msg;
       reply(String.multiline(`
         <!doctype html>
         <html lang="en" spellcheck="false">
@@ -157,20 +160,13 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
             
             <script>Object.assign(global,{rawConf:JSON.parse('${valToJson({
               
-              // Encode to String server-side; decode client-side
+              // This gets encoded server-side; will be decoded client-side
+              hid: src.uid, ...belowConf, locus, initComm
               
-              hid: src.uid,
-              ...belowConf,
-              ageMs: getMs(),
-              utcMs: getMs(),
-              initComm
-              
-            }).replace(/[\\']/g, '\\$&') /* The payload will be single-quoted, so escape it appropriately */ }')})</script>
+            }).replace(/[\\']/g, '\\$&') /* The JSON string is wrapped in single-quotes; escape any embedded single-quotes */ }')})</script>
             
           </head>
-          
           <body></body>
-          
         </html>
       `));
       

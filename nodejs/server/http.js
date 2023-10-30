@@ -96,8 +96,19 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         
       } else {
         
-        if      (!hasCmd && path === 'favicon.ico') Object.assign(msg, { command: 'hut:icon', trn: 'anon' });
-        else if (!hasCmd)                           Object.assign(msg, { command: 'hut:hutify', trn: 'sync' });
+        if (!hasCmd && path === 'favicon.ico') {
+          
+          Object.assign(msg, { command: 'hut:icon', trn: 'anon' });
+          
+        } else if (!hasCmd) {
+          
+          Object.assign(msg, {
+            command: 'hut:hutify',
+            trn: 'sync',
+            locus: token.dive(path.replace(/[/]+/g, '.'))
+          });
+          
+        }
         
         // "trn" defaults to "sync"; clients can save server effort by specifying "anon"
         if (!msg.has('trn')) msg.trn = 'sync';
