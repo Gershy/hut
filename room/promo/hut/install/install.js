@@ -1,4 +1,4 @@
-global.rooms['promo.hut.install'] = async (installKeep) => {
+global.rooms['promo.hut.install'] = async (roomName, installKeep) => {
   
   let { Hinterland, HtmlBrowserHabitat } = await getRooms([
     'Hinterland',

@@ -590,16 +590,14 @@ global.rooms['record'] = async () => {
             
         }
           
-        // Skip `offset` items! (Note that filtered items don't count
-        // towards offset items)
+        // Skip `offset` items! (Note that filtered items don't count towards offset items)
         let count = 0;
         for await (let selected of selection) {
           
           // Stop selecting if `activeSignal` is no longer active
           if (activeSignal.off()) return;
           
-          // Completely ignore `selected` if it gets filtered out (it
-          // doesn't count towards the `offset` either!)
+          // Ignore `selected` if it gets filtered out (it won't effect `offset` either!)
           if (filter && !(await filter(selected))) continue;
           
           count++;
@@ -707,16 +705,14 @@ global.rooms['record'] = async () => {
       if (!this.activeSignal['~prm']) this.activeSignal['~prm'] = Promise(rsv => this.activeSignal.route(rsv, 'prm'));
       return this.activeSignal['~prm'];
     },
-    async getRecs() {
-      // TODO: Could use `global.then` and take off the `async` keyword
-      await this.ready();
-      return this.hrecs.toArr(hrec => hrec.rec);
+    getRecs() {
+      return then(this.ready(), () => this.hrecs.toArr(hrec => hrec.rec));
     },
-    async getRec() {
-      // TODO: Could use `global.then` and take off the `async` keyword
-      await this.ready();
-      for (let hrec of this.hrecs.values()) return hrec.rec;
-      return null;
+    getRec() {
+      return then(this.ready(), () => {
+        for (let hrec of this.hrecs.values()) return hrec.rec;
+        return null;
+      });
     },
     async findRecs(fn) {
       await Promise(rsv => this.activeSignal.route(rsv));

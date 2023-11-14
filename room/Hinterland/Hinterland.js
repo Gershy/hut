@@ -133,6 +133,9 @@ global.rooms['Hinterland'] = async () => {
     
     async open({ sc, prefix=this.prefix, hereHut, rec=hereHut }) {
       
+      // Hinterland basically sets up the Experience ("utils"), and wires things up so that the
+      // "above" and "below" functions of the consumer get called appropriately
+      
       let tmp = Tmp();
       
       let recMan = rec.type.manager;
@@ -158,7 +161,7 @@ global.rooms['Hinterland'] = async () => {
       
       /// {DEBUG=
       let sampleSc = sc.kid('recordSample');
-      if (sampleSc.params().chatter && sampleSc.params().ms) (async () => {
+      if (sampleSc.params().active && sampleSc.params().ms) (async () => {
         
         let rank = rec => rec.uid.hasHead('!') ? -1 : 0;
         let rankType = (a, b) => a.type.name.localeCompare(b.type.name);
@@ -290,7 +293,7 @@ global.rooms['Hinterland'] = async () => {
             lofterRh: lofterRh,
             lofterRelHandler: lofterRh,
             enableAction: (term, ...args) => belowHut.enableAction(pfx(term, ':'), ...args),
-            ...Form.makeUtils(prefix, belowHut, recMan, pfx)
+            ...Form.makeUtils(prefix, belowHut, recMan, pfx) // Can't use the `utils` instance - it used `hereHut`; this case needs `belowHut`
           }, dep);
         });
         

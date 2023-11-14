@@ -102,11 +102,11 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
           
         } else if (!hasCmd) {
           
-          Object.assign(msg, {
-            command: 'hut:hutify',
-            trn: 'sync',
-            locus: token.dive(path.replace(/[/]+/g, '.'))
-          });
+          let { term='HUT' } = msg;
+          Object.assign(msg, { command: 'hut:hutify', trn: 'sync', locus: {
+            term,
+            diveToken: token.dive(path.replace(/[/]+/g, '.'))
+          }});
           
         }
         

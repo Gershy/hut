@@ -15,7 +15,8 @@ global.rooms['reality.layout.Text'] = async () => {
       /// {DEBUG=
       if (!Form.alignOpts.has(align)) throw Error(`Api: invalid "align" value`).mod({ align });
       if (!isForm(style, Array)) throw Error(`Api: "style" should be Array or String; got ${getFormName(style)}`);
-      if (!style.any(v => !Form.styleOpts.has(v))) throw Error(`Api: invalid "style" value`).mod({ style });
+      
+      if (style.any(v => !Form.styleOpts.has(v))) throw Error(`Api: invalid "style" value`).mod({ style });
       /// =DEBUG}
       
       if (spacing?.constructor !== Object) spacing = { h: spacing, v: spacing };

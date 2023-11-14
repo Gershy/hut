@@ -142,15 +142,20 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
             ${roomScript('defer', 'setup.clearing') /* Note we want these deferred scripts to appear as early as possible so they can begin downloading */}
             ${roomScript('defer', 'setup.hut.hinterland.RoadAuthority')}
             ${roomScript('defer', 'habitat.HtmlBrowserHabitat.hutify.foundation')}
-            ${protocolRooms.toArr(n => roomScript('defer', n)).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
+            ${protocolRooms.toArr(n => roomScript('defer', n)).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur... just kinda hurts my soul */ }
             <script>
+              // TODO: Use SharedWorker? (caching is funky for the html:worker response!)
+              // let worker = new SharedWorker('-html:worker?hid=${src.hid}');
+              // worker.port.onmessage = evt => gsc('MSG', evt.data);
+              // worker.port.start();
+              // Object.assign(window.global = window, { rooms: Object.create(null), worker });
               Object.assign(window.global = window, { rooms: Object.create(null) });
               let evtSrc = EventTarget.prototype;
               Object.defineProperty(evtSrc, 'evt', { configurable: true, value: function(...args) {
                 this.addEventListener(...args);
-                return Tmp(() => this.removeEventListener(...args));
+                return Tmp(() => this.removeEventListener(...args)); // Won't work until Tmp is globally defined
               }});
-              // Can't use window.evt - Tmp hasn't been defined yet
+              // Can't use window.evt since Tmp isn't defined yet (clearing.js isn't applied yet)
               window.addEventListener('DOMContentLoaded', e=>rooms['habitat.HtmlBrowserHabitat.hutify.foundation']().init(e));
             </script>
             
@@ -212,6 +217,25 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
           animation-iteration-count: 1;
           animation-fill-mode: forwards;
         }
+      `));
+      
+    });
+    cmd('html:worker', async ({ src, reply, msg }) => {
+      
+      // If able to generate exact url used for tab to import clearing, it may be possible to reuse
+      // the cache between the worker and tab js? TODO: Can the worker be the single source of file
+      // urls, shared between all active tabs?? Right now in dev maturity the cache busting uses a
+      // random value every time, whereas in beta it uses a fixed value per run of the AboveHut -
+      // maybe the BelowHut should always have access to this fixed, per-AboveHut-run beta string?
+      // In dev tabs should request the exact same SharedWorker, without fully random cachebusting!
+      // edge://inspect/#workers
+      reply(String.multiline(`
+        // importScripts('-hut:room?room=setup.clearing'); // TODO: Fails as the js is delivered as application/octet-stream :(
+        onconnect = e => e.ports.each(port => {
+          let portUid = Math.random().toString(36).slice(2);
+          let cnt = 0;
+          setInterval(() => port.postMessage('HI: ' + portUid + ': ' + (cnt++)), 3000);
+        });
       `));
       
     });

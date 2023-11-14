@@ -160,7 +160,7 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
           
           // Note that `room.offsets` exists based on how Rooms are
           // compiled for BELOW!
-          return room();
+          return room(name);
           
         })
         .catch(cause => err.propagate({ cause, msg: `Failed to load room "${name}"` }))
@@ -214,6 +214,8 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   };
   /// =DEBUG}
   
+  // Note that `aboveHid` is the server's unique `hid` value, whereas `belowHid` can also be called
+  // the "assigned hid" - i.e. the hid the server has provided for this client
   let { hid: belowHid, aboveHid, deploy: { uid, host } } = global.conf();
   let { netAddr, netIden: netIdenConf, protocols: pcls, heartbeatMs } = host;
   pcls = pcls.toArr(v => v); // Otherwise `pcls ~== { 0: pclConf0, 1: pclConf1, ... }`
@@ -392,12 +394,31 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   // Providing the same `belowHid` initiates only one BelowHut
   // Note that RoadAuthorities BELOW should never require any params passed to their Roads
   for (let roadAuth of roadAuths) aboveHut.getBelowHutAndRoad({ roadAuth, hid: belowHid, params: {} });
-  let belowHut = aboveHut.belowHuts.values().next().value; // Get the single BelowHut
   
+  // Get the single BelowHut
+  let belowHut = aboveHut.belowHuts.values().next().value;
+  
+  // Set up the Locus
+  // TODO: The real solution to the problem of a single BelowHut (user) with multiple tabs open
+  // (multiple Locuses) is to set to some Hut in a SharedWorker, and for each tab, a separate Hut
+  // is used. Some potential ways to do this:
+  // - The SharedWorker uses the legendary BetweenHut; tabs use BelowHuts as usual
+  // - SharedWorker uses a BelowHut (which should already fully work); tab uses *another* BelowHut
+  //   (this is probably stupid - it's using a BelowHut exactly where a BetweenHut is intended)
+  let locus = recMan.addRecord({ type: 'hut.locus', uid: '!locus', group: [ belowHut ], value: conf('locus') });
+  locus.valueSrc.route(({ term='Hut!', diveToken=[] }={}) => {
+    window.document.title = term;
+    window.history.pushState(null, term, `/${diveToken.join('/')}`);
+  });
+  
+  // TODO: Intercept link clicks to the same origin - they should modify `window.location` and the
+  // Locus value, allowing a new page to load without a full http refresh! It may be possible to
+  // intercept user navigation via back/forwards browser buttons; I don't think it's possible to
+  // intercept navigations which occur when user types in new url and hits enter
+  
+  // Process the initial command
   let initComm = conf('initComm');
   if (initComm) belowHut.processCommand({ src: aboveHut, msg: initComm });
-  
-  gsc({ locus: conf('locus') });
   
   await loft.open({ sc: global.subcon('loft'), prefix: conf('deploy.loft.prefix'), hereHut: belowHut, rec: aboveHut });
   

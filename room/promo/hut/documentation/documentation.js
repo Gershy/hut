@@ -1,4 +1,4 @@
-global.rooms['promo.hut.documentation'] = async docKeep => {
+global.rooms['promo.hut.documentation'] = async (roomName, docKeep) => {
   
   let rooms = await getRooms([
     'Hinterland',
@@ -10,20 +10,14 @@ global.rooms['promo.hut.documentation'] = async docKeep => {
   return Hinterland({
     prefix: 'doc',
     habitats: [ HtmlBrowserHabitat() ],
+    /// {ABOVE=
     above: async (experience, dep) => {
       
-      /// {ABOVE=
-      
-      dep(literature.activateAbove(experience));
-      
-      /// =ABOVE}
-      
     },
+    /// =ABOVE}
     below: async (experience, dep) => {
       
-      experience.real.addLayout('Geom', { w: '100%', h: '100%' });
-      experience.real.addLayout('Decal', { colour: '#6050f0' });
-      
+      dep(await literature.activateBelow(experience));
       
     }
   })

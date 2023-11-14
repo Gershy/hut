@@ -1,4 +1,4 @@
-global.rooms['therapy'] = async therapyKeep => {
+global.rooms['therapy'] = async (roomName, therapyKeep) => {
   
   // This room consumes a record structure representing Subconscious
   // output, and provides a UI for analyzing this output

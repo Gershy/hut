@@ -1,4 +1,4 @@
-let roomName = 'habitat.HtmlBrowserHabitat.hutify.protocol.sokt'
+let roomName = 'habitat.HtmlBrowserHabitat.hutify.protocol.sokt';
 global.rooms[roomName] = () => then(getRoom('setup.hut.hinterland.RoadAuthority'), RoadAuth =>
   form({ name: 'SoktRoadAuthority', has: { RoadAuth }, props: (forms, Form) => ({
     

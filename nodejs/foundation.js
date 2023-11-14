@@ -1090,7 +1090,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         
         /// {DEBUG=
         // TODO: Wrapping this in DEBUG does nothing; this file doesn't get compiled!
-        let trace = sc.params().chatter ? Error('trace').getInfo().trace : null;
+        let trace = sc.params().active ? Error('trace').getInfo().trace : null;
         /// =DEBUG}
         
         let leftColW = 28;
@@ -1538,7 +1538,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
             // The file executed and defined `global.room[name]` to be a
             // function; return a call to that function; pass the Keep
             // representing the sourcecode's parent!
-            let result = await Object.assign(global.rooms[name], { offsets })(srcKeep.access(namePcs));
+            let result = await Object.assign(global.rooms[name], { offsets })(name, srcKeep.access(namePcs));
             loadedRooms.add(name, result);
             return result;
             

@@ -1,4 +1,4 @@
-global.rooms['chess2'] = async chess2Keep => {
+global.rooms['chess2'] = async (roomName, chess2Keep) => {
   
   let sc = subcon('loft.chess2');
   

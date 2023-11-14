@@ -874,8 +874,13 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   },
   subconParams: sc => {
     
+    // Returns configuration for specific subcon instance; some significant properties:
+    // - "chatter": indicates this sc is writing to stdout
+    // - "therapy": indicates this sc is writing to therapy
+    // - "active": indicates this sc is at least writing to somewhere
+    
     let subconConf = global.conf('global.subcon');
-    if (!subconConf) return { chatter: true, therapy: false };
+    if (!subconConf) return { chatter: true, therapy: false, active: true };
     let ptr = { root: subconConf };
     let params = {};
     for (let pc of [ 'root', ...token.dive(sc.term) ]) {
@@ -883,7 +888,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
       ptr = ptr[pc];
       params.merge(ptr.params ?? {});
     }
-    return params;
+    return { ...params, active: params.chatter || params.therapy };
     
   },
   subconOutput: (sc, ...args) => console.log(`\nSubcon "${sc.term}": ${global.formatAnyValue(args)}`),
@@ -920,27 +925,22 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   // Util
   token: {
     
-    // The ability to specify functionality via compact notation is a
-    // fundamental feature of Hut. Such compact values are "Tokens".
-    // Note that theoretically, compact notation could indicate all
-    // kinds of operations: walking graphs, defining deep merges,
-    // multi-property extraction, schema validation, etc! The "type of
-    // functionality" could even be embedded within the Token - this
-    // would mean a single function (`token.resolve`) could process any
-    // given Token. For now, Hut only supports Diving (`token.dive`),
-    // which converts a Token into an Array of items, typically for use
-    // with indirection (diving through successive references).
-    // Note that Tokens are usually Strings, but could be other compact
-    // values!
+    // The ability to specify functionality via compact notation is a fundamental feature of Hut.
+    // Such compact values are "Tokens". Note that theoretically, compact notation could indicate
+    // all kinds of operations: walking graphs, defining deep merges, multi-property extraction,
+    // schema validation, etc! The "type of functionality" could even be embedded within the Token
+    // - this would mean a single function (`token.resolve`) could process any given Token. For now
+    // Hut only supports Diving (`token.dive`), which converts a Token into an Array of items,
+    // typically for use with indirection (diving through successive references). Note that Tokens
+    // are probably/usually Strings, but could be other compact values!
     
     resolve: (...args) => token.dive,
     dive: tok => {
       
-      // Note this function says nothing about the items in the resolved
-      // "indirection chain" (e.g. that they are all Strings). If the
-      // Token is an actual Array
-      // function is very tolerant when passed an actual Array, and
-      // neither examines its children nor performs any flattening
+      // Note this function says nothing about the items in the resolved "indirection chain" (e.g.
+      // that they are all Strings). This function is very tolerant when passed an actual Array,
+      // and neither examines its children nor performs any flattening (because nested Arrays could
+      // represent the indirection components!)
       
       // Handle `null`, empty string
       if (!tok) tok = [];
@@ -951,10 +951,9 @@ Object.assign(global, global.rooms['setup.clearing'] = {
       // in they are typically rendered similarly to or reminiscent of a
       // right-pointing-arrow
       if (isForm(tok, String))
-        return ('./>\u0010\u001a'.has(tok[0]) // \u0010 - arrowhead-right; \u001a - arrow-right
-          ? tok.slice(1).split(tok[0])
-          : tok.split('.')
-        ).filter(Boolean);
+        return './>\u0010\u001a'.has(tok[0]) // \u0010 - arrowhead-right; \u001a - arrow-right
+          ? tok.slice(1).split(tok[0]).filter(Boolean)
+          : tok.split('.').filter(Boolean);
       
       if (!isForm(tok, Array)) throw Error(`Api: token must resolve to Array; got ${getFormName(tok)}`).mod({ token: tok });
       

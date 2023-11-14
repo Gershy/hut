@@ -10,6 +10,7 @@ global.rooms['setup.hut'] = async () => {
     // Huts connect by Roads to other Huts, have the ability to Tell and Hear to/from other Huts,
     // and can react to what they Hear
     
+    $hutCommSc: subcon('hut.comm'),
     $sendComm: ({ src, trg, road, reply, ms=getMs(), msg }) => {
       
       // Causes `src` to tell `trg` a Message
@@ -51,11 +52,10 @@ global.rooms['setup.hut'] = async () => {
         `));
       /// =DEBUG}
       
-      subcon(msg?.command === 'hut:room' ? 'hut.comm.room' : 'hut.comm')(() => ([{
-        src: src?.desc() ?? null,
-        trg: trg.desc(),
-        msg: hasForm(msg, Keep) ? msg.desc() : msg
-      }]));
+      let { active, commandRegex } = Form.hutCommSc.params();
+      let { command } = msg;
+      if      (!command)                                      Form.hutCommSc({ src, trg, note: 'missing "command"', msg });
+      else if (active && command?.match(commandRegex || '.')) Form.hutCommSc({ src, trg, command, msg });
       
       if (!src && trg.isAfar) throw Error(`Can't tell TrgAfarHut when SrcHut is null`);
       if (!src) return trg.processCommand({ src: null, road: null, reply: null, ms, msg });
@@ -189,7 +189,7 @@ global.rooms['setup.hut'] = async () => {
       
       let run = () => {
         let ch = this.commandHandlers.get(comm.msg.command);
-        if (!ch) throw Error(`Api: invalid command`).mod({ hut: this.desc(), comm });
+        if (!ch) throw Error(`Api: invalid command`).mod({ hut: this.desc(), command: comm.msg.command, comm });
         return ch.fn(comm);
       };
       
@@ -399,12 +399,12 @@ global.rooms['setup.hut'] = async () => {
       }
       /// =ABOVE}
       
-      // Get a BelowHut reference; consider any provided `hid`, whether
-      // the `hid` has already been seen, and the deployment maturity
+      // Get a BelowHut reference; consider any provided `hid`, whether the `hid` has already been
+      // seen, and the deployment maturity
       let belowHut = (() => {
         
-        // TODO: Is the hid-refresh redirect necessary? What if the hid
-        // for the initial html request is simply ignored??
+        // TODO: Is the hid-refresh redirect necessary? What if the hid for the initial html
+        // request is simply ignored??
         
         if (hid && this.belowHuts.has(hid)) return this.belowHuts.get(hid);
         
@@ -432,13 +432,10 @@ global.rooms['setup.hut'] = async () => {
         let type = manager.getType('hut.below');
         let group = manager.getGroup([]);
         let bh = BelowHut({ aboveHut: this, isHere: !this.isHere, type, group, hid, heartbeatMs: this.heartbeatMs });
-        
         manager.addRecord('hut.owned', { above: this, below: bh }, { ms: getMs() });
         
         this.belowHuts.add(hid, bh);
-        bh.endWith(() => {
-          this.belowHuts.rem(hid);
-        });
+        bh.endWith(() => this.belowHuts.rem(hid));
         
         return bh;
         
