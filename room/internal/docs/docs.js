@@ -1,23 +1,3 @@
-/* TODO: Changes based on lucidity gained from writing documentation:
-
-RootReal is accessed with hinterland.seek('real', 'primary') meaning
-there can be multiple RootReals; this was to accomodate, e.g.,
-multi-monitor setups, where each RootReal would represent a monitor. But
-better to just do hinterland.seek('real'), returning the ONE AND ONLY
-RootReal, representing the "multi-monitor environment" itself; perhaps
-child Reals can represent the individual monitors.
-
-Real.prototype.mod -> Real.prototype.modify
-
-real.resizeSrc; triggers on ANY resize, including by animation, if
-adjusting to new window size, etc.
-
-"tech" -> "media" ("RealTech" -> "RealMedia")
-
-Art "animationFn" -> "artFn"
-Axis1d "order" -> "axisOrder"
-*/
-
 global.rooms['internal.docs'] = async foundation => {
   
   let rooms = await foundation.getRooms([
