@@ -223,14 +223,23 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
             return entry.indent(ansi('\u00a6', 'subtle') + '   ')
             
           });
-          let multiLine = multiLineItems.valSort(v => v.length + (v.split('\n').length - 1) * 3).join(bold(',') + '\n')
+          //let multiLine = multiLineItems.valSort(v => v.length + (v.split('\n').length - 1) * 3).join(bold(',') + '\n')
+          
+          // Using `Math.max` means there's no sorting preference for items less than 10 chars long
+          let multiLine = multiLineItems.valSort(v => {
+            let noAnsi = remAnsi(v);
+            let numChars = noAnsi.length;
+            let numLines = (noAnsi.split('\n').length - 1);
+            return Math.max(20, numChars) * 1 + numLines * 7;
+          }).join(bold(',') + '\n')
+          
           
           return `${bold('{')}\n${multiLine}\n${bold('}')}`;
           
         })();
         
-        return str;
         seen.set(val, str);
+        return str;
         
       }
       

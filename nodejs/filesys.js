@@ -614,6 +614,7 @@ let FsKeep = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => ({
     
   })})(),
   $extToContentType: {
+    js: 'text/javascript; charset=utf-8',
     json: 'text/json; charset=utf-8',
     html: 'text/html; charset=utf-8',
     css: 'text/css; charset=utf-8',

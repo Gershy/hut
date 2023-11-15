@@ -352,10 +352,8 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
             
             // `keep` gets piped to the response; it may be compressed
             
-            this.res.writeHead(200, {
-              'Content-Disposition': 'inline',
-              ...resHeaders
-            });
+            let keepHeaders = { 'Content-Disposition': 'inline', ...resHeaders };
+            this.res.writeHead(200, keepHeaders);
             
             let pipe = await keep.getTailPipe();
             if (encode) {
@@ -371,7 +369,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
               
             }
             
-            this.sc(() => ({ event: 'tell', id: this.context.id, res: { code: 200, headers: resHeaders, encode, body: keep.desc() } }));
+            this.sc(() => ({ event: 'tell', id: this.context.id, res: { code: 200, headers: keepHeaders, encode, body: keep.desc() } }));
             
           } else {
             
@@ -386,7 +384,6 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
             this.res.end(msg);
             
             this.sc(() => ({ event: 'tell', id: this.context.id, res: { code: 200, headers: resHeaders, encode, body: origMsg } }));
-            
           }
           
         } catch (err) {
