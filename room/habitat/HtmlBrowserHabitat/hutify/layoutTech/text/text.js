@@ -16,7 +16,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.text'] = () => ({
     // pre-wrap tactic is going to fail when the text wraps; the wrapped
     // lines will wrap all the way to the leftmost side of the child
     // This may, however, overload the functionality of the Text Layout;
-    // it could be better to use define something new like RichText
+    // it could be better to define something new like RichText
     let span = real.node.querySelector(':scope > span.text');
     span.textContent = layout.getParam(real, 'text') ?? '\u2022'.repeat(3);
     

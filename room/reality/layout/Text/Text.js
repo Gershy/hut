@@ -10,7 +10,7 @@ global.rooms['reality.layout.Text'] = async () => {
     
     init({ text=null, size=null, align='mid', style='', spacing={} }={}) {
       
-      if (style.constructor === String) style = style.split(',').map(v => v.trim() ?? skip);
+      if (style.constructor === String) style = style.split(',').map(v => v.trim() || skip);
       
       /// {DEBUG=
       if (!Form.alignOpts.has(align)) throw Error(`Api: invalid "align" value`).mod({ align });

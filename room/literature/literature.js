@@ -45,10 +45,16 @@ global.rooms['literature'] = async () => {
       return section;
       
     },
+    text(text) {
+      return this.real.addReal('text', {
+        Geom: { w: '100%' },
+        Text: { text, align: 'fwd', spacing: '1vmin' }
+      });
+    },
     title(text) {
       return this.real.addReal('title', {
         Geom: { w: '100%' },
-        Text: { text, size: '220%', style: 'bold' }
+        Text: { text, align: 'fwd', spacing: '1vmin', size: '220%', style: 'bold', }
       });
     }
     
@@ -56,46 +62,55 @@ global.rooms['literature'] = async () => {
   
   let Literature = form({ name: 'Literature', has: { Slots }, props: (forms, Form) => ({
     
-    init({ roomName, scribe, content }) { Object.assign(this, { roomName, scribe, content }); },
+    init({ roomName, content }) {
+      Object.assign(this, {
+        roomName,
+        content,
+        experience: null,
+        scribe: null,
+        activeContentTmp: Tmp.stub
+      });
+    },
     
+    async setContent(chain) {
+      
+      /// {DEBUG=
+      if (!this.scribe) throw Error('Api: called setContent before activateBelow');
+      /// =DEBUG}
+      
+      // TODO: This approach makes it impossible to have shared experiences within the Literature
+      // content because the `getRoom` only occurs BELOW; but at the moment there's no way to have
+      // it called ABOVE in sync, because doing so would effect the global state of the  BelowHut
+      // and cause all tabs to snap to the same Literature content
+      let contentRoom = [ ...token.dive(this.roomName), 'root', ...token.dive(chain) ].join('.');
+      let scribeFn = await getRoom(contentRoom);
+      
+      let prevTmp = this.activeContentTmp;
+      let nextTmp = this.activeContentTmp = Tmp();
+      
+      // Add the new section
+      let pageReal = this.scribe.section(chain.join('.'), scribeFn);
+      nextTmp.endWith(pageReal);
+      
+      // Remove the previous section
+      prevTmp.end();
+      
+    },
     async activateBelow(experience, real=experience.real) {
       
+      /// {DEBUG=
+      if (this.scribe) throw Error('Api: multiple activateBelow calls');
+      /// =DEBUG}
+      
       let tmp = Tmp();
+      this.experience = experience;
+      this.scribe = Scribe({ real });
       
       /// {BELOW=
-      let scribe = Scribe({ real });
-      let activateNewContent = async (chain, prevTmp) => {
-        
-        // The Tmp representing the previous content isn't ended the moment new Content is
-        // activated; it's only ended when the new Content is loaded and ready to be displayed
-        
-        let tmp = Tmp();
-        
-        let contentRoom = [ ...token.dive(this.roomName), 'root', ...chain ].join('.');
-        gsc({ contentRoom });
-        
-        // TODO: This approach makes it impossible to have shared experiences within the Literature
-        // content because the `getRoom` only occurs BELOW; but at the moment there's no way to
-        // have it called ABOVE in sync, because doing so would effect the global state of the 
-        // BelowHut and cause all tabs to snap to the same Literature content
-        let scribeFn = await getRoom(contentRoom);
-        
-        // Add the new section
-        let pageReal = scribe.section(chain.join('.'), scribeFn);
-        tmp.endWith(pageReal);
-        
-        // Remove the previous section
-        prevTmp.end();
-        
-        return tmp;
-        
-      };
-      
       let belowHut = experience.lofterRh.rec;
       let locus = await belowHut.withRh('hut.locus', 'one');
       
       let contentChain = null;
-      let contentTmp = Tmp.stub;
       let locusLoadRoute = locus.valueSrc.route(({ diveToken }) => {
         
         // Dedup
@@ -103,7 +118,7 @@ global.rooms['literature'] = async () => {
         if (newContentChain === contentChain) return;
         contentChain = newContentChain;
         
-        contentTmp = activateNewContent(diveToken, contentTmp);
+        this.setContent(diveToken);
         
       });
       tmp.endWith(locusLoadRoute);

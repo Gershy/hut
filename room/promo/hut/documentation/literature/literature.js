@@ -7,7 +7,7 @@ global.rooms['promo.hut.documentation.literature'] = async roomName => {
   
   content.seek('news').desc                          = 'News';
   
-  content.seek('beginner').desc                      = 'Introduction to Hut';
+  content.seek('beginner').desc                      = 'Intro to Hut';
   content.seek('beginner.starting').desc             = 'Getting Started';
   content.seek('beginner.starting.install').desc     = 'Install';
   content.seek('beginner.starting.tutorial').desc    = 'Tutorial';

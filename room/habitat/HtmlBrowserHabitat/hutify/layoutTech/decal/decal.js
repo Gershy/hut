@@ -14,6 +14,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.decal'] = () => {
     size:          [ 'width', 'height' ],
     'text.colour': [ 'color' ],
     'text.size':   [ 'font-size' ],
+    'text.align':  [ 'font-size' ],
   });
   let mapTransitionCurve = Object.plain({
     linear: 'linear',
@@ -37,6 +38,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.decal'] = () => {
         else if (k === 'text') {
           if (v?.colour) style.color = v.colour;
           if (v?.size)   style.fontSize = v.size;
+          if (v?.align)  style.textAlign = { fwd: 'start', bak: 'end', mid: 'center' }[v.align]; // TODO: Proper text alignment is nontrivial; requires flexbox manipulation :( see ../text/text.js
         }
         else if (k === 'windowing') style.overflow = v ? 'hidden' : 'visible';
       }
