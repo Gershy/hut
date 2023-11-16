@@ -154,7 +154,10 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
                 this.addEventListener(...args);
                 return Tmp(() => this.removeEventListener(...args)); // Won't work until Tmp is globally defined
               }});
-              // Can't use window.evt since Tmp isn't defined yet (clearing.js isn't applied yet)
+              
+              // - Can't use window.evt since Tmp isn't defined yet (clearing.js hasn't executed)
+              // - rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] will exist because that
+              //   script was deferred (it executes fully before the "DOMContentLoaded" event)
               window.addEventListener('DOMContentLoaded', e=>rooms['habitat.HtmlBrowserHabitat.hutify.foundation']().init(e));
             </script>
             
@@ -231,12 +234,12 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
       
       reply(String.multiline(`
         self.global = Object.assign(self, { rooms: Object.create(null) });
-        importScripts('${uri({ path: '-hut:room', query: { room: 'setup.clearing' } })}'); // TODO: Fails as the js is delivered as application/octet-stream :(
-        onconnect = e => e.ports.each(port => {
+        importScripts('${uri({ path: '-hut:room', query: { room: 'setup.clearing' } })}');
+        self.on('connect', conn => console.log('CONNECT', conn) ?? conn.ports.each(port => {
           let portUid = Math.random().toString(36).slice(2);
           let cnt = 0;
           setInterval(() => port.postMessage('HI: ' + portUid + ': ' + (cnt++)), 3000);
-        });
+        }));
       `));
       
     });

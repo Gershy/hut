@@ -13,22 +13,18 @@ Error.prepareStackTrace = (err, callSites) => {
     // 2. This error is unrelated to any line (e.g. Promise.all index)
     let rawFileName = cs.getFileName();
     
-    // Option 1; check eval origin (note that we'll want to overwrite
-    // `row` and `col`, as their un-overwritten values will be their
-    // index within the `eval`'d String, whereas the index of where
-    // `eval` was called is *much* more useful for debugging!
+    // Option 1; check eval origin (note that we'll want to overwrite `row` and `col`, as their
+    // un-overwritten values will be their index within the `eval`'d String, whereas the index of
+    // where `eval` was called is *much* more useful for debugging!
     if (!rawFileName) {
       let evalOrig = cs.getEvalOrigin();
-      let match = [ , rawFileName=null, row, col ] = (evalOrig ?? '').match(/(https?:[/][/].+):([0-9]+):([0-9]+)/) ?? [];
+      let [ , /*rawFileName*/, row, col ] = (evalOrig ?? '').match(/(https?:[/][/].+):([0-9]+):([0-9]+)/) ?? [];
       row = parseInt(row, 10); col = parseInt(col, 10);
     }
     
-    // We'll get to option 2 if `rawFileName` still (potentially even
-    // after having checked for an eval origin) doesn't indicate a
-    // room; in that case, `keepTerm` takes on a nullish value!
-    let match = rawFileName?.match(/\broom=([^?&/]*)/);
-    let keepTerm = match ? (match[1] ?? null) : null;
-    
+    // We'll get to option 2 if `rawFileName` still (potentially even after having checked for an
+    // eval origin) doesn't indicate a room; in that case, `keepTerm` takes on a nullish value!
+    let keepTerm = rawFileName?.match(/\broom=([^?&/]*)/)?.[1] ?? null;
     return keepTerm
       ? { type: 'line', fnName: cs.getFunctionName(), keepTerm, row, col }
       : { type: 'info', info: cs.toString() };
@@ -41,13 +37,11 @@ let hutifyPath = 'habitat.HtmlBrowserHabitat.hutify';
 
 global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   
-  // We're going to be stingy with this code; the smaller+faster this
-  // file is, the better the user experience! Note this file
-  // interoperates nicely with the typical Hut style of loading Rooms,
-  // but in the browser this code should be referenced manually and
-  // run after the DOMContentLoaded event (obvs we can't reference this
-  // Room with `getRoom`, as the logic for doing so only gets defined
-  // after this Room has been initialized!)
+  // We're going to be stingy with this code; the smaller+faster this file is, the better the user
+  // experience! Note this file interoperates nicely with the typical Hut style of loading Rooms,
+  // but in the browser this code should be referenced manually and run after the DOMContentLoaded
+  // event (obvs we can't reference this Room with `getRoom`, as the logic for doing so only gets
+  // defined after this Room has been initialized!)
   
   let onErr = evt => {
     
@@ -83,37 +77,28 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   // Some maturities use cache-busting for every asset request, but we want to avoid requesting the
   // same asset multiple times with different cache-busting values; therefore we cache locally
   global.getMs = () => performance.timeOrigin + performance.now();
+  
+  let keeps = Map();
   global.keep = Object.assign(diveToken => {
-    let dive = token.dive(diveToken);
-    let key = `/${dive.join('/')}`;
-    let keep = global.keep.keeps.get(key);
-    if (!keep) global.keep.keeps.add(key, keep = HttpKeep({ path: '+hut:asset', query: { dive: key } }));
+    let key = `/${token.dive(diveToken).join('/')}`;
+    let keep = keeps.get(key);
+    if (!keep) keeps.add(key, keep = HttpKeep({ path: '+hut:asset', query: { dive: key } }));
     return keep;
-  }, { keeps: Map() });
-  global.conf = (diveToken, def=null) => {
-    
-    // Resolve nested Arrays and period-delimited Strings
-    let dive = token.dive(diveToken);
-    let ptr = global.rawConf;
-    for (let pc of dive) {
-      if (!isForm(ptr, Object) || !ptr.has(pc)) return def;
-      ptr = ptr[pc];
-    }
-    return ptr;
-    
-  };
+  });
+  global.conf = (diveToken, def=null) => token.diveOn(diveToken, global.rawConf, def).val;
   global.subconOutput = (sc, ...args) => {
     
-    let { chatter=true } = global.subconParams(sc);
-    if (!chatter) return;
+    if (!global.subconParams(sc).chatter) return;
     
     args = args.map(arg => isForm(arg, Function) ? arg() : arg).sift();
     if (!args.length) return;
+    
+    args = args.map(a => isForm(a?.desc, Function) ? a.desc() : a);
     console.log(
       `%c${getDate().padTail(60, ' ')}\n${('[' + sc.term + ']').padTail(60, ' ')}`,
       'background-color: #dadada;font-weight: bold;',
     );
-    console.log(...args.map(a => isForm(a?.desc, Function) ? a.desc() : a));
+    console.log(...args);
     
   };
   global.getRooms = (names, { shorten=true, ...opts }={}) => {
@@ -128,6 +113,7 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
       // Deferred rooms embedded in initial html don't emit "load" event
       // Need to see if `global.rooms` is already populated
       
+      // Get or create a <script/> element
       let script = document.head.querySelector(`:scope > script[data-room="${name}"]`);
       if (!script) {
         
@@ -141,6 +127,8 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
         
       }
       
+      // Ensure that a simple "room" property is set on the <script/> element; this "room" property
+      // references a Promise resolves/rejects which the <script/> executes or fails for any reason
       if (!script.room) script.room = Promise((rsv, rjc) => {
         if (global.rooms[name]) return rsv();
         script.evt('load', rsv);
