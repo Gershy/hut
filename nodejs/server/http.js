@@ -289,10 +289,9 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         if (!keep && ![ String, Buffer ].some(F => isForm(msg, F))) throw Error('Api: message must resolve to Keep, String, or Buffer');
         /// =DEBUG}
         
-        // Only try to encode if the value isn't precompressed, there are
-        // compression options available, and either the message is known
-        // to be long enough to be worth compressing, or the message's
-        // length isn't known (it's streamed)
+        // Only try to encode if the value isn't precompressed, there are compression options
+        // available, and either the message is known to be long enough to be worth compressing, or
+        // the message's length isn't known (it's streamed)
         let encode = (() => {
           
           let { compression } = this.roadAuth;

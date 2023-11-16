@@ -233,7 +233,6 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
             return Math.max(20, numChars) * 1 + numLines * 7;
           }).join(bold(',') + '\n')
           
-          
           return `${bold('{')}\n${multiLine}\n${bold('}')}`;
           
         })();
@@ -464,16 +463,20 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           },
           resolve({ conf, chain, getValue }) {
             
-            // We'll have problems if the parent needs its children resolved
-            // first; the parent would throw an Error saying something like
-            // "a.b.c requires a.b.c.d", which short-circuits before "a.b.c.d"
-            // is returned as a further Action, meaning "a.b.c.d" will never
-            // be initialized (results in churn failure)
+            // We'll have problems if the parent needs its children resolved first; the parent
+            // would throw an Error saying something like "a.b.c requires a.b.c.d", which
+            // short-circuits before "a.b.c.d" is returned as a further Action, meaning "a.b.c.d"
+            // will never be initialized (results in churn failure)
+            
+            // Note "headOp" and "tailOp": the "head" and "tail" here refer to before and after the
+            // ConfySet's children have done their parsing. This means that "headOp" is able to
+            // format some non-setlike input into a set of child values (e.g. a comma-delimited
+            // string into an array of items parsed from that String), while "tailOp" is finally
+            // given the set of values which captures all child values, and operates on that set
+            // (e.g. in order to validate some constraint incorporating multiple child values).
             
             if (conf === '!<def>') conf = {};
-            let orig = conf;
             
-            // Process `conf` before recursing (e.g. add some default items)
             if (this.headOp) conf = this.headOp({ conf, chain, getValue });
             
             if (isForm(conf, String)) conf = conf.split(/[,+]/);
@@ -527,10 +530,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
               }]
             ]},
             arr: { target: Array, tries: [
-              [ String, v => {
-                let [ delim=null ] = v.match(/[,+$]/);
-                return delim ? v.split(delim).map(v => v.trim() || skip) : [ v ];
-              }],
+              [ String, v => v.split(/[,+]/).map(v => v.trim() ?? skip) ],
               [ Object, v => v.toArr(v => v) ]
             ]}
           }),
@@ -602,7 +602,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         `));
         let protocolRegex = niceRegex(String.baseline(`
           | ^                                             $
-          | ^([a-zA-Z]+)                                  $
+          | ^([a-zA-Z]*)                                  $
           | ^           (?:           )?                  $
           | ^              [:]([0-9]+)                    $
           | ^                           (?:             )?$
@@ -841,6 +841,44 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
             return heartbeatMs;
           }}),
           protocols: ConfySet({
+            headOp: ({ conf: protocols }) => {
+              
+              // Compact Strings representing the set of protocols can have nested sets, using "<"
+              // and ">" characters to define the nesting, e.g.:
+              //    | protocols === "http:80<gzip+deflate>,ws:80<bzip>"
+              // This means that unlike a typical ConfySet, the "protocols" ConfySet needs to avoid
+              // splitting on delimiters contained in angle braces
+              
+              if (isForm(protocols, String)) {
+                
+                let str = protocols;
+                let arr = [];
+                while (str.length) {
+                  
+                  // Find the next "<" or delimiter
+                  let nextChunkMatch = str.match(/[,+]|[<][^>]*[>]/);
+                  if (!nextChunkMatch) { arr.push(str); break; } // Consume whole rest of `str` into the final item
+                  
+                  let chunk = nextChunkMatch[0];
+                  if (chunk[0] === '<') {
+                    let consumed = str.slice(0, nextChunkMatch.index) + chunk;
+                    arr.push(consumed);
+                    str = str.slice(consumed.length);
+                    if (/^[,+]/.test(str)) str = str.slice(1); // Delimiters may trail the ">" char
+                  } else {
+                    arr.push(str.slice(0, nextChunkMatch.index));
+                    str = str.slice(nextChunkMatch.index + 1);
+                  }
+                  
+                }
+                
+                return arr.map(v => v.trim() ?? skip);
+                
+              }
+              
+              return protocols;
+              
+            },
             tailOp: ({ chain, conf: protocols }) => {
               
               if (isForm(protocols, Object) && protocols.empty())

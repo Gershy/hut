@@ -57,10 +57,7 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
     // stack information when they're logged natively
     if (isForm(err, SyntaxError)) return;
     
-    if (err?.desc)
-      gsc(`Uncaught ${getFormName(err)}:\n${err?.desc?.()}`);
-    else
-      gsc(`Uncaught ${getFormName(err)}`, err);
+    gsc(`Uncaught ${getFormName(err)}`, err);
     
     // TODO: Refresh!! Or better yet - reset foundation (more complex)
     evt.preventDefault();
