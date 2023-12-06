@@ -601,7 +601,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   /// =DEBUG}
   
   // Flow controls, sync/async interoperability
-  onto: (val, ...fns) => { for (let fn of fns) fn(val); return val; },
+  onto: (val, fn) => (fn(val), val),
   safe: (fn, onErr) => {
     
     // Returns `fn()` with error handling provided by `onErr` regardless
@@ -1316,8 +1316,8 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
       // `this.access(key)` is expected to return the same Keep(...)
     }),
     streamable: C.noFn('streamable'),
-    getHeadPipe: C.noFn('getHeadPipe'), // The "head" precedes the content; it allows piping *into* the Keep
-    getTailPipe: C.noFn('getTailPipe') // The "tail" comes after the conent; it allows piping *out of* the Keep
+    getHeadStream: C.noFn('getHeadStream'), // The "head" precedes the content; it allows piping *into* the Keep
+    getTailStream: C.noFn('getTailStream') // The "tail" comes after the conent; it allows piping *out of* the Keep
     /// =DEBUG}
     
   })});

@@ -84,6 +84,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       let { belowNetAddr, body, hutCookie, path, query /*, fragment */ } = comm.context;
       
       let msg = { ...hutCookie, ...query, ...body };
+      
       let hasCmd = msg.has('command');
       let pathEmbedsCmd = !hasCmd && /^[+-]/.test(path);
       if (pathEmbedsCmd) {
@@ -94,26 +95,31 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         msg.command = path.slice(1).replace(/[/]+/g, '.');
         msg.trn = { '+': 'sync', '-': 'anon' }[char0];
         
-      } else {
+      } else if (!hasCmd && path === 'favicon.ico') {
         
-        if (!hasCmd && path === 'favicon.ico') {
-          
-          Object.assign(msg, { command: 'hut:icon', trn: 'anon' });
-          
-        } else if (!hasCmd) {
-          
-          let { term='HUT' } = msg;
-          Object.assign(msg, { command: 'hut:hutify', trn: 'sync', locus: {
-            term,
-            diveToken: token.dive(path.replace(/[/]+/g, '.'))
-          }});
-          
-        }
+        Object.assign(msg, { command: 'hut:icon', trn: 'anon' });
         
-        // "trn" defaults to "sync"; clients can save server effort by specifying "anon"
-        if (!msg.has('trn')) msg.trn = 'sync';
+      } else if (!hasCmd) {
+        
+        let { term='HUT' } = msg;
+        Object.assign(msg, {
+          command: 'hut:hutify',
+          trn: 'sync',
+          locus: { term, diveToken: token.dive(path.replace(/[/]+/g, '.')) }
+        });
         
       }
+        
+      // "trn" defaults to "sync"; clients can save server effort by specifying "anon"
+      if (!msg.has('trn')) msg.trn = 'sync';
+      
+      // `{ trn: 'anon' }` is always accompanied by `{ hid: null }`
+      if (msg.trn === 'anon') msg.hid = null;
+      
+      subcon('roadAuth.http')(() => ({
+        incomingCtx: { path, msg: { ...hutCookie, ...query, ...body } },
+        resolvedCtx: msg
+      }));
       
       // Unprefixed commands are interpreted towards the default Loft, according to the AboveHut
       if (!msg.command.has(':')) msg.command = `${this.aboveHut.getDefaultLoftPrefix()}:${msg.command}`;
@@ -245,10 +251,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       },
       async send(msg) {
       
-        // Translates arbitrary value `msg` into http content type and
-        // payload. This is one of the few times Errors may be handled
-        // without being thrown - passing an Error as `msg` indicates the
-        // client has misused the http connection!
+        // Translates arbitrary value `msg` into http content type and payload
         
         if (msg === skip) return;
         
@@ -354,7 +357,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
             let keepHeaders = { 'Content-Disposition': 'inline', ...resHeaders };
             this.res.writeHead(200, keepHeaders);
             
-            let pipe = await keep.getTailPipe();
+            let pipe = await keep.getTailStream();
             if (encode) {
               
               let err = Error('trace');
@@ -387,9 +390,9 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
           
         } catch (err) {
           
-          gsc({ err });
-          
+          gsc({ desc: 'Error ending http response', err });
           err.suppress();
+          
           this.kill({ err, code: 400, msg: 'Api: network misbehaviour' });
           
         } finally {

@@ -69,20 +69,23 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   window.evt('blur', () => bc.remove('focus'));
   
   let HttpKeep = form({ name: 'HttpKeep', has: { Keep }, props: (forms, Form) => ({
-    init({ path, query }) { Object.assign(this, { path, query }); },
-    getUri() { return global.uri(this); },
-    desc() { return global.uri(this); }
+    init({ path, query }) {
+      Object.assign(this, { path, query, uri: null });
+      this.uri = global.uri(this); // Must only be called once for the same instance - non-deterministic in "dev" maturity!
+    },
+    getUri() { return this.uri; },
+    desc() { return this.uri; }
   })});
   
   // Some maturities use cache-busting for every asset request, but we want to avoid requesting the
   // same asset multiple times with different cache-busting values; therefore we cache locally
-  global.getMs = () => performance.timeOrigin + performance.now();
+  global.getMs = () => performance.now() + performance.timeOrigin;
   
   let keeps = Map();
   global.keep = Object.assign(diveToken => {
-    let key = `/${token.dive(diveToken).join('/')}`;
-    let keep = keeps.get(key);
-    if (!keep) keeps.add(key, keep = HttpKeep({ path: '+hut:asset', query: { dive: key } }));
+    let dive = `/${token.dive(diveToken).join('/')}`;
+    let keep = keeps.get(dive);
+    if (!keep) keeps.add(dive, keep = HttpKeep({ path: '+hut:asset', query: { dive } }));
     return keep;
   });
   global.conf = (diveToken, def=null) => token.diveOn(diveToken, global.rawConf, def).val;
@@ -187,8 +190,6 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
       
     }
     
-    let roomPcs = name.split('.');
-    let roomPcLast = roomPcs.slice(-1)[0];
     return {
       file,
       row: srcRow,
@@ -355,8 +356,6 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   let bank = WeakBank({ sc: global.subcon('bank') });
   let recMan = record.Manager({ bank });
   
-  foundationTmp.endWith(() => aboveHut.end());
-  
   // Note that `netIden` is just a stub - the nodejs foundation uses a
   // real NetworkIdentity instance to run serve all protocols together,
   // because it allows for sophisticated network management - e.g. cert
@@ -368,6 +367,7 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   let netIden = { ...netIdenConf };
   let secure = netIden.secureBits > 0;
   let aboveHut = hut.AboveHut({ hid: aboveHid, isHere: false, recMan, heartbeatMs });
+  foundationTmp.endWith(() => aboveHut.end());
   
   let roadAuths = pcls.map(({ name, port, ...opts }) => {
     let RoadAuthForm = pclServers[name];
@@ -390,6 +390,7 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   // - The SharedWorker uses the legendary BetweenHut; tabs use BelowHuts as usual
   // - SharedWorker uses a BelowHut (which should already fully work); tab uses *another* BelowHut
   //   (this is probably stupid - it's using a BelowHut exactly where a BetweenHut is intended)
+  
   let locus = recMan.addRecord({ type: 'hut.locus', uid: '!locus', group: [ belowHut ], value: conf('locus') });
   locus.valueSrc.route(({ term='Hut!', diveToken=[] }={}) => {
     window.document.title = term;

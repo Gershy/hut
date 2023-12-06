@@ -219,19 +219,24 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
             if (paddingAmt) padding += ' ';
             padding += '-'.repeat(Math.max(paddingAmt - 1, 0));
             let paddedKey = k + ansi(padding, 'subtle');
-            let entry = `${paddedKey}${bold(':')} ${v}`;
-            return entry.indent(ansi('\u00a6', 'subtle') + '   ')
+            return `${paddedKey}${bold(':')} ${v}`;
             
           });
-          //let multiLine = multiLineItems.valSort(v => v.length + (v.split('\n').length - 1) * 3).join(bold(',') + '\n')
           
           // Using `Math.max` means there's no sorting preference for items less than 10 chars long
           let multiLine = multiLineItems.valSort(v => {
+            
             let noAnsi = remAnsi(v);
-            let numChars = noAnsi.length;
-            let numLines = (noAnsi.split('\n').length - 1);
-            return Math.max(20, numChars) * 1 + numLines * 7;
-          }).join(bold(',') + '\n')
+            let numLines = (noAnsi.match(/\n/g) ?? []).length + 1;
+            
+            // The first line of `noAnsi` embeds `keyLen` chars and ": "
+            let numChars = noAnsi.length - (keyLen + ': '.length);
+            if (numLines === 1 && numChars < 50) numChars = 50; // Avoid reordering short single-lines values
+            
+            return numChars * 1 + numLines * 7;
+          })
+            .map(v => v.indent(ansi('\u00a6', 'subtle') + '   '))
+            .join(bold(',') + '\n')
           
           return `${bold('{')}\n${multiLine}\n${bold('}')}`;
           
@@ -1146,13 +1151,18 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         
         thenAll(args.map(arg => isForm(arg, Function) ? arg(sc) : arg), args => {
           
-          let { chatter=true, therapy=false, format } = sc.params();
+          let { chatter=true, therapy=false, chatterFormat } = sc.params();
+          
+          if (chatterFormat) {
+            // The subcon's "chatterFormat" param takes the argument arr and returns a new arr, or
+            // `null` to silence this item
+            args = eval(chatterFormat)(...args);
+            if (args === null) return;
+            if (!isForm(args, Array)) args = [ args ];
+          }
           
           // Forced output for select subcons
           if (!chatter && ![ 'gsc', 'warning' ].has(sc.term)) return;
-          
-          // Format args if formatter is available
-          if (format) args = args.map(arg => format(arg, sc));
           
           let depth = 7;
           if (isForm(args[0], String) && /^[!][!][0-9]+$/.test(args[0])) {
@@ -1207,7 +1217,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         // Now output any logs buffered before we were ready
         for (let args of buffered) global.subconOutput(...args);
         
-        setupSc(`Configuration processed after ${(getMs() - t).toFixed(2)}ms`, global.conf([]));
+        setupSc.kid('conf')(`Configuration processed after ${(getMs() - t).toFixed(2)}ms`, global.conf([]));
         
       })
       .fail(async err => {
@@ -1616,19 +1626,17 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     let FakeReal = form({ name: 'FakeReal', has: { Tmp }, props: (forms, Form) => ({
       init({ name, tech }) {
         forms.Tmp.init.call(this);
-        Object.assign(this, {
-          name, tech,
-          fakeLayout: null,
-          params: { textInputSrc: { mod: Function.stub, route: fn => fn(''), send: Function.stub }}
-        });
+        Object.assign(this, { name, tech, params: {
+          textInputSrc: { mod: Function.stub, route: fn => fn(''), send: Function.stub }
+        }});
       },
       loaded: Promise.resolve(),
       setTree() {},
       addReal(real) { return this; },
       mod() {},
-      addLayout: lay => Tmp({ layout: { src: Src.stub, route: Function.stub } }),
-      getLayout() { return this.fakeLayout || (this.fakeLayout = this.getLayoutForm('FakeBoi')()); },
-      getLayoutForm(name) { return this.tech.getLayoutForm(name); },
+      addLayout() { return  Tmp({ layout: fakeLayout }); },
+      getLayout() { return fakeLayout; },
+      getLayoutForm(name) { return FakeLayout; },
       getTech() { return this.tech; },
       addNavOption() { return { activate: () => {} }; },
       render() {}
@@ -1636,8 +1644,9 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     let FakeLayout = form({ name: 'FakeLayout', has: { Src }, props: (forms, Form) => ({
       init() { forms.Src.init.call(this); this.keysSrc = Src.stub; },
       isInnerLayout() { return false; },
-      setText(){},
-      addReal(){},
+      setText() {},
+      addReal() {},
+      route: Function.stub,
       src: Src.stub
     })});
     
@@ -1645,8 +1654,8 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     let fakeReal = global.real = FakeReal({ name: 'nodejs.fakeReal', tech: {
       render: Function.stub,
       informNavigation: Function.stub,
-      getLayoutForm: name => fakeLayout,
-      getLayoutForms: names => names.toObj(name => [ name, fakeReal.getLayoutForm(name) ]),
+      getLayoutForm: name => FakeLayout,
+      getLayoutForms: names => names.toObj(name => [ name, FakeLayout ]),
       render: Function.stub
     }});
     

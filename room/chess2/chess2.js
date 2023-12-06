@@ -316,7 +316,6 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
       ]);
       
       // Enable access to all piece images via term "pieces"
-      
       dep(enableKeep('pieces', chess2Keep.seek(`img.${pieceStyle}`)));
       
       let { random: { FastRandom } } = rooms;
@@ -458,7 +457,6 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
       
       // Broad parameters
       let activePieceDef = pieceLayouts[layoutStyle];
-      let pieceTypes = Set(activePieceDef.toArr( col => col.map(([ name ]) => name) ).flat(Infinity));
       
       // TODO: If I wanted to avoid keeping all Lofters in memory while
       // implementing this functionality I would need a way to detect
@@ -472,7 +470,7 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
         lofter.setValue({ term: termTmp.term, status: 'chill' });
         
         // Add a "status" property to the Lofter
-        lofter.status = addRecord('lofterStatus', [ lofter ], { type: 'chill', ms: Date.now() });
+        lofter.status = addRecord('lofterStatus', [ lofter ], { type: 'chill', ms: getMs() });
         
         // Update the single LofterStatus based on changes to "status"
         let statusSrc = dep(lofter.getValuePropSrc('status'));
@@ -480,7 +478,7 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
           
           if (status === lofter.status.getValue('type')) return;
           lofter.status.end();
-          lofter.status = addRecord('lofterStatus', [ lofter ], { type: status, ms: Date.now() });
+          lofter.status = addRecord('lofterStatus', [ lofter ], { type: status, ms: getMs() });
           
         }, 'prm');
         
@@ -520,7 +518,7 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
             if ( wAlive && !bAlive) addRecord('outcome', [ match ], { winner: 'white', reason: 'checkmate' });
             if (!wAlive &&  bAlive) addRecord('outcome', [ match ], { winner: 'black', reason: 'checkmate' });
             if (!wAlive && !bAlive) addRecord('outcome', [ match ], { winner: null, reason: 'stalemate' });
-            if ( wAlive &&  bAlive) addRecord('round',   [ match ], { ms: Date.now() }); // Game continues!
+            if ( wAlive &&  bAlive) addRecord('round',   [ match ], { ms: getMs() }); // Game continues!
             
           } else {
             
@@ -544,9 +542,9 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
       }));
       
       // Perform matchmaking regularly
-      dep(TimerSrc({ ms: matchmakeMs, num: Infinity })).route(async () => {
+      dep(TimerSrc({ ms: matchmakeMs, num: Infinity })).route(async (...args) => {
         
-        let ms = Date.now();
+        let ms = getMs();
         
         let queues = await chess2.withRh('queue', 'all');
         let queuedStatusesByTerm = queues.categorize(q => q.getValue('term'));
@@ -577,7 +575,7 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
             match.rh('outcome').route(({ rec: outcome }) => sc(`MATCH OTCM (${match.getValue('desc')})`, outcome.getValue()));
             
             // Initial Round of Match
-            addRecord('round', [ match ], { ms: Date.now() });
+            addRecord('round', [ match ], { ms: getMs() });
             
             // Add Pieces to Match
             for (let [ colour, pieces ] of activePieceDef)
@@ -719,7 +717,7 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
           let queueAct = dep(enableAction('enterQueue', ({ term }) => {
             if (!isForm(term, String)) throw Error('Term must be String');
             if (term.length > 50) throw Error('Term max length: 50');
-            addRecord('queue', [ chess2, status ], { term, ms: Date.now() });
+            addRecord('queue', [ chess2, status ], { term, ms: getMs() });
           }));
           
           /// {BELOW=
@@ -977,7 +975,7 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
             }));
             dep(TimerSrc({ ms: 500, num: Infinity })).route(() => {
               
-              let elapsed = (Date.now() - round.getValue('ms'));
+              let elapsed = (getMs() - round.getValue('ms'));
               let total = moveMs - 2000; // Subtracting an amount makes the timer feel generous (TODO: Can be funky for very low `moveMs` values??)
               let amt = 1 - Math.min(1, elapsed / total);
               

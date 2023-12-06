@@ -52,16 +52,16 @@ global.rooms[roomName] = () => then(getRoom('setup.hut.hinterland.RoadAuthority'
           
           let netTell = valToJson({ command: 'hut:bp', trn: 'async', hid: this.belowHut.hid, ...msg });
           let stuffHeader = netTell.length < 100 && Form.headerValueRegex.test(netTell);
-          let res = await fetch('/', {
+          let req = {
             method: 'POST',
-            headers: stuffHeader
-              ? { 'Content-Type': 'application/json; charset=utf-8', 'X-Hut-Msg': netTell }
-              : { 'Content-Type': 'application/json; charset=utf-8' },
-            ...(stuffHeader || { body: netTell }),
+            headers: { 'Content-Type': 'application/json; charset=utf-8' },
             signal: this.roadAuth.abortController.signal,
             redirect: 'error'
-          });
+          };
+          if (stuffHeader) req.headers['X-Hut-Msg'] = netTell;
+          else             req.body = netTell;
           
+          let res = await fetch('/', req);
           if (res.status >= 400) throw Error(`Bad request (${res.status})`).mod({ res });
           
           // Process response as a Tell
@@ -72,7 +72,7 @@ global.rooms[roomName] = () => then(getRoom('setup.hut.hinterland.RoadAuthority'
         } catch (cause) {
           // TODO: Retry logic!
           let ignore = cause.message.has('abort') && !this.roadAuth.active;
-          if (!ignore) err.propagate({ cause, msg: 'Http failed (maybe network problems, server down?)', netTell: msg });
+          if (!ignore) err.propagate({ cause, msg: 'Api: http failed (network problems, server down?)', netTell: msg });
         }
         this.activeReqs--;
         

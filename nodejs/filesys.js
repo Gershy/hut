@@ -457,11 +457,10 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
   },
   getDataTailStream(fp, forbid={}) {
     
-    // A "tail stream" comes from a file pointer's data storage. Once a
-    // stream has initialized, it seems unaffected even if the file
-    // pointer is changed partway through! This means we can simply
-    // consider our operation complete once the stream has been
-    // initialized, without needing to wait for it to finish streaming.
+    // A "tail stream" comes from a file pointer's data storage. Once a stream has initialized, it
+    // seems unaffected even if the file pointer is changed partway through! This means we can
+    // simply consider our operation complete once the stream has been initialized, without needing
+    // to wait for it to finish streaming.
     
     this.checkFp(fp);
     
@@ -481,7 +480,22 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
         // Don't allow the `doLocked` fn to finish until the stream is done!!
         await Promise((rsv, rjc) => {
           stream.on('close', rsv);
-          stream.on('error', err => (err.code !== 'ENOENT') ? rjc(err) : rsv());
+          stream.on('error', err => {
+            // ENOENT indicates the stream should return no data, successfully
+            if (err.code === 'ENOENT') return rsv();
+            
+            // ERR_STREAM_PREMATURE_CLOSE unwantedly propagates to the top-level; it should reject
+            // like any other error, but need:
+            // 1. Suppress to allows catching to prevent the top-level process crashing
+            // 2. Wrap in a separate error which is then thrown; this *allows* the error to crash
+            //    at the top-level if it goes entirely unhandled
+            if (err.code === 'ERR_STREAM_PREMATURE_CLOSE') {
+              err.suppress();
+              err = Error('Api: broken stream likely caused by unexpected client socket disruption').mod({ cause: err });
+            }
+            
+            return rjc(err);
+          });
         });
         
       }
@@ -609,8 +623,8 @@ let FsKeep = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => ({
     },
     getContentByteLength() { return Buffer.byteLength(this.getContent()); },
     streamable() { return true; },
-    getHeadPipe() { return {}; }, // TODO: Mock this
-    getTailPipe() { return ({ pipe: writable => writable.end(this.getContent()) }); }
+    getHeadStream() { return {}; }, // TODO: Mock this
+    getTailStream() { return ({ pipe: writable => writable.end(this.getContent()) }); }
     
   })})(),
   $extToContentType: {
@@ -704,8 +718,8 @@ let FsKeep = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => ({
       : names;
   },
   async streamable() { return true; return (await this.trn.getType(this.fp)) === 'leaf'; },
-  async getHeadPipe() { return this.trn.getDataHeadStream(this.fp, this.forbid); },
-  async getTailPipe() { return this.trn.getDataTailStream(this.fp, this.forbid); },
+  async getHeadStream() { return this.trn.getDataHeadStream(this.fp, this.forbid); },
+  async getTailStream() { return this.trn.getDataTailStream(this.fp, this.forbid); },
   iterateChildren(dbg=Function.stub) {
     
     // Returns { [Symbol.asyncIterator]: fn, close: fn }

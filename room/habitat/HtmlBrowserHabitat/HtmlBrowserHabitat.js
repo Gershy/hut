@@ -145,20 +145,22 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
             ${protocolRooms.toArr(n => roomScript('defer', n)).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur... just kinda hurts my soul */ }
             <script>
               // TODO: Use SharedWorker? (caching is funky for the html:worker response!)
-              let worker = new SharedWorker('${uriRaw({ path: '-html:worker', cacheBust: hut.hid })}');
-              worker.port.onmessage = evt => gsc('MSG', evt.data);
-              worker.port.start();
-              Object.assign(window.global = window, { rooms: Object.create(null), worker });
+              //console.log('START', window.performance.now());
+              //let worker = new SharedWorker('${uriRaw({ path: '-html:worker', cacheBust: hut.hid })}');
+              //worker.port.onmessage = evt => console.log('MSG', window.performance.now(), evt.data);
+              //worker.port.start();
+              //Object.assign(window.global = window, { rooms: Object.create(null), worker });
+              Object.assign(window.global = window, { rooms: Object.create(null) });
               let evtSrc = EventTarget.prototype;
               Object.defineProperty(evtSrc, 'evt', { configurable: true, value: function(...args) {
                 this.addEventListener(...args);
-                return Tmp(() => this.removeEventListener(...args)); // Won't work until Tmp is globally defined
+                return Endable(() => this.removeEventListener(...args)); // Won't work until Endable is globally defined
               }});
               
-              // - Can't use window.evt since Tmp isn't defined yet (clearing.js hasn't executed)
+              // - Can't use window.evt since Endable isn't defined yet (clearing.js hasn't run)
               // - rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] will exist because that
               //   script was deferred (it executes fully before the "DOMContentLoaded" event)
-              window.addEventListener('DOMContentLoaded', e=>rooms['habitat.HtmlBrowserHabitat.hutify.foundation']().init(e));
+              window.addEventListener('DOMContentLoaded', e => rooms['habitat.HtmlBrowserHabitat.hutify.foundation']().init(e));
             </script>
             
             ${preloadRooms.toArr(n => roomScript('async', n)).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
@@ -232,13 +234,20 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
       // In dev tabs should request the exact same SharedWorker, without fully random cachebusting!
       // edge://inspect/#workers
       
+      let deps = [
+        'setup.clearing',
+        'setup.hut.hinterland.RoadAuthority',
+        'habitat.HtmlBrowserHabitat.hutify.workerFoundation'
+      ].map(room => uri({ path: '-hut:room', query: { room }}));
+      
       reply(String.multiline(`
         self.global = Object.assign(self, { rooms: Object.create(null) });
-        importScripts('${uri({ path: '-hut:room', query: { room: 'setup.clearing' } })}');
-        self.on('connect', conn => console.log('CONNECT', conn) ?? conn.ports.each(port => {
-          let portUid = Math.random().toString(36).slice(2);
-          let cnt = 0;
-          setInterval(() => port.postMessage('HI: ' + portUid + ': ' + (cnt++)), 3000);
+        self.importScripts(${deps.map(d => `'${d}'`).join(', ')});
+        self.addEventListener('connect', conn => conn.ports.each(port => {
+          let uid = Math.random().toString(36).slice(2);
+          console.log('A new tab connected', { uid });
+          port.postMessage({ desc: 'hello new tab, i assigned you a uid', uid });
+          port.addEventListener('message', evt => console.log('A tab is messaging me', { uid, evt }));
         }));
       `));
       
@@ -258,7 +267,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
           id: `multi${n}`,
           title: `Multi #${n + 1}`,
           width: w, height: h,
-          src: `/?trn=sync&hid=${names[n]}&textSize=${textSize}`
+          src: uri({ path: '', query: { hid: names[n], textSize }})
         }).toArr((v, k) => `${k}="${v}"`).join(' ');
         return `<iframe ${paramStr}></iframe>`
       }

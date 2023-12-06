@@ -5,7 +5,7 @@ global.rooms['reality.layout.Text'] = async () => {
     
     /// {DEBUG=
     $alignOpts: 'fwd,bwd,mid,fit'.split(','), /* "fit" = "justify" */
-    $styleOpts: 'bold,italic'.split(','),
+    $styleOpts: 'bold,italic,underline'.split(','),
     /// =DEBUG}
     
     init({ text=null, size=null, align='mid', style='', spacing={} }={}) {

@@ -36,26 +36,28 @@ global.rooms['setup.hut'] = async () => {
       // Road to communicate)
       
       if (hasForm(msg, Error)) {
+        // TODO: I think this isn't in use any more; pls delete?
+        gsc('LMAOOOO this is still happening')
         subcon('warning')(`Error reply`, msg);
         msg = { command: 'error', type: 'application', msg: msg.message };
       }
+      
       if (!msg) return;
       
       /// {DEBUG=
-      if (!src && road) throw Error(`Can't provide Road without SrcHut (who is on the other end of that Road??)`);
-      if (!src && reply) throw Error(`Can't omit "src" and provide "reply" (who would receive that reply??)`);
+      if (!src && road) throw Error(`Api: can't provide Road without SrcHut (who is on the other end of that Road??)`);
+      if (!src && reply) throw Error(`Api: can't omit "src" and provide "reply" (who would receive that reply??)`);
       if (src?.aboveHut !== trg && trg?.aboveHut !== src)
         throw Error(String.baseline(`
-          | Supplied unrelated Huts (neither is the other's parent)
+          | Api: Supplied unrelated Huts (neither is the other's parent)
           | Src: ${src?.desc?.() ?? null}
           | Trg: ${trg?.desc?.() ?? null}
         `));
       /// =DEBUG}
       
-      let { active, commandRegex } = Form.hutCommSc.params();
       let { command } = msg;
-      if      (!command)                                      Form.hutCommSc({ src, trg, note: 'missing "command"', msg });
-      else if (active && command?.match(commandRegex || '.')) Form.hutCommSc({ src, trg, command, msg });
+      if (!command) Form.hutCommSc({ src, trg, note: 'missing "command"', msg });
+      else          Form.hutCommSc({ src, trg, command, msg });
       
       if (!src && trg.isAfar) throw Error(`Can't tell TrgAfarHut when SrcHut is null`);
       if (!src) return trg.processCommand({ src: null, road: null, reply: null, ms, msg });
@@ -344,8 +346,6 @@ global.rooms['setup.hut'] = async () => {
         
         // Handle namespaced assets by treating the first component as the prefix
         let [ pfx, term, ...innerDive ] = dive;
-        
-        gsc({ diveToken, pfx, term, innerDive });
         
         let keep = this.enabledKeeps.get(`${pfx}:${term}`)?.seek(innerDive) ?? null;
         if (!await keep?.exists()) throw Error(`Api: invalid asset chain`).mod({ dive: diveToken });
