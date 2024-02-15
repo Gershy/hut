@@ -1,6 +1,7 @@
 require('./clearing.js');
-
 let dim = text => `\x1b[37m${text}\x1b[0m`;
+
+
 let log = (...v) => { let depth = 6; if (isForm(v[0], Number)) { [ depth, ...v ] = v; } console.log(...v.map(v => require('util').inspect(v, { depth, colors: true }))); };
 let doTests = 1;
 let testSpecific = 0 && { depth: 8, name: 'jsPropsDynamic', input: 'a[1]=2;' };
@@ -14,8 +15,9 @@ let getParserParams = parser => {
   return { ...defaults, ...parser };
   
 };
-let globalOmitRegex = /([ \n\t]|([/][/].*[\n])|([/][*].*[*][/]))*/;
 %%%
+  
+let globalOmitRegex = /([ \n\t]|([/][/].*[\n])|([/][*].*[*][/]))*/;
 %%%
 let canConsumeEmpty = (parser, seen=Set()) => {
   

@@ -1,4 +1,4 @@
-require('./clearing.js');
+require('../room/setup/clearing/clearing.js');
 
 let dim = text => `\x1b[37m${text}\x1b[0m`;
 let log = (...v) => { let depth = 6; if (isForm(v[0], Number)) { [ depth, ...v ] = v; } console.log(...v.map(v => require('util').inspect(v, { depth, colors: true }))); };
@@ -7,11 +7,10 @@ let doTests = 0;
 let testSpecific = 0 && { depth: 8, name: 'jsPropsDynamic', input: 'a[1]=2;' };
 let debugLiveAttempts = 0;
 
-// TODO: Incapable of removing any trailing "omittable" characters
-// e.g. try `parse(getJsParser(), 'let var = true; // trailing stuff')`
-// this `globalOmitRegex` is only ever applied before an attempt to
-// satisfy a parse node, and there is no parse node at the very end of
-// the input.
+// TODO: Incapable of removing any trailing "omittable" characters e.g. try:
+//    | parse(getJsParser(), 'let var = true; // trailing stuff')
+// this `globalOmitRegex` is only ever applied before an attempt to satisfy a parse node, and there
+// is no parse node at the very end of the input!
 let globalOmitRegex = /([ \n\t]|([/][/].*[\n])|([/][*].*[*][/]))*/;
 
 let getParserParams = parser => {
@@ -43,7 +42,6 @@ let canConsumeEmpty = (parser, seen=Set()) => {
   return false;
   
 };
-
 let parse = function*(parser, input, trace) {
   
   let getNormalizedParser = parser => {
@@ -65,7 +63,7 @@ let parse = function*(parser, input, trace) {
     // Sanitization step
     for (let p of iterateAllParsers(parser)) {
       
-      // TODO: If there are "all" parsers whose first n children are
+      // TODO: (optimization) if there are "all" parsers whose first n children are
       // identical (and n > 1) should replace those n children with a
       // single { type: 'repeat', minReps: n, maxReps: n } child
       
@@ -225,8 +223,8 @@ let parse = function*(parser, input, trace) {
       
       if ([ 'nop', 'token', 'regex' ].has(parser.type)) return;
       
-      // Check if a loop occurred - find the first occurrence of `parser`
-      // in `checkLrChain` and return the chain from that point forth
+      // Check if a loop occurred - find the first occurrence of `parser` in `checkLrChain` and
+      // return the chain from that point forth
       let findInChain = checkLrChain.find(p => p === parser);
       if (findInChain.found)  yield checkLrChain.slice(findInChain.ind);
       else                    checkLrChain = [ ...checkLrChain, parser ];
@@ -235,7 +233,6 @@ let parse = function*(parser, input, trace) {
       seen.add(parser);
       
       if (parser.type === 'all') {
-        
         
         // HANDLE ALL-PARSER EMPTYABLE CHILD PREFIXES
         let numEmpty = 0;
@@ -286,20 +283,20 @@ let parse = function*(parser, input, trace) {
       // back to the parent that initiated the dive. All I know is that
       // if this *does* return some LR-chains, the current logic to
       // break them will not succeed because it doesn't know how to
-      // break chains formed in part by dive-tails
+      // break chains including dive-tails
       // #3:
-      //    <No verification of LR tails within the diveParser at all.>
+      //    <No verification of LR tails within the diveParser at all>
       // There's a good chance that diveParsers are never set up to
       // contain loops, but this isn't exactly evident to me.
       // #4:
-      //    if (parser.has('diveParser')) yield* getLeftRecursionChains(parser.diveParser, [], [ parser ]);
+      //    if (parser.has('diveParser')) yield* getLeftRecursionChains(parser.diveParser, [], Set([ parser ]));
       // That's right - a 2nd chain is used! The first chain is used to
       // detect that loops have been closed. The 2nd chain would be used
       // to determine that the search for LR within the diveTail has
-      // exited the confinements of the diveTail. The 2nd chain can be
-      // used to avoid infinite loops, and any loops detected with it
-      // would *not* result in LR-chains being yielded (as these chains
-      // cross diveTail boundaries, and don't actually lead to LR)
+      // exited the confines of the diveTail. The 2nd chain can be used
+      // to avoid infinite loops, and any loops detected with it would
+      // *not* result in LR-chains being yielded (as these chains cross
+      // diveTail boundaries, and don't actually lead to LR)
       
       if (parser.has('diveParser')) yield* getLeftRecursionChains(parser.diveParser, [], seen);
       
@@ -536,6 +533,11 @@ let parse = function*(parser, input, trace) {
     let accesses = [];
     let accessible = it => {
       
+      // Makes it easy to re-traverse a predictable iterator; the function result here returns
+      // interchangeable generators, which share (memoize) results. So the initial iterator will
+      // only be called when any of the iterators returned from this function exceed the current
+      // number of yielded items
+      
       let accessInd = accesses.length;
       accesses.push(0);
       
@@ -646,8 +648,7 @@ let parse = function*(parser, input, trace) {
           
           // Yield greedy dive with whitespace
           if (diveParser && didConsume &&  diveGreedy)
-            for (let dp of input.advance(parsed.result).doDive(parsed, diveParser))
-              (dp.result = ws + dp.result, yield dp);
+            for (let dp of input.advance(parsed.result).doDive(parsed, diveParser)) { dp.result = ws + dp.result; yield dp; }
           
           yield { ...parsed, result: ws + parsed.result };
           
@@ -661,11 +662,10 @@ let parse = function*(parser, input, trace) {
       },
       parseWith: function*(parser, trace) {
         
-        if (this.memParsedSet.has(parser)) { hit++; return yield* this.memParsedSet.get(parser)(); }
-        
-        let access = accessible(this.parseWith0(parser));
-        this.memParsedSet.set(parser, access);
-        miss++;
+        // Check if there's already an "accessible" generator for this parser
+        let access = this.memParsedSet.get(parser);
+        if (!access) { miss++; this.memParsedSet.set(parser, access = accessible(this.parseWith0(parser))); }
+        else         { hit++; }
         
         yield* access();
         
@@ -691,7 +691,7 @@ let parse = function*(parser, input, trace) {
         // anything else, whereas a different any-option may have allowed
         // the repeat-child to repeat many times successfully. For this
         // reason we need to be able to backtrack to earlier stages of the
-        // repeat-child; hence the recursive generator approach seen here.
+        // repeat-child; hence the recursive generator approach
         
         let { greedy, minReps, maxReps } = getParserParams(parser);
         
@@ -1462,10 +1462,7 @@ let simplifyParsed = parsed => {
       { name: 'delimL', type: 'token', token: '/' },
       genRegexParser(),
       { name: 'delimR', type: 'token', token: '/' },
-      { name: 'modifiers', type: 'repeat', parser: { type: 'any', parsers: [
-        { name: 'global', type: 'token', token: 'g' },
-        { name: 'caseInsensitive', type: 'token', token: 'i' }
-      ]}}
+      { name: 'modifiers', type: 'repeat', parser: { type: 'regex', regex: '[a-zA-Z]*' } }
     ]});
     value.parsers.add(inlineValue);
     
@@ -1487,6 +1484,12 @@ let simplifyParsed = parsed => {
       value
     ]};
     value.parsers.add(binaryOpValue);
+    
+    let mushky = 'abc';
+    let obj = { mushky };
+    let obj2 = { mushky: ',ushky' };
+    let obj3 = { [mushky]: 'def' };
+    
     
     let objectEntry = { name: 'entry', type: 'any', parsers: [
       
@@ -1698,7 +1701,7 @@ let simplifyParsed = parsed => {
   input = input.split('%%%')[0].trim();
   
   let { now } = require('perf_hooks').performance;
-  console.log(`Parsing ${input.length} chars...`);
+  gsc(`Parsing ${input.length} chars...`);
   
   let parser = genParser();
   

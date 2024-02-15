@@ -1,5 +1,6 @@
 /// <reference path="./room/record.d.ts"/>
 /// <reference path="./room/setup.hut.d.ts"/>
+/// <reference path="./nodejs/parse.ts"/>
 
 // Utils
 type Only<Props, Pattern extends string> = Omit<Props, keyof Omit<Props, Pattern>>;
