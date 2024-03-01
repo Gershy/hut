@@ -27,7 +27,7 @@ global.rooms['promo.hut.install'] = async (roomName, installKeep) => {
         
         if (isForm(pcs, String)) pcs = pcs.split(/[,/]/);
         if (!isForm(pcs, Array)) throw Error(`Api: "pcs" should be Array (or String); got ${getFormName(pcs)}`);
-        if (pcs.find(v => !isForm(v, String)).found) throw Error(`Api: "pcs" should contain only strings`);
+        if (pcs.seek(v => !isForm(v, String)).found) throw Error(`Api: "pcs" should contain only strings`);
         
         let keep = itemsKeep.seek(pcs);
         if (!await keep.streamable()) throw Error(`Api: invalid request`);
@@ -43,12 +43,12 @@ global.rooms['promo.hut.install'] = async (roomName, installKeep) => {
         
       }));
       
-      let deploy = conf('deploy').find(deploy => deploy.loft.name === 'promo.hut.install').val;
+      let deploy = conf('deploy').seek(deploy => deploy.loft.name === 'promo.hut.install').val;
       let { host: { netIden, netAddr, protocols } } = deploy;
       
       // TODO: Support anything other than http?? Maybe consider all available protocols and rank
       // them in some order of accessibility
-      let { port } = protocols.find(p => p.name === 'http').val;
+      let { port } = protocols.seek(p => p.name === 'http').val;
       
       let protocol = `http${netIden.secureBits ? 's' : ''}`;
       let isDefaultPort = (protocol === 'https' && port === 443) || (protocol === 'http' && port === 80);

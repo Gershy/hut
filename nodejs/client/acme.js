@@ -84,17 +84,17 @@ module.exports = form({ name: 'AcmeHttpClient', props: (forms, Form) => ({
       
       if (eab) {
         
-        // Basically with external bindings the payload is extended with
-        // an "externalAccountBinding" property
+        // External bindings allow extending payload with "externalAccountBinding" property
         
+        throw Error('Not implemented yet :(');
+        
+        /*
         let { kid, hmac } = eab;
         if (!kid) throw Error('Missing eab.kid');
         if (!hmac) throw Error('Missing eab.hmac');
         
-        let header = nonce
-          ? { alg: 'HS256', url, nonce, kid }
-          : { alg: 'HS256', url, kid };
-        let body = jwk;
+        let header = { alg: 'HS256', kid, url: addr, ...(nonce && { nonce }) };
+        let body = this.jwk;
         
         [ header, body ] = [ header, body ].map(v => v ? Buffer.from(valToSer(v)).toString('base64url') : '');
         eab = {
@@ -105,6 +105,7 @@ module.exports = form({ name: 'AcmeHttpClient', props: (forms, Form) => ({
             .digest()
             .toString('base64url')
         };
+        */
         
       }
       

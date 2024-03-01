@@ -5,7 +5,7 @@ let dim = text => `\x1b[37m${text}\x1b[0m`;
 let log = (...v) => { let depth = 6; if (isForm(v[0], Number)) { [ depth, ...v ] = v; } console.log(...v.map(v => require('util').inspect(v, { depth, colors: true }))); };
 let doTests = 1;
 let testSpecific = 0 && { depth: 8, name: 'jsPropsDynamic', input: 'a[1]=2;' };
-let debugLiveAttempts = 0;
+let debugLiveAttempts = 0; // set to 0
 let getParserParams = parser => {
   
   // Global defaults
@@ -135,7 +135,7 @@ let parse = (parser, input, trace) => {
         // All the parser's props, except for its delegating props
         let props = {}.gain(parser, { parser: C.skip, parsers: C.skip, diveParser: C.skip });
         
-        return existingParsers.find(parser => {
+        return existingParsers.seek(parser => {
           //console.log({ props, props2: {}.gain(parser, { parser: C.skip, parsers: C.skip, diveParser: C.skip }) });
           for (let k in props) if (props[k] !== parser[k]) return false;
           return true;
@@ -158,7 +158,7 @@ let parse = (parser, input, trace) => {
     };
     let getLrBreakingParser = (head, tail) => {
       
-      // if (head.type === 'all' && !head.parsers.find(p => p === tail).found) {
+      // if (head.type === 'all' && !head.parsers.seek(p => p === tail).found) {
       //   log(3, 'WHYYYY', { head, tail });
       //   throw Error('UGH');
       // }
@@ -187,7 +187,7 @@ let parse = (parser, input, trace) => {
       
       // HANDLE ALL-PARSER EMPTYABLE CHILD PREFIXES
       if (head.type === 'all') {
-        let { found, ind } = head.parsers.find(p => p === tail);
+        let { found, ind } = head.parsers.seek(p => p === tail);
         //if (!found) throw Error('UH OHHHH');
         if (!found) ind === 0; // TODO: This is a bad sign :(
         return { ...head, parsers: head.parsers.slice(ind + 1) }; // Exclude all parsers up to and including `tail`
@@ -221,7 +221,7 @@ let parse = (parser, input, trace) => {
       
       // Check if a loop occurred - find the first occurrence of `parser`
       // in `checkLrChain` and return the chain from that point forth
-      let findInChain = checkLrChain.find(p => p === parser);
+      let findInChain = checkLrChain.seek(p => p === parser);
       if (findInChain.found)  yield checkLrChain.slice(findInChain.ind);
       else                    checkLrChain = [ ...checkLrChain, parser ];
       
@@ -308,7 +308,7 @@ let parse = (parser, input, trace) => {
         //if (lrChain.map(p => (p.type === 'all') ? p : C.skip).count() > 1)
         //  throw Error(`LR chain contains multiple all-type parsers; all-type parsers may only be the final (refactored) parser in the LR-chain; obviously this can't be achieved with multiple all-type parsers`);
         
-        let { val, ind } = lrChain.find(p => p.type === 'all');
+        let { val, ind } = lrChain.seek(p => p.type === 'all');
         if (!val) return;
         
         // Rotate the array until the all-parser is the final item
@@ -1205,7 +1205,7 @@ let simplifyParsed = parsed => {
   
   if (testSpecific) {
     let { name, input, depth } = testSpecific;
-    let test = tests.find(test => test.name === name).val;
+    let test = tests.seek(test => test.name === name).val;
     let parser = test.genParser();
     let parsed = parse(parser, input, { offset: 0, chain: [], debug: 0 }).next().value;
     log(depth, parsed ? simplifyParsed(parsed) : '<No result>');

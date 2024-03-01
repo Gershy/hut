@@ -108,7 +108,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
         // be `null`, indicating that every single remaining line began
         // with the prefix; in this case every remaining line is added
         // under the current `subject`!
-        let ind = lns.find(ln => !ln.hasHead(wsPfx)).ind || lns.length;
+        let ind = lns.seek(ln => !ln.hasHead(wsPfx)).ind || lns.length;
         
         let kidLns = lns.slice(0, ind); // Includes everything up until (excluding) non-ws-prefixed line
         lns = lns.slice(ind);           // Includes non-ws-prefixed line and onwards
@@ -593,9 +593,9 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     return this.retrieveOrCompute('prv', 'utf8', () => this.getOsslPrv({ alg: 'rsa', bits: this.secureBits }));
     
   },
-  async getCsr() {
-    return this.getOsslCsr({ prv: await this.getPrv() });
-  },
+  // async getCsr() {
+  //  return this.getOsslCsr({ prv: await this.getPrv() });
+  //},
   
   async getSgnInfo() {
     
@@ -603,16 +603,10 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
     let getSgn = async () => {
       
-      // A SGN (as opposed to PRV, CSR, CRT) is a combination of all the
-      // values needed to manage a server with  a certified identity, as
-      // well as some simple functionality to manage that identity:
+      // A SGN (as opposed to PRV + CSR + CRT) is a combination of all the values needed to manage
+      // a server with  a certified identity, as well as some management functionality:
       //    | {
-      //    |   prv, csr, crt, invalidate,
-      //    |   validity: {
-      //    |     msElapsed,
-      //    |     msRemaining,
-      //    |     expiryMs
-      //    |   }
+      //    |   prv, csr, crt, invalidate, validity: { msElapsed, msRemaining, expiryMs }
       //    | }
       
       Form.subcon.sign('GET CERT', this.certificateType);
@@ -858,7 +852,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
             // Is there an active, insecure http server, for the given
             // NetworkAddress, on port 80? If so we'll use it for the
             // challenge, otherwise we'll just spin up a one-off server!
-            let activeInsecureHttpPort80Server = this.servers.find(server => true
+            let activeInsecureHttpPort80Server = this.servers.seek(server => true
               && server.onn()
               && server.secure === false
               && server.protocol === 'http'
@@ -954,10 +948,10 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
           if (auth?.body?.identifier?.type !== 'dns') throw Error(`OOFfaaahahgga identifier type isn't dns!`).mod({ auth });
           if (auth.body.status !== 'pending') throw Error(`OWWWW I don't know what to do the auth status is "${auth.body.status}"`).mod({ auth });
           
-          let challType = challPrefs.find(type => auth.body.challenges.find(chall => chall.type === type).found).val;
+          let challType = challPrefs.seek(type => auth.body.challenges.seek(chall => chall.type === type).found).val;
           if (!challType) throw Error(`OWWAAWOWOWOW couldn't negotiate a Challenge; we support [ ${challPrefs.join(', ')} ]; options are [ ${auth.body.challenges.map(chall => chall.type).join(', ')} ]`).mod({ challPrefs, auth });
           
-          let challenge = auth.body.challenges.find(chall => chall.type === challType).val;
+          let challenge = auth.body.challenges.seek(chall => chall.type === challType).val;
           
           sc(`DO CHALLENGE ${challenge.type} FOR ${auth.body.identifier.value}`);
           let authRes = await challOptions[challType](auth, challenge);
@@ -1039,7 +1033,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
   },
   
-  activatePort(port, servers, security=null) {
+  activatePort(port, servers, sgn=null) {
     
     // Activates all Servers/RoadAuthorities configured to run on `port`
     
@@ -1050,7 +1044,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     let tmp = Tmp();
     
     let serverPrms = servers.map(server => Promise.later());
-    let activeTmps = servers.map(server => server.activate({ security, adjacentServerPrms: serverPrms }));
+    let activeTmps = servers.map(server => server.activate({ security: sgn, adjacentServerPrms: serverPrms }));
     
     // Resolve the manually handled Promise for each Server when the Server goes active
     for (let [ term, activeTmp ] of activeTmps)
@@ -1080,7 +1074,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     // Maybe spin up a server to redirect http->https if port 80 is free?
     if (this.redirectHttp80 && this.secureBits > 0) (() => {
       
-      let httpsServer = this.servers.find(server => server.protocol === 'http').val;
+      let httpsServer = this.servers.seek(server => server.protocol === 'http').val;
       if (!httpsServer) return; // No point redirecting if there's no secure server
       
       // TODO: Don't know if another process is using a port (detect "EPORTUNAVAILABLE"?)

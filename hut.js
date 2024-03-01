@@ -1,38 +1,17 @@
 /// <reference path="./ts/hut.d.ts"/>
+// Comments may precede "use strict": https://stackoverflow.com/questions/31412978
 'use strict';
 
-process.stdout.write('\u001b[0m');
+process.stdout.write('\u001b[0m'); // Clear any ansi set by previous output
 
-// Make Errors better! (https://v8.dev/docs/stack-trace-api)
-Error.prepareStackTrace = (err, callSites) => {
-  
-  let trace = callSites.map(cs => {
-    
-    let file = cs.getFileName();
-    if (!file || file.hasHead('node:')) return skip;
-    
-    //Object.getOwnPropertyNames(Object.getPrototypeOf(cs)),
-    
-    return {
-      type: 'line',
-      fnName: cs.getFunctionName(),
-      keepTerm: [ '', '[file]', ...cs.getFileName().split(/[/\\]+/) ].join('/'),
-      row: cs.getLineNumber(),
-      col: cs.getColumnNumber()
-    };
-    
-  });
-  
-  return `>>>HUTTRACE>>>${valToJson(trace)}<<<HUTTRACE<<<`;
-  
-};
+require('./nodejs/util/installV8ErrorStacktraceHandler.js');
 
 // Require clearing.js (it's under "rooms", but simply modifies global
 // state so it can be required directly)
 Object.assign(global, { rooms: Object.create(null) });
 require('./room/setup/clearing/clearing.js');
 
-// Do nothing more than require clearing.js if this isn't the main file
+// Do nothing more if this isn't the main file
 if (process.argv[1] !== __filename) return;
 
 if (0 || process.cwd() === '/hut') { // Low-level debug
@@ -78,8 +57,7 @@ if (0 || process.cwd() === '/hut') { // Low-level debug
   
 }
 
-// Run based on directory of this file and command-line configuration
-require('./nodejs/foundation.js')({ hutFp: __dirname, conf: (() => { // Parse configuration
+let conf = (() => { // Parse command-line conf
   
   try {
     
@@ -129,4 +107,7 @@ require('./nodejs/foundation.js')({ hutFp: __dirname, conf: (() => { // Parse co
     
   }
   
-})()});
+})();
+
+require('./nodejs/foundation.js')({ hutFp: __dirname, conf })
+  .fail(err => console.log('FATAL', err));

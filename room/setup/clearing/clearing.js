@@ -10,6 +10,7 @@ if (!global.mmm)      global.mmm = () => {};
 /// =ASSERT}
 
 Object.assign(global, {
+  Regex: RegExp,
   AsyncFunction: (async () => {}).constructor,
   GeneratorFunction: (function*(){})().constructor,
   AsyncGeneratorFunction: (async function*(){})().constructor,
@@ -100,8 +101,9 @@ Object.assign(global, {
       return p.toObj(p => this.has(p) ? [ p, this[p] ] : skip);
       
     },
-    find(f) { // Iterator: (val, key) => bool; returns { found, val=null, key=null }
-      for (let k in this) if (f(this[k], k)) return { found: true, val: this[k], key: k };
+    find(fn) { console.log('Deprecated "find" method'); return this.seek(fn); },
+    seek(fn) { // Iterator: (val, key) => bool; returns { found, val=null, key=null }
+      for (let k in this) if (fn(this[k], k)) return { found: true, val: this[k], key: k };
       return { found: false, val: null, k: null };
     },
     empty() { for (let k in this) return false; return true; },
@@ -129,14 +131,14 @@ Object.assign(global, {
       }
       return this;
     },
-    diveKeysResolved(chain=[]) {
+    diveKeysResolved() {
       let result = {};
       for (let [ k, v ] of this) {
         let dive = token.dive(k);
         let last = dive.pop();
         let ptr = result;
         for (let cmp of dive) ptr = (ptr.has(cmp) && ptr[cmp] != null) ? ptr[cmp] : (ptr[cmp] = {});
-        ptr[last] = isForm(v, Object) ? v.diveKeysResolved([ ...chain, ...dive, last ]) : v;
+        ptr[last] = isForm(v, Object) ? v.diveKeysResolved() : v;
       }
       return result;
     },
@@ -182,10 +184,11 @@ Object.assign(global, {
       for (let i = 0; i < len; i++) { let v = it(this[i], i); if (v !== skip) ret.push(v); }
       return Object.fromEntries(ret);
     },
-    find(f) { // Iterator: (val, ind) => bool; returns { found=false, val=null, ind=null }
+    find(fn) { console.log('Deprecated "find" method'); return this.seek(fn); },
+    seek(fn) { // Iterator: (val, ind) => bool; returns { found=false, val=null, ind=null }
       // TODO: Maybe not good to overwrite `Array.prototype.find`??
       let n = this.length;
-      for (let i = 0; i < n; i++) if (f(this[i], i)) return { found: true, val: this[i], ind: i };
+      for (let i = 0; i < n; i++) if (fn(this[i], i)) return { found: true, val: this[i], ind: i };
       return { found: false, val: null, ind: null };
     },
     all(fn=Boolean) { return this.every(fn); },
@@ -196,7 +199,7 @@ Object.assign(global, {
     rem(val) { let ind = this.indexOf(val); if (ind > -1) this.splice(ind, 1); },
     gain(...arrs) { for (let arr of arrs) this.push(...arr); return this; },
     count() { return this.length; },
-    valSort(fn) { return this.sort((a, b) => fn(a) - fn(b)); },
+    valSort(fn) { return this.sort((a, b) => fn(a) - fn(b)); }, // Sorts smaller values earlier (pass fn as e.g. `v => -v` to sort descending)
     categorize(fn) { // Iterator: val => '<categoryTerm>'
       
       //  [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ].categorize(n => {
@@ -258,6 +261,7 @@ Object.assign(global, {
     },
     code(ind=0) { return this.charCodeAt(0); },
     count() { return this.length; },
+    ellipsis(limit, chr='\u2026') { return this.length > limit ? this.slice(0, limit - 1) + chr : this; },
     indent(...args /* amt=2, char=' ' | indentStr=' '.repeat(2) */) {
       
       if (!this) return this; // No-op on empty String (otherwise it would transform a 0-line string to a 1-line string)
@@ -476,6 +480,27 @@ Object.assign(global, {
     toString() { return this.desc(); }
     
   });
+  protoDefs(RegExp, {
+    
+    $readable: (...args /* flags, niceRegexStr | niceRegexStr */) => {
+      
+      // Allows writing self-documenting regular expressions
+      
+      let [ flags, str ] = (args.length === 2) ? args : [ '', args[0] ];
+      let lns = str.split('\n').map(line => line.trimTail());
+      
+      let cols = Math.max(...lns.map(line => line.length)).toArr(col => Set(lns.map(ln => ln[col])));
+      cols.each(col => col.size > 1 && col.rem(' '));
+      
+      /// {DEBUG=
+      for (let [ num, col ] of cols.entries()) if (col.size > 1) throw Error(`Conflicting chars at column ${num}: [${[ ...col ].join('')}]`);
+      /// =DEBUG}
+      
+      return RegExp(cols.map(col => [ ...col ][0]).join(''), flags);
+      
+    }
+    
+  });
   
   let newlessProtoDefs = (Cls, vals) => {
     
@@ -531,7 +556,8 @@ Object.assign(global, {
       for (let v of this) { v = fn(v, ind++); if (v !== skip) ret.push(v); }
       return ret;
     },
-    find(fn) { // Iterator: (val) => bool; returns { found, val }
+    find(fn) { console.log('Deprecated "find" method'); return this.seek(fn); },
+    seek(fn) { // Iterator: (val) => bool; returns { found, val }
       for (let val of this) if (fn(val)) return { found: true, val };
       return { found: false, val: null };
     },
@@ -556,8 +582,9 @@ Object.assign(global, {
       for (let [ k, v ] of this) { v = fn(v, k); if (v !== skip) ret.push(v); }
       return Object.fromEntries(ret);
     },
-    find(f) { // Iterator: (val, key) => bool; returns { found, val, key }
-      for (let [ k, v ] of this) if (f(v, k)) return { found: true, val: v, key: k };
+    find(fn) { console.log('Deprecated "find" method'); return this.seek(fn); },
+    seek(fn) { // Iterator: (val, key) => bool; returns { found, val, key }
+      for (let [ k, v ] of this) if (fn(v, k)) return { found: true, val: v, key: k };
       return { found: false, val: null, key: null };
     },
     count() { return this.size; },
@@ -631,7 +658,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     
   },
   thenAll: (vals, ...args /* rsv, rjc */) => {
-    if (vals.find(v => v instanceof Promise).found) vals = Promise.all(vals);
+    if (vals.seek(v => v instanceof Promise).found) vals = Promise.all(vals);
     return then(vals, ...args);
   },
   
@@ -759,13 +786,13 @@ Object.assign(global, global.rooms['setup.clearing'] = {
       // trying to call `undefined` as a function
       if (collisionProps.length === 0) {
         
-        let utilProp = propsOfThatName.find(v => !!v).val;
+        let utilProp = propsOfThatName.seek(v => !!v).val;
         if (utilProp) collisionProps = [ utilProp ];
         else          continue;
         
       } else if (collisionProps.length > 1) {
         
-        let definingForms = collisionProps.map(prop => Form['~forms'].find(ParForm => ParForm.prototype[propName] === prop).val);
+        let definingForms = collisionProps.map(prop => Form['~forms'].seek(ParForm => ParForm.prototype[propName] === prop).val);
         throw Error([
           `Form ${name} has ambiguous "${propName}" property `,
           `from ${collisionProps.length} ParentForms `,
@@ -795,11 +822,11 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     return Form;
     
   },
-  getFormName: f => {
-    if (f === null) return 'Null';
-    if (f === undefined) return 'Undefined';
-    if (f !== f) return 'UndefinedNumber';
-    return Object.getPrototypeOf(f)?.constructor.name ?? 'Prototypeless'; // e.g. `getFormName(Object.plain()) === 'Prototypeless'`
+  getFormName: v => {
+    if (v === null) return 'Null';
+    if (v === undefined) return 'Undefined';
+    if (v !== v) return 'UndefinedNumber';
+    return Object.getPrototypeOf(v)?.constructor.name ?? 'Prototypeless'; // e.g. `getFormName(Object.plain()) === 'Prototypeless'`
   },
   isForm: (fact, Form) => {
     

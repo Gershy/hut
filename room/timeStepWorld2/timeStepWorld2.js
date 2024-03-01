@@ -156,8 +156,8 @@ global.rooms['timeStepWorld2'] = async foundation => {
       
       if (!world.getValue().has('ctrlSet')) throw Error(`World missing direct "ctrlSet" value`);
       if (!hasForm(world.getValue().ctrlSet, Object)) throw Error(`World "ctrlSet" value should be Object (got ${getFormName(world.getValue().ctrlSet)})`);
-      if (world.getValue().ctrlSet.find(v => !isForm(v, Number)).found) throw Error(`World "ctrlSet" value should have every prop set to a number (key code)`);
-      if (world.getValue().ctrlSet.find(v => v !== Math.floor(v)).found) throw Error(`World "ctrlSet" value should have every prop set to an integer`);
+      if (world.getValue().ctrlSet.seek(v => !isForm(v, Number)).found) throw Error(`World "ctrlSet" value should have every prop set to a number (key code)`);
+      if (world.getValue().ctrlSet.seek(v => v !== Math.floor(v)).found) throw Error(`World "ctrlSet" value should have every prop set to an integer`);
       
       if (!world.getValue().has('ms')) throw Error(`World missing direct "ms" value`);
       if (!isForm(world.getValue().ms, Number)) throw Error(`World "ms" value should be Number (got ${getFormName(world.getValue().ms)})`)

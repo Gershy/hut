@@ -24,14 +24,14 @@ let Filepath = form({ name: 'Filepath', props: (forms, Form) => ({
     vals = vals.flat(Infinity);
     
     // Flatten into a flat list of Strings
-    let nonStrCmp = vals.find(val => !isForm(val, String)).val;
+    let nonStrCmp = vals.seek(val => !isForm(val, String)).val;
     if (nonStrCmp) throw Error(`Api: all components must be String; got ${getFormName(nonStrCmp)}`).mod({ vals });
     
     vals = vals
       .map(cmp => cmp.split(/[/\\]+/)) // Each String is broken into its components
       .flat(1)                         // Finally flatten into flat list of components
-      
-    let illegalCmp = vals.find(val => Form.filteredComponentRegex.test(val)).val;
+    
+    let illegalCmp = vals.seek(val => Form.filteredComponentRegex.test(val)).val;
     if (illegalCmp) throw Error('Api: illegal file component provided').mod({ illegalCmp });
     
     // Use `path.resolve`; first component being "/" ensures working
@@ -850,7 +850,7 @@ module.exports = {
             trn.getData(testFp, 'utf8').then(v => results.add(v))
           ]);
           
-          if (results.find(r => r.length).found) throw Error('All results must be 0-length');
+          if (results.seek(r => r.length).found) throw Error('All results must be 0-length');
           
         }
         
@@ -863,7 +863,7 @@ module.exports = {
             trn.getData(testFp, 'utf8').then(v => results.add(v))
           ]);
           
-          if (results.find(r => r !== 'hihihi').found) throw Error('All results must be "hihihi"');
+          if (results.seek(r => r !== 'hihihi').found) throw Error('All results must be "hihihi"');
           
         }
         

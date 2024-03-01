@@ -11,7 +11,7 @@ global.rooms['literature'] = async () => {
     access(name) {
       if (/[^a-z0-9]/.test(name)) throw Error(`Api: name must be fully lowercase and alphanumeric`).mod({ name });
       return null
-        ?? this.kids.find(kid => kid.name === name).val
+        ?? this.kids.seek(kid => kid.name === name).val
         ?? this.kids.add((0, this.Form)({ name, par: this }));
     },
     chain() {
@@ -99,7 +99,9 @@ global.rooms['literature'] = async () => {
     async activateBelow(experience, real=experience.real) {
       
       /// {DEBUG=
-      if (this.scribe) throw Error('Api: multiple activateBelow calls');
+      // TODO: This is CLUMSY; this gets called multiple times ABOVE for each instance of BELOW
+      // that connects
+      // if (this.scribe) throw Error('Api: multiple activateBelow calls');
       /// =DEBUG}
       
       let tmp = Tmp();

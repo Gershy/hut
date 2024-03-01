@@ -135,7 +135,7 @@ module.exports = async () => {
         let c = fn();
         let valid = true
           && c.length === exp.length
-          && !c.find((v, i) => v !== exp[i]).found;
+          && !c.seek((v, i) => v !== exp[i]).found;
         
         if (!valid) {
           let fnStr = fn.toString().replace(/ *[.]cut/, '.cut');
@@ -567,7 +567,7 @@ module.exports = async () => {
         for (let i = 0; i < 6; i++) srcs[2].send('hoo');
         
         if (events.count() !== 6) throw Error(`Expected exactly 6 events; got ${events.count()}`);
-        if (events.find(evt => !isForm(evt, Array)).found) throw Error(`All events should be Array`);
+        if (events.seek(evt => !isForm(evt, Array)).found) throw Error(`All events should be Array`);
         
         let lastEvent = events.slice(-1)[0];
         if (lastEvent.count() !== 3) throw Error(`Event should have 3 items (because there are 3 Srcs)`);
@@ -824,8 +824,8 @@ module.exports = async () => {
       scp.end();
       
       if (depTmps.count() !== 5) throw Error(`Scope never ran`);
-      if (depTmps.find(tmp => !isForm(tmp, Tmp)).found) throw Error(`Not all sends resulted in Tmps`);
-      if (depTmps.find(tmp => tmp.onn()).found) throw Error(`Not all Deps ended when Scope ended`);
+      if (depTmps.seek(tmp => !isForm(tmp, Tmp)).found) throw Error(`Not all sends resulted in Tmps`);
+      if (depTmps.seek(tmp => tmp.onn()).found) throw Error(`Not all Deps ended when Scope ended`);
       
     },
     async m => { // Deps end when parent Scope ends
@@ -842,7 +842,7 @@ module.exports = async () => {
       scp.end();
       
       if (depTmps.count() !== 5) throw Error(`Scope never ran`);
-      if (depTmps.find(tmp => tmp.onn()).found) throw Error(`Not all Deps ended when parent Scope ended`);
+      if (depTmps.seek(tmp => tmp.onn()).found) throw Error(`Not all Deps ended when parent Scope ended`);
       
     },
     async m => { // Deps end when Tmp ends, multi, one at a time
@@ -857,9 +857,9 @@ module.exports = async () => {
         let tmp = Tmp();
         src.send(tmp);
         if (depTmps.count() !== 5) throw Error(`Scope never ran`);
-        if (depTmps.find(tmp => tmp.off()).found) throw Error(`Dep ended too early`);
+        if (depTmps.seek(tmp => tmp.off()).found) throw Error(`Dep ended too early`);
         tmp.end();
-        if (depTmps.find(tmp => tmp.onn()).found) throw Error(`Not all Deps ended when Tmp ended`);
+        if (depTmps.seek(tmp => tmp.onn()).found) throw Error(`Not all Deps ended when Tmp ended`);
       }
       
     },
@@ -876,13 +876,13 @@ module.exports = async () => {
       
       for (let depTmps of depTmpsArr) {
         if (depTmps.count() !== 5) throw Error(`Scope never ran`);
-        if (depTmps.find(tmp => tmp.off()).found) throw Error(`Dep ended too early`);
+        if (depTmps.seek(tmp => tmp.off()).found) throw Error(`Dep ended too early`);
       }
       
       for (let tmp of tmps) tmp.end();
       
       for (let depTmps of depTmpsArr) {
-        if (depTmps.find(tmp => tmp.onn()).found) throw Error(`Not all Deps ended when Tmp ended`);
+        if (depTmps.seek(tmp => tmp.onn()).found) throw Error(`Not all Deps ended when Tmp ended`);
       }
       
     },
@@ -899,13 +899,13 @@ module.exports = async () => {
       
       for (let depTmps of depTmpsArr) {
         if (depTmps.count() !== 5) throw Error(`Scope never ran`);
-        if (depTmps.find(tmp => tmp.off()).found) throw Error(`Dep ended too early`);
+        if (depTmps.seek(tmp => tmp.off()).found) throw Error(`Dep ended too early`);
       }
       
       scp.end();
       
       for (let depTmps of depTmpsArr) {
-        if (depTmps.find(tmp => tmp.onn()).found) throw Error(`Not all Deps ended when Tmp ended`);
+        if (depTmps.seek(tmp => tmp.onn()).found) throw Error(`Not all Deps ended when Tmp ended`);
       }
       
     },
@@ -930,13 +930,13 @@ module.exports = async () => {
       
       for (let depTmps of depTmpsArr) {
         if (depTmps.count() !== 5) throw Error(`Scope never ran`);
-        if (depTmps.find(tmp => tmp.off()).found) throw Error(`Dep ended too early`);
+        if (depTmps.seek(tmp => tmp.off()).found) throw Error(`Dep ended too early`);
       }
       
       scp.end();
       
       for (let depTmps of depTmpsArr) {
-        if (depTmps.find(tmp => tmp.onn()).found) throw Error(`Not all Deps ended when Tmp ended`);
+        if (depTmps.seek(tmp => tmp.onn()).found) throw Error(`Not all Deps ended when Tmp ended`);
       }
       
     },

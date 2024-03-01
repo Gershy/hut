@@ -211,7 +211,7 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
       if (piece.getValue('type') === 'king' && (Math.abs(trnCol) >= 2 || Math.abs(trnRow) >= 2)) {
         
         let gudKing = piece;
-        let gudRook = pieces.find(gp => { // "gudPiece"
+        let gudRook = pieces.seek(gp => { // "gudPiece"
           
           // TODO: Also, there should be no pieces between the
           // king and match piece!
@@ -510,8 +510,8 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
             applyMoves(match, pieces, significantMoves);
             
             let aliveKings = pieces.map(pc => (pc.onn() && pc.getValue('type') === 'king') ? pc : skip);
-            let wAlive = aliveKings.find(king => king.getValue('colour') === 'white').found;
-            let bAlive = aliveKings.find(king => king.getValue('colour') === 'black').found;
+            let wAlive = aliveKings.seek(king => king.getValue('colour') === 'white').found;
+            let bAlive = aliveKings.seek(king => king.getValue('colour') === 'black').found;
             
             round.end();
              
@@ -998,13 +998,13 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
                 
                 let { piece: pieceUid } = move;
                 let pieces = await match.withRh('piece', 'all');
-                let piece = pieces.find(piece => piece.uid === pieceUid).val;
+                let piece = pieces.seek(piece => piece.uid === pieceUid).val;
                 
                 if (!piece) throw Error('Api: invalid piece uid').mod({ move });
                 if (piece.getValue('wait') > 0) throw Error('Api: piece must wait').mod({ move });
                 
                 let vm = getValidMoves(makeBoard(pieces), matchLofter, piece)
-                  .find(vm => vm.col === trg.col && vm.row === trg.row)
+                  .seek(vm => vm.col === trg.col && vm.row === trg.row)
                   .val;
                 
                 // Ensure the provided move is a valid move

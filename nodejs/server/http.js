@@ -116,13 +116,13 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       // `{ trn: 'anon' }` is always accompanied by `{ hid: null }`
       if (msg.trn === 'anon') msg.hid = null;
       
+      // Unprefixed commands are interpreted towards the default Loft, according to the AboveHut
+      if (!msg.command.has(':')) msg.command = `${this.aboveHut.getDefaultLoftPrefix()}:${msg.command}`;
+      
       subcon('roadAuth.http')(() => ({
         incomingCtx: { path, msg: { ...hutCookie, ...query, ...body } },
         resolvedCtx: msg
       }));
-      
-      // Unprefixed commands are interpreted towards the default Loft, according to the AboveHut
-      if (!msg.command.has(':')) msg.command = `${this.aboveHut.getDefaultLoftPrefix()}:${msg.command}`;
       
       // These can't be confined to DEBUG blocks - must always detect malformatted remote queries!
       let { hid=null, trn } = msg;
@@ -321,7 +321,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
           });
           
           // Find a compression option supported by both us and the client
-          let matchedEncoding = compression.find(v => encodings.has(v)).val;
+          let matchedEncoding = compression.seek(v => encodings.has(v)).val;
           if (matchedEncoding) return matchedEncoding;
           
           if (encodings.has('*')) return compression[0];

@@ -1765,7 +1765,7 @@ global.rooms['fly.models'] = async foundation => {
     
     doStep(ud) {
       
-      let target = ud.entities.find(ent => {
+      let target = ud.entities.seek(ent => {
         let { tangibility: { team, sides } } = ent.getState(ud);
         return team === 'ace' && sides.has('tail');
       }).val;
@@ -1969,7 +1969,7 @@ global.rooms['fly.models'] = async foundation => {
       
     },
     */
-    isAlive: utils.fa(forms, 'isAlive', (i, arr) => !arr.find(alive => !alive).found)
+    isAlive: utils.fa(forms, 'isAlive', (i, arr) => !arr.seek(alive => !alive).found)
     
   })});
   let WinderMom = form({ name: 'WinderMom', has: { Enemy, Spawner, Mover }, props: (forms, Form) => ({

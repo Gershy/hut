@@ -33,8 +33,8 @@ global.rooms['reality.real.Real'] = () => form({ name: 'Real', has: { Tmp }, pro
   addReal(givenName, ...args /* ... [ ... layouts ... ] ... { ... params ... } ...  */) {
     
     let [ prefix, name ] = givenName.has('.') ? givenName.cut('.') : [ this.prefix, givenName ];
-    let rawParams = args.find(v => isForm(v, Object)).val ?? {};
-    let layouts = args.find(v => isForm(v, Array)).val ?? [];
+    let rawParams = args.seek(v => isForm(v, Object)).val ?? {};
+    let layouts = args.seek(v => isForm(v, Array)).val ?? [];
     
     // Params with capital 1st letters represent Layouts
     let { params={}, layoutParams={} } = rawParams.categorize((v, k) => {

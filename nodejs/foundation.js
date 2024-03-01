@@ -10,73 +10,20 @@ let { rootTransaction: rootTrn, Filepath, FsKeep } = require('./filesys.js');
 let NetworkIdentity = require('./NetworkIdentity.js');
 
 // Set up basic monitoring
-let processExitSrc = Src();
-(() => {
-  
-  // https://nodejs.org/api/process.html#signal-events
-  let origExit = process.exit;
-  process.exitNow = process.exit;
-  process.exit = code => {
-    process.explicitExit = true;
-    
-    let err = Error(`Process explicitly exited (${code})`);
-    processExitSrc.route(() => gsc(err));
-    processExitSrc.route(() => process.stdout.write('\u001b[0m'));
-    return process.exitNow(code);
-  };
-  
-  // NOTE: Trying to catch SIGKILL or SIGSTOP crashes posix!
-  // https://github.com/nodejs/node-v0.x-archive/issues/6339
-  let evts = 'hup,int,pipe,quit,term,tstp,break'.split(',');
-  let haltEvts = Set('int,term,quit'.split(','));
-  for (let evt of evts) process.on(`sig${evt}`.upper(), (...args) => {
-    gsc(`Received event: "${evt}"`, args);
-    haltEvts.has(evt) && process.exit(isForm(args[1], Number) ? args[1] : -1);
-  });
-  
-  let onErr = err => {
-    if (err['~suppressed']) return; // Ignore suppressed errors
-    gsc(`Uncaught ${getFormName(err)}:`, err.desc());
-    process.exitNow(1);
-  };
-  process.on('uncaughtException', onErr);
-  process.on('unhandledRejection', onErr);
-  process.on('exit', code => processExitSrc.send(code));
-  
-  processExitSrc.route(code => process.explicitExit || gsc(`Hut terminated (code: ${code})`));
-  
-})();
-
-let niceRegex = (...args /* flags, niceRegexStr | niceRegexStr */) => {
-  
-  // Allows writing self-documenting regular expressions
-  
-  let [ flags, str ] = (args.length === 2) ? args : [ '', args[0] ];
-  let lns = str.split('\n').map(line => line.trimTail());
-  
-  let cols = Math.max(...lns.map(line => line.length)).toArr(col => Set(lns.map(ln => ln[col])));
-  cols.each(col => col.size > 1 && col.rem(' '));
-  
-  /// {DEBUG=
-  for (let [ num, col ] of cols.entries()) if (col.size > 1) throw Error(`Conflicting chars at column ${num}: [${[ ...col ].join('')}]`);
-  /// =DEBUG}
-  
-  return RegExp(cols.map(col => [ ...col ][0]).join(''), flags);
-  
-};
+let { processExitSrc } = require('./util/installTopLevelHandler.js')();
 
 // Avoid "//" within String by processing non-String-open characters, or
 // fully enclosed Strings (note: may fail to realize that a String stays
 // open if it has escaped quotes e.g. 'i criii :\')'; note lookbehind
 // ("?<=") excludes its contents from the actual match
-let captureLineCommentRegex = niceRegex(String.baseline(`
+let captureLineCommentRegex = Regex.readable(String.baseline(`
   | (?<=                                  )
   |     ^(      |       |       |       )* [ ]*
   |       [^'"#] '[^']*' "[^"]*" #[^#]*#       [/][/].*
 `).replace(/#/g, '`')); // Simple way to include literal "`" in regex
 
 // Avoid "/*" within Strings; capture terminating "*/" on the same line
-let captureInlineBlockCommentRegex = niceRegex('g', String.baseline(`
+let captureInlineBlockCommentRegex = Regex.readable('g', String.baseline(`
   | (?<=                                           )                                 
   |     ^(?:     |           |           |       )* [ ]*         [^*]|[*][^/]        
   |         [^'"] ['][^']*['] ["][^"]*["] #[^#]*#       [/][*](?:            )*[*][/]
@@ -88,238 +35,15 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
   let hutFp = Filepath(hutFpRaw);
   let hutKeepPrm = rootTrn.kid(hutFp).then(trn => FsKeep(trn, hutFp));
   
-  { // Setup initial utils
-    
-    // Make `global.subconOutput` immediately available (but any log
-    // invocations will only show up after configuration is complete)
-    global.subconOutput = (...args) => global.subconOutput.buffered.push(args); // Buffer everything
-    global.subconOutput.buffered = [];
-    
-    let modCode = (...codes) => '\u001b[' + codes.map(c => c.toString(10)).join(';') + 'm';
-    let modMapping = {
-      
-      // https://stackoverflow.com/a/41407246/830905
-      
-      red:       '\u001b[31m',
-      green:     '\u001b[32m',
-      yellow:    '\u001b[33m',
-      blue:      '\u001b[34m',
-      
-      subtle:    '\u001b[2m',
-      
-      bold:      '\u001b[1m',
-      italic:    '\u001b[3;22m',
-      underline: '\u001b[4;22m',
-      
-      rgbRed: '\u001b[38;2;255;0;0m', // Must be 38, then 2, then the next 3 are R,G,B
-      
-      reset:     '\u001b[0m'
-    };
-    let ansi = (str, modName) => `${modMapping[modName]}${str}${modMapping.reset}`;
-    let remAnsi = (str) => str.replace(/\u{1b}\[[^a-zA-Z]+[a-zA-Z]/ug, '');
-    let bolded = Map();
-    let bold = (str, b = bolded.get(str)) => b || (bolded.set(str, b = ansi(str, 'bold')), b);
-    
-    // Define `global.formatAnyValue`
-    let format = (val, opts={}, d=0, pfx='', seen=Map()) => {
-      
-      // `opts.d` is the maximum depth; the "<limit>" indicator will be returned beyond it
-      // `d` is the current depth
-      // `opts.w` is the initial width
-      // `pfx` is the string which will precede the first line of any output from this `format`
-      // call; it should be considered in order to break excessively long lines
-      
-      let pfxLen = pfx.length;
-      
-      if (val === undefined) return ansi('undefined', 'green');
-      if (val === null) return ansi('null', 'green');
-      
-      if (isForm(val, String)) return ansi(`'${val.replaceAll('\n', '\\n')}'`, 'green');
-      if (isForm(val, Number)) return ansi(`${val}`, 'green');
-      if (isForm(val, Boolean)) return ansi(val ? 'T' : 'F', 'green');
-      
-      if (d > opts.d) return ansi('<limit>', 'red');
-      
-      if (seen.has(val)) return seen.get(val);
-      
-      if (Object.getPrototypeOf(val) === null) {
-        
-        seen.set(val, '<cyc> PlainObject(...)');
-        seen.set(val, str);
-        let str = `PlainObject ${format({ ...val }, opts, d, 'PlainObject ', seen)}`;
-        return str;
-        
-      }
-      
-      if (hasForm(val, Function)) {
-        
-        let str = 'Fn: ' + val.toString().split('\n').map(ln => ln.trim() ?? skip).join(' ');
-        
-        let maxW = Math.max(8, opts.w - pfxLen - d * 4 - 1); // Subtract 1 for the trailing ","
-        if (str.length > maxW) str = str.slice(0, maxW - 1) + '\u2026';
-        
-        str = ansi(str, 'blue');
-        
-        seen.set(val, str);
-        return str;
-        
-      }
-      
-      if (isForm(val, Set)) {
-        
-        seen.set(val, '<cyc> Set(...)');
-        let str = `Set ${format([ ...val ], opts, d, 'Set ', seen)}`;
-        seen.set(val, str);
-        return str;
-        
-      }
-      
-      if (isForm(val, Map)) {
-        
-        seen.set(val, '<cyc> Map(...)');
-        let str = `Map ${format(Object.fromEntries(val), opts, d, 'Map ', seen)}`;
-        seen.set(val, str);
-        return str;
-        
-      }
-      
-      if (isForm(val?.desc, Function)) {
-        
-        try {
-          let str = ansi(val.desc(), 'blue');
-          seen.set(val, str);
-          return str;
-        } catch (err) {
-          // Ignore any errors from calling `val.desc`
-        }
-        
-      }
-      
-      if (isForm(val, Object)) {
-        
-        if (val.empty()) return bold('{}');
-        
-        seen.set(val, '<cyc> { ... }');
-        let keyLen = Math.max(...val.toArr((v, k) => k.length));
-        
-        let str = (() => {
-          
-          let formatted = val.map((v, k) => format(v, opts, d + 1, `${k.padTail(keyLen, ' ')}: `, seen));
-          
-          let oneLine = `${bold('{')} ${formatted.toArr((v, k) => `${k}${bold(':')} ${v}`).join(bold(',') + ' ')} ${bold('}')}`;
-          let canOneLine = true
-            && !oneLine.has('\n')
-            && remAnsi(oneLine).length < (opts.w - d * 4);
-          if (canOneLine) return oneLine;
-          
-          let multiLineItems = formatted.toArr((v, k) => {
-            
-            let paddingAmt = keyLen - k.length;
-            let padding = '';
-            if (paddingAmt) padding += ' ';
-            padding += '-'.repeat(Math.max(paddingAmt - 1, 0));
-            let paddedKey = k + ansi(padding, 'subtle');
-            return `${paddedKey}${bold(':')} ${v}`;
-            
-          });
-          
-          // Using `Math.max` means there's no sorting preference for items less than 10 chars long
-          let multiLine = multiLineItems.valSort(v => {
-            
-            let noAnsi = remAnsi(v);
-            let numLines = (noAnsi.match(/\n/g) ?? []).length + 1;
-            
-            // The first line of `noAnsi` embeds `keyLen` chars and ": "
-            let numChars = noAnsi.length - (keyLen + ': '.length);
-            if (numLines === 1 && numChars < 50) numChars = 50; // Avoid reordering short single-lines values
-            
-            return numChars * 1 + numLines * 7;
-          })
-            .map(v => v.indent(ansi('\u00a6', 'subtle') + '   '))
-            .join(bold(',') + '\n')
-          
-          return `${bold('{')}\n${multiLine}\n${bold('}')}`;
-          
-        })();
-        
-        seen.set(val, str);
-        return str;
-        
-      }
-      
-      if (isForm(val, Array)) {
-        
-        if (val.empty()) return bold('[]');
-        
-        seen.set(val, '<cyc> [ ... ]');
-        
-        let str = (() => {
-          
-          let formatted = val.map(v => format(v, opts, d + 1, '', seen));
-          
-          let oneLine = `${bold('[')} ${formatted.join(bold(',') + ' ')} ${bold(']')}`;
-          let canOneLine = true
-            && !oneLine.has('\n')
-            && remAnsi(oneLine).length < (opts.w - d * 4);
-          if (canOneLine) return oneLine;
-          
-          let multiLine = formatted.map(v => v.indent(ansi('\u00a6', 'subtle') + '   ')).join(bold(',') + '\n');
-          return `${bold('[')}\n${multiLine}\n${bold(']')}`;
-          
-        })();
-        
-        seen.set(val, str);
-        return str;
-        
-      }
-      
-      let formName = getFormName(val);
-      seen.set(val, `<cyc> ${formName}(...)`);
-      let str = `${ansi(formName, 'blue')} ${format({ ...val }, opts, d, `${formName} `, seen)}`;
-      seen.set(val, str);
-      return str;
-      
-    };
-    
-    global.formatAnyValue = (val, { colours=true, width=conf('global.terminal.width'), depth=7 }={}) => {
-      return format(val, { colours, w: width, d: depth });
-    };
-    
-  };
+  // Make `global.subconOutput` immediately available (but any log
+  // invocations will only show up after configuration is complete)
+  global.subconOutput = (...args) => global.subconOutput.buffered.push(args); // Buffer everything
+  global.subconOutput.buffered = [];
   
-  { // Calibrate hi-res `getMs`; overwrites `global.getMs`
-    
-    // Find a hi-res timestamp very close to a Date.now() millisecond
-    // tickover; we determine whether we're close to the beginning of a
-    // millisecond tickover by counting busy-wait iterations completed
-    // before the end of the millisecond; the more, the closer we assume
-    // we were to the millisecond origin. Finally use the nearest such
-    // millisecond as an origin time for `getMs` calls, supplemented by
-    // a hi-res value
-    let { performance: perf } = require('perf_hooks');
-    let getMsHiRes = perf.now.bind(perf);
-    let getMsLoRes = Date.now;
-    
-    let origin = getMsHiRes() - getMsLoRes(); // We're going to tune `origin` to the average difference between `nowHiRes()` and `nowLoRes()`
-    let maxMs = 15; // How long to calibrate (and busy-wait) for
-    let lo0 = getMsLoRes();
-    while (true) {
-      
-      let [ lo, hi ] = [ getMsLoRes(), getMsHiRes() ];
-      let elapsed = lo - lo0;
-      if (elapsed > maxMs) break; // 30ms busy-wait
-      
-      let diff = (lo + 0.5) - hi; // `lo` marks the *beginning* of a millisecond, so add 0.5 on average!
-      
-      // The later we go the amount of change to `origin` decreases
-      let amt = elapsed / maxMs;
-      origin = origin * amt + diff * (1 - amt);
-      
-    }
-    
-    global.getMs = () => origin + getMsHiRes();
-    
-  };
+  // Setup `global.formatAnyValue`
+  global.formatAnyValue = require('./util/formatAnyValue.js'); // (val, { colours, w, d }) => formattedStr;
+  
+  global.getMs = require('./util/getCalibratedUtcMillis.js')(/* involves a busy-wait */);
   
   // Initial subcon log...
   let setupSc = global.subcon('setup');
@@ -344,7 +68,6 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     hutKeep.forbid = { mill: 1, '.git': 1 };
     
     let rootKeep = RootKeep({
-      
       'file': rootFsKeep,
       'file:root': rootFsKeep,
       'file:hut':  hutKeep,
@@ -352,908 +75,88 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       'file:mill': millKeep,
       'file:code:src': hutKeep.seek('room'),
       'file:code:cmp': millKeep.seek('cmp')
-      
     });
+    global.keep = Object.assign(dt => rootKeep.seek(token.dive(dt)), { rootKeep });
     
-    global.keep = (diveToken) => {
-      return rootKeep.seek(token.dive(diveToken));
-    };
-    
-  };
+  }
+  
+  console.log('yo');
   
   { // Resolve configuration and get subcon output working
     
-    let resolveConf = async () => {
-      
-      // Note that `globalConf` and `global.conf` will be initialized as
-      // far as possible, even if the config is never fully resolved!
-      
-      let globalConf = {};
-      global.conf = (diveToken, def='TODOhijklmno') => {
-        
-        let v = token.diveOn(diveToken, globalConf, def).val;
-        if (v === 'TODOhijklmno') throw Error('Api: bad conf dive token').mod({ diveToken });
-        return v;
-        
-      };
-      
-      let { ConfySet, ConfyVal, ConfyNullable } = (() => {
-        
-        // !<ref> !<lnk>
-        // !<rem>
-        // !<def>
-        
-        let Confy = form({ name: 'Confy', props: (forms, Form) => ({
-          
-          $getValue: (values, relChain, relOrAbsDive) => {
-            
-            let dive = token.dive(relOrAbsDive);
-            let [ cmp0, ...cmps ] = dive;
-            
-            /// {DEBUG=
-            if (![ '[abs]', '[rel]' ].has(cmp0)) throw Error('Api: first dive component must be "[abs]" or "[rel]"');
-            /// =DEBUG}
-            
-            let absCmps = [];
-            for (let cmp of cmp0 === '[rel]' ? [ ...relChain, ...cmps ] : cmps)
-              absCmps[cmp !== '[par]' ? 'push' : 'pop'](cmp); // `absCmp.pop(cmp)` simply ignores `cmp`
-            
-            if (cmp0 === '[abs]') absCmps = [ 'root', ...absCmps ];
-            
-            // Imagine a case where `values` looks like:
-            //    | {
-            //    |   'root.heap.netIdens.myNetIden': {
-            //    |     'details.email': 'myEmail'
-            //    |   }
-            //    | }
-            // And `relOrAbsDive` looks like:
-            //    | "[abs].root.heap.netIdens.myNetIden.detail.email"
-            // (or generally any case where a mixture of dive-keys and actual
-            // references need to be traversed in order to find the value)
-            // TODO: This can be implemented more efficiently; still a search
-            // against the whole `values` Object, for each key in the current
-            // subset of `value` check if each key is a prefix of
-            // `relOrAbsDive`, and for each which is, recurse on that key!
-            // BETTER TODO: simply always store `values` in "diveKeysResolved"
-            // format????
-            values = values.diveKeysResolved(); // Creates new value (no in-place modification)
-            
-            let { found, val } = token.diveOn(absCmps, values);
-            if (found) return val;
-            
-            throw Error(
-              (absCmps.join('.') === cmps.join('.'))
-                ? `Api: conf path "${relChain.join('.')}" requires missing chain "${absCmps.join('.')}"`
-                : `Api: conf path "${relChain.join('.')}" requires missing chain "${absCmps.join('.')}" (provided as "${dive.join('.')}")`
-            ).mod({ rel: relChain.join('.') });
-              
-          },
-          $wrapFn: async ({ conf, orig=null, chain }, fn) => {
-            
-            try { return await fn(); } catch (err) {
-              
-              err.propagate(msg => ({
-                msg: msg.hasHead('Api: ') ? msg : `Api: "${chain.join('.')}" ${msg}`,
-                value: conf,
-                ...(orig && { origValue: orig })
-              }));
-              
-            }
-            
-          },
-          
-          init() {},
-          resolve({ conf, chain, getValue /* (relOrAbsDive) => someResolvedValue */ }) {
-            throw Error('Not implemented');
-          },
-          getAction(conf, chain=['root']) {
-            return async values => {
-              
-              let getValue = Form.getValue.bound(values, chain);
-              let orig = conf;
-              let isRef = isForm(conf, String) && conf.hasHead('!<ref>');
-              
-              return Form.wrapFn({ conf, orig: isRef ? orig : null, chain }, () => {
-                if (isRef) conf = getValue(conf.slice('!<ref>'.length).trim());
-                return this.resolve({ conf, chain, getValue });
-              });
-              
-            };
-          }
-          
-        })});
-        let ConfySet = form({ name: 'ConfySet', has: { Confy }, props: (forms, Form) => ({
-          init({ kids={}, all=null, headOp=null, tailOp=null, ...args }={}) {
-            Object.assign(this, { kids: Object.plain(kids), all, headOp, tailOp });
-          },
-          resolve({ conf, chain, getValue }) {
-            
-            // We'll have problems if the parent needs its children resolved first; the parent
-            // would throw an Error saying something like "a.b.c requires a.b.c.d", which
-            // short-circuits before "a.b.c.d" is returned as a further Action, meaning "a.b.c.d"
-            // will never be initialized (results in churn failure)
-            
-            // Note "headOp" and "tailOp": the "head" and "tail" here refer to before and after the
-            // ConfySet's children have done their parsing. This means that "headOp" is able to
-            // format some non-setlike input into a set of child values (e.g. a comma-delimited
-            // string into an array of items parsed from that String), while "tailOp" is finally
-            // given the set of values which captures all child values, and operates on that set
-            // (e.g. in order to validate some constraint incorporating multiple child values).
-            
-            if (conf === '!<def>') conf = {};
-            
-            if (this.headOp) conf = this.headOp({ conf, chain, getValue });
-            
-            if (isForm(conf, String)) conf = conf.split(/[,+]/);
-            if (isForm(conf, Array)) conf = conf.toObj((v, i) => [ i, v ]);
-            if (!isForm(conf, Object)) throw Error(`requires value resolving to Object; got ${getFormName(conf)}`);
-            
-            // Pass the '!<def>' value for every Kid
-            conf = { ...{}.map.call(this.kids, v => '!<def>'), ...conf };
-            
-            let actions = {};
-            for (let [ k, v ] of conf) {
-              if (v === '!<rem>') continue;
-              let kid = this.kids[k] ?? this.all;
-              let kidChain = [ ...chain, k ];
-              actions[kidChain.join('.')] = kid
-                ? kid.getAction(v, kidChain)
-                : () => Error(`Api: "${chain.join('.')}" has no Kid to handle "${k}"`).propagate({ conf });
-            }
-            
-            // Processing afterwards looks a bit tricky - we add another
-            // pending Action for the parent alongside all the Kid Actions -
-            // this one will be able to reference values resulting from Kid
-            // Actions! Note that this additional Action for the parent never
-            // produces any further Actions!
-            if (this.tailOp) actions[chain.join('.')] = values =>
-              Form.wrapFn({ conf, chain }, () => this.tailOp({ conf, chain, getValue }));
-            
-            // Note that `result` can be overwritten by `tailOp`, and also by
-            // merging in the results from all Kids
-            return { result: conf, actions };
-          }
-        })});
-        let ConfyVal = form({ name: 'ConfyVal', has: { Confy }, props: (forms, Form) => ({
-          
-          $settlers: Object.plain({
-            bln: { target: Boolean, tries: [
-              [ Number, v => !!v ],
-              [ String, v => {
-                if ([ 'yes', 'true', 't', 'y' ].has(v.lower())) return true;
-                if ([ 'no', 'false', 'f', 'n' ].has(v.lower())) return false;
-                throw Error(`failed resolving String "${v}" to Boolean`);
-              }]
-            ]},
-            str: { target: String, tries: [] },
-            num: { target: Number, tries: [
-              [ String, v => {
-                let num = parseInt(v, 10);
-                let str = num.toString();
-                if (v !== str && v !== '+' + str) throw Error(`failed resolving String "${v}" to Number`);
-                return num;
-              }]
-            ]},
-            arr: { target: Array, tries: [
-              [ String, v => v.split(/[,+]/).map(v => v.trim() ?? skip) ],
-              [ Object, v => v.toArr(v => v) ]
-            ]}
-          }),
-          $rejectDefault: ({ chain }) => { throw Error('requires a value'); },
-          
-          init({ def=Form.rejectDefault, nullable=def===null, settle=null, fn=null, ...args }={}) {
-            
-            // - `def` is the default value or a synchronous Function giving a
-            //   default value if the Confy receives "!<def>"
-            // - `settle` is { target: Form, tries: [ [ Form1, fn1 ], [ Form2, fn2 ], ... ] }
-            //   The settle "tries" must resolve the incoming value to the
-            //   settle "target"; the only exception is if the incoming value
-            //   is null and `nullable` is set to true
-            // - `fn` arbitrarily rejects or transforms the given value; `fn`
-            //   gets the final say after all logic has finished!
-            
-            if (isForm(settle, String)) {
-              if (!Form.settlers[settle]) throw Error(`Api: invalid settle String "${settle}"`);
-              settle = Form.settlers[settle];
-            }
-            if (settle && !isForm(settle, Object)) throw Error(`Api: when provided "settle" must resolve to Array; got ${getFormName(settle)}`);
-            if (!hasForm(def, Function)) def = Function.createStub(def);
-            
-            Object.assign(this, { def, settle, fn, nullable });
-            
-          },
-          async resolve({ conf, chain, getValue }) {
-            
-            if (conf === '!<def>') conf = this.def({ conf, chain, getValue });
-            
-            if (this.settle) {
-              let orig = conf;
-              let { target, tries } = this.settle;
-              for (let [ Form, fn ] of tries) if (isForm(conf, Form)) conf = fn(conf);
-              
-              let valid = (conf === null && this.nullable) || isForm(conf, target);
-              if (!valid) throw Error(`couldn't resolve value to ${target.name}`);
-            }
-            
-            if (this.fn) conf = await this.fn(conf, { getValue });
-            
-            return { result: conf };
-          }
-          
-        })});
-        let ConfyNullable = form({ name: 'ConfyNullable', has: { Confy }, props: (forms, Form) => ({
-          init(confy) { Object.assign(this, { confy }); },
-          resolve({ conf, chain, getValue }) {
-            if (conf === '!<def>') return { result: null };
-            if (conf === null) return { result: null };
-            //if (isForm(conf, Object) && conf.empty()) return { result: null };
-            return { result: null, actions: { [chain.join('.')]: this.confy.getAction(conf, chain) }};
-          }
-        })});
-        
-        return { ConfySet, ConfyVal, ConfyNullable };
-        
-      })();
-      
-      let confyRoot = (() => {
-        
-        // TODO: This misses semantics; e.g. "999.999.000.900"
-        let ipRegex = niceRegex(String.baseline(`
-          | ^
-          |  [0-9]{1,3}
-          |            (?:             ){3}
-          |               [.][0-9]{1,3}
-          |                                $
-        `));
-        let protocolRegex = niceRegex(String.baseline(`
-          | ^                                             $
-          | ^([a-zA-Z]*)                                  $
-          | ^           (?:           )?                  $
-          | ^              [:]([0-9]+)                    $
-          | ^                           (?:             )?$
-          | ^                              [<]([^>]*)[>]  $
-        `));
-        
-        let confyRoot = ConfySet();
-        confyRoot.kids.heap = ConfyVal({ def: null }); // Accept arbitrary values
-        confyRoot.kids.confKeeps = ConfySet({
-          // Add in the default "def.js" Conf Keep
-          headOp: ({ conf }) => ({ mill: '/[file:mill]/conf/def.js', ...conf }),
-          all: ConfyVal({ settle: 'str' })
-        });
-        
-        let confyEnv = confyRoot.kids.environment = ConfySet();
-        let confyGlb = confyRoot.kids.global = ConfySet();
-        let confyDep = confyRoot.kids.deploy = ConfyNullable(ConfySet({ all: ConfySet() }));
-        
-        confyGlb.kids.subcon = onto(ConfySet({
-          headOp: ({ chain, conf, getValue }) => {
-            let isRootSc = /^root[.]global[.]subcon$/.test(chain.join('.'));
-            let params = isRootSc ? { chatter: 1, therapy: 0 } : getValue('[rel].[par].params');
-            return { params }.merge(conf);
-          },
-          kids: {
-            params: ConfySet({
-              kids: {
-                chatter: ConfyVal({ settle: 'bln' }),
-                therapy: ConfyVal({ settle: 'bln' })
-              },
-              all: ConfyVal() // Accept aribtrary values
-            })
-          }
-        }), confy => confy.all = confy);
-        confyGlb.kids.bearing = ConfyVal({ settle: 'str', def: 'above', fn: bearing => {
-          if (![ 'above', 'below', 'between' ].has(bearing)) throw Error('requires value from enum: [ "above", "below", "between" ]');
-          return bearing;
-        }});
-        confyGlb.kids.maturity = ConfyVal({ settle: 'str', def: 'alpha', fn: maturity => {
-          if (![ 'dev', 'beta', 'alpha' ].has(maturity)) throw Error('requires value from enum: [ "dev", "beta", "alpha" ]');
-          return maturity;
-        }});
-        confyGlb.kids.features = ConfySet({
-          kids: {
-            wrapBelowCode: ConfyVal({ settle: 'bln', def: false }),
-            loadtest: ConfyVal({ settle: 'bln', def: false }),
-          },
-          all: ConfyVal({ fn: feature => {
-            if (![ Boolean, Number, String ].any(F => isForm(feature, F)))
-              throw Error(`forbids value of type "${getFormName(feature)}"`);
-            return feature;
-          }})
-        });
-        confyGlb.kids.therapy = ConfyNullable(ConfySet());
-        
-        confyGlb.kids.terminal = ConfySet({ kids: {
-          width: ConfyVal({ settle: 'num', def: () => 140 })
-        }});
-        
-        // Environment values include:
-        // - "device": metadata about this device running Hut
-        // - "shell": info related to executing shell utilities
-        // - "dnsNetAddrs": hosts to use for resolving dns queries
-        confyEnv.kids.device = ConfySet({ kids: {
-          platform: ConfyVal({ settle: 'str', def: () => require('os').platform() }),
-          operatingSystem: ConfyVal({ settle: 'str', def: () => require('os').version() }),
-          numCpus: ConfyVal({ settle: 'num', def: () => require('os').cpus().length })
-        }});
-        confyEnv.kids.shell = ConfySet({ kids: {
-          openssl: ConfyVal({ settle: 'str', def: 'openssl' })
-        }});
-        confyEnv.kids.dnsNetAddrs = ConfyVal({ settle: 'arr', def: '1.1.1.1+1.0.0.1', fn: dnsNetAddrs => {
-          
-          if (dnsNetAddrs.length < 2) throw Error('requires minimum 2 dns values');
-          for (let na of dnsNetAddrs)
-            if (!ipRegex.test(na))
-              throw Error(`requires valid network addresses; got "${na}"`);
-          return dnsNetAddrs;
-          
-        }});
-        
-        // Deploy values include:
-        // - "host": hosting info for this deployment
-        let confyDepKids = confyDep.confy.all.kids;
-        confyDepKids.uid = ConfyVal({ settle: 'str', def: () => Math.random().toString(36).slice(2, 8), fn: uid => {
-          if (!/^[a-zA-Z0-9]+$/.test(uid)) throw Error('requires alphanumeric string').mod({ value: uid });
-          return uid;
-        }});
-        confyDepKids.host = ConfySet({ kids: {
-          netIden: ConfySet({ kids: {
-            name: ConfyVal({ settle: 'str', fn: (name, chain) => {
-              if (!/^[a-z][a-zA-Z]*$/.test(name)) throw Error(`requires a String of alphabetic characters beginning with a lowercase character`);
-              return name;
-            }}),
-            keep: ConfyVal({ settle: 'str', def: null }),
-            secureBits: ConfyVal({ settle: 'num', fn: (bits, chain) => {
-              if (!bits.isInteger()) throw Error('requires an integer');
-              if (bits < 0) throw Error('requires a value >= 0');
-              return bits;
-            }}),
-            email: ConfyVal({ settle: 'str', fn: email => {
-              email = email.trim();
-              if (!/^[^@]+[@][^.]+[.][^.]/.test(email)) throw Error('must be a valid email');
-              return email;
-            }}),
-            password: ConfyVal({ settle: 'str', def: null }),
-            certificateType: ConfyVal({ settle: 'str', def: null }),
-            details: ConfySet({
-              kids: {
-                geo: ConfyVal({ settle: 'str', fn: geo => {
-                  let pcs = geo.split('.');
-                  while (pcs.length < 6) pcs.push('?');
-                  return pcs.slice(0, 6).join('.');
-                }}),
-                org: ConfyVal({ settle: 'str', fn: org => {
-                  let pcs = org.split('.');
-                  while (pcs.length < 6) pcs.push('?');
-                  return pcs.slice(0, 6).join('.');
-                }}),
-              },
-              all: ConfyVal({ settle: 'str' }) // Arbitrary String values
-            })
-          }}),
-          netAddr: ConfyVal({ settle: 'str', def: 'localhost', fn: async (netAddr, { getValue }) => {
-            
-            // 'localhost'
-            // '127.0.0.1'
-            // '211.122.42.7'
-            // '!<auto>'
-            
-            if (netAddr === '!<auto>') {
-              
-              // Autodetect the best NetworkAddress to use for this machine
-              
-              let dnsNetAddrs = getValue('[abs].environment.dnsNetAddrs');
-              let dnsResolver = new (require('dns').promises.Resolver)();
-              dnsResolver.setServers(dnsNetAddrs); // Use DNS servers defined in Conf
-              
-              let ips = require('os').networkInterfaces()
-                .toArr(v => v).flat()                       // Flat list of all interfaces
-                .map(v => v.internal ? skip : v.address);   // Remove internal interfaces
-              
-              let potentialHosts = (await Promise.all(ips.map(async ip => {
-                
-                ip = ip.split('.').map(v => parseInt(v, 10));
-                
-                // TODO: support ipv6!
-                if (ip.count() !== 4 || ip.find(v => !isForm(v, Number)).found) return skip;
-                
-                let type = (() => {
-                  
-                  // Reserved:
-                  // 0.0.0.0 -> 0.255.255.255
-                  if (ip[0] === 0) return 'reserved';
-                  
-                  // Loopback:
-                  // 127.0.0.0 -> 127.255.255.255
-                  if (ip[0] === 127) return 'loopback';
-                  
-                  // Private; any of:
-                  // 10.0.0.0 -> 10.255.255.255,
-                  // 172.16.0.0 -> 172.31.255.255,
-                  // 192.168.0.0 -> 192.168.255.255
-                  if (ip[0] === 10) return 'private'
-                  if (ip[0] === 172 && ip[1] >= 16 && ip[1] <= 31) return 'private';
-                  if (ip[0] === 192 && ip[1] === 168) return 'private';
-                  
-                  // Any other address is public
-                  return 'external';
-                  
-                })();
-                
-                // Reserved hosts are ignored entirely
-                if (type === 'reserved') return skip;
-                
-                // Loopback hosts are the least powerful
-                if (type === 'loopback') return { type, rank: 0, ip, addr: null };
-                
-                // Next-best is private; available on local network. Note
-                // that class C ips (whose first component is >= 192) are
-                // preferable to class B ips (below that range)
-                if (type === 'private' && ip[0] <= 191) return { type, rank: 1, ip, addr: null };
-                if (type === 'private' && ip[0] >= 192) return { type, rank: 2, ip, addr: null };
-                
-                // Remaining types will be "external"; within "external"
-                // there are three different ranks (from worst to best:)
-                // - Non-reversible
-                // - Reversible but lacking A-record
-                // - Reversible with A-record present (globally addressable)
-                try {
-                  
-                  // Reverse `ip` into any related hostnames
-                  let addrs = await dnsResolver.reverse(ip.map(n => n.toString(10)).join('.'));
-                  
-                  // Only consider hostnames with available A records
-                  return Promise.all(addrs.map(async addr => {
-                    
-                    // If an A record is found this is the most powerful
-                    // address possible (globally addressable)
-                    try {
-                      await dnsResolver.resolve(addr, 'A');
-                      return { type: 'public', rank: 5, ip, addr };
-                    } catch (err) {
-                      // Reversable ips without A records are one level down
-                      // from globally addressable results
-                      return { type: 'publicNoHost', rank: 4, ip, addr };
-                    }
-                    
-                  }));
-                  
-                } catch (err) {
-                  
-                  // The address is external but not reversible
-                  return { type: 'external', rank: 3, ip, addr: null };
-                  
-                }
-                
-              }))).flat();
-              
-              let bestRank = Math.max(...potentialHosts.map(v => v.rank));
-              let bestHosts = potentialHosts.map(v => v.rank === bestRank ? (v.addr || v.ip.join('.')) : skip);
-              
-              netAddr = bestHosts.length ? bestHosts[0] : 'localhost';
-              
-            }
-            
-            if (netAddr !== 'localhost' && !ipRegex.test(netAddr))
-              throw Error(`requires valid network address; got "${netAddr}"`);
-            
-            return netAddr;
-            
-          }}),
-          heartbeatMs: ConfyVal({ settle: 'num', def: 20 * 1000, fn: heartbeatMs => {
-            if (!heartbeatMs.isInteger()) throw Error('requires an integer').mod({ value: heartbeatMs });
-            if (heartbeatMs < 1000) throw Error('requires a heartbeat slower than 1hz').mod({ value: heartbeatMs });
-            return heartbeatMs;
-          }}),
-          protocols: ConfySet({
-            headOp: ({ conf: protocols }) => {
-              
-              // Compact Strings representing the set of protocols can have nested sets, using "<"
-              // and ">" characters to define the nesting, e.g.:
-              //    | protocols === "http:80<gzip+deflate>,ws:80<bzip>"
-              // This means that unlike a typical ConfySet, the "protocols" ConfySet needs to avoid
-              // splitting on delimiters contained in angle braces
-              
-              if (isForm(protocols, String)) {
-                
-                let str = protocols;
-                let arr = [];
-                while (str.length) {
-                  
-                  // Find the next "<" or delimiter
-                  let nextChunkMatch = str.match(/[,+]|[<][^>]*[>]/);
-                  if (!nextChunkMatch) { arr.push(str); break; } // Consume whole rest of `str` into the final item
-                  
-                  let chunk = nextChunkMatch[0];
-                  if (chunk[0] === '<') {
-                    let consumed = str.slice(0, nextChunkMatch.index) + chunk;
-                    arr.push(consumed);
-                    str = str.slice(consumed.length);
-                    if (/^[,+]/.test(str)) str = str.slice(1); // Delimiters may trail the ">" char
-                  } else {
-                    arr.push(str.slice(0, nextChunkMatch.index));
-                    str = str.slice(nextChunkMatch.index + 1);
-                  }
-                  
-                }
-                
-                return arr.map(v => v.trim() ?? skip);
-                
-              }
-              
-              return protocols;
-              
-            },
-            tailOp: ({ chain, conf: protocols }) => {
-              
-              if (isForm(protocols, Object) && protocols.empty())
-                throw Error('requires at least 1 protocol');
-              
-              return protocols;
-              
-            },
-            all: ConfySet({
-              
-              // The list of protocols may look like:
-              // '+http:111<comp1,comp2>+ws:222<comp3,comp4>'
-              // (note the leading "+" indicates to delimit using "+" before
-              // delimiting using anything else - especially "," in this case)
-              
-              // A single protocol may look like:
-              // 'http'
-              // 'http:80<gzip+deflate>'
-              // 'http<gzip>'
-              // 'http:80'
-              // { protocol: 'http', port: 80, compression: 'gzip+deflate' }
-              // { protocol: 'http', port: 80, compression: [ 'gzip', 'deflate' ] }
-              // Note that "port" can also be left `null` - it takes an annoying
-              // amount of context to pick a default port because we need to know
-              // about the protocol but also the NetworkIdentity (which isn't
-              // readily referenced from here)
-              
-              headOp: ({ conf: protocol }) => {
-                
-                if (isForm(protocol, String)) {
-                  let match = protocol.match(protocolRegex);
-                  if (match) {
-                    let [ , name, port='!<def>', compression='!<def>' ] = match;
-                    if (name === 'ws') name = 'sokt';
-                    if (name === 'websocket') name = 'sokt';
-                    protocol = { name, port, compression };
-                  }
-                }
-                
-                return protocol;
-                
-              },
-              kids: {
-                name: ConfyVal({ settle: 'str' }),
-                port: ConfyVal({ settle: 'num',
-                  def: ({ conf, chain, getValue }) => {
-                    
-                    // [par]:             { name, port, compression }
-                    // [par].[par]:       { 0: { name, port, compression }, 1: { name, port, compression }, ... }
-                    // [par].[par].[par]: { netIden: { ... }, netAddr: '...', protocols: { 0: { name, port, compression }, ... } }
-                    
-                    let protocol = getValue('[rel].[par].name');
-                    let secureBits = getValue('[rel].[par].[par].[par].netIden.secureBits');
-                    let term = `${secureBits > 0 ? 'secure' : 'unsafe'} ${protocol}`;
-                    
-                    let def = Object.plain({
-                      
-                      'secure http':  443,
-                      'unsafe http':   80,
-                      
-                      'secure ftp':    22,
-                      'unsafe ftp':    21,
-                      
-                      'secure sokt':  443,
-                      'unsafe sokt':   80,
-                      
-                    })[term];
-                    if (!def) throw Error(`has no default port for "${term}"`);
-                    
-                    return def;
-                    
-                  },
-                  fn: port => {
-                    
-                    if (!port.isInteger()) throw Error('requires an integer').mod({ value: port });
-                    if (port <= 0) throw Error('requires a value >= 0').mod({ value: port });
-                    return port;
-                    
-                  }
-                }),
-                compression: ConfyVal({ settle: 'arr', def: [], fn: compression => {
-                  if (compression.some(v => !isForm(v, String))) throw Error('requires Array of Strings').mod({ value: compression });
-                  return compression;
-                }})
-              }
-              
-            })
-          }),
-        }});
-        confyDepKids.loft = ConfySet({
-          headOp: ({ conf }) => {
-            if (isForm(conf, String)) {
-              let [ prefix, name ] = conf.cut('.');
-              conf = { prefix, name };
-            }
-            return conf;
-          },
-          kids: {
-            prefix: ConfyVal({ settle: 'str',
-              def: ({ getValue }) => getValue('[rel].[par].name').slice(0, 2),
-              fn: pfx => {
-                if (!/^[a-z][a-z0-9]{0,8}$/.test(pfx)) throw Error('requires lowercase alphanumeric string beginning with alpha character and max 8 chars');
-                return pfx;
-              }
-            }),
-            name: ConfyVal({ settle: 'str', fn: name => {
-              if (!/^[a-z][a-zA-Z0-9.]*$/.test(name)) throw Error('requires alphanumeric string beginning with lowercase alphabetic character');
-              return name;
-            }})
-          }
-        });
-        confyDepKids.keep = ConfyVal({ settle: 'str', def: null, fn: (keep, { getValue }) => {
-          if (keep === '!<auto>') {
-            let uid = getValue('[rel].[par].uid');
-            let loft = getValue('[rel].[par].loft');
-            keep = `/[file:mill]/bank/${uid}.${loft.prefix}.${loft.name}`;
-          }
-          return keep;
-        }});
-        
-        // Apply the "uid", "host", and "keep" Deploy kids for Therapy
-        Object.assign(confyGlb.kids.therapy.confy.kids, { ...confyDepKids }.slice([ 'uid', 'host', 'keep' ]));
-        
-        return confyRoot;
-        
-      })();
-      
-      let churn = async actions => {
-        
-        let remaining;
-        if (isForm(actions, Object)) remaining = { ...actions };
-        if (isForm(actions, Array)) remaining = actions.toObj((v, i) => [ i, v ]);
-        if (!remaining) throw Error('Api: "actions" must resolve to Object/Array');
-        
-        let values = {};
-        while (!remaining.empty()) {
-          
-          let errs = [];
-          let progress = false;
-          let furtherActions = {};
-          
-          for (let [ k, fn ] of remaining) {
-            
-            let actionResult; /* { result, actions: { ... } }*/
-            try { actionResult = await fn(values); } catch (err) {
-              if (!isForm(err, Error)) throw err;
-              errs.push(err);
-              continue;
-            }
-            
-            if (!isForm(actionResult, Object)) throw Error('woAWwowowwaa poorly implemented churn function...').mod({ actionResult, fn: fn.toString() });
-            
-            progress = true;
-            values[k] = actionResult.result;
-            delete remaining[k];
-            
-            if (actionResult.has('actions')) {
-              /// {DEBUG=
-              if (!isForm(actionResult.actions, Object)) throw Error('OOofofowwwwsoasaoo poorly implemented churn function...').mod({ actionResult, fn: fn.toString() });
-              /// =DEBUG}
-              Object.assign(furtherActions, actionResult.actions);
-            }
-            
-          }
-          
-          if (!progress) {
-            throw Error('Api: unable to make progress on churn').mod({
-              remaining,
-              cause: errs,
-              partiallyChurnedValues: values
-            });
-          }
-          Object.assign(remaining, furtherActions);
-          
-        }
-        
-        return values;
-        
-      };
-      
-      let extendConf = async (cf, { tolerateErrors=false }) => {
-        
-        // Modifies `globalConf` in-place
-        
-        try {
-          
-          globalConf.merge(cf.diveKeysResolved());
-          let values = await churn({ root: confyRoot.getAction(globalConf, [ 'root' ]) });
-          globalConf = values.diveKeysResolved().root;
-          
-        } catch (err) {
-          
-          if (!/unable to make progress on churn/.test(err.message)) throw err.mod(msg => `Unexpected error while churning: ${msg}`);
-          globalConf = err.partiallyChurnedValues.diveKeysResolved().root;
-          if (!tolerateErrors) throw err;
-          
-        }
-        
-      };
-      
-      // Add on the UserConf...
-      await extendConf(rawConf, { tolerateErrors: true });
-      let { confKeeps: rawConfKeeps={} } = globalConf;
-      
-      // Add on any KeepConf if specified by UserConf and defaults...
-      if (!rawConfKeeps.empty()) {
-        
-        let confKeeps = await Promise.all(rawConfKeeps.map(async (confKeepDiveToken, term) => {
-          
-          let confKeep = global.keep(confKeepDiveToken);
-          
-          let content = null;
-          try {
-            content = await confKeep.getContent('utf8');
-            content = content.replace(/[;\s]+$/, ''); // Remove tailing whitespace and semicolons
-            return await eval(`(${content})`);
-          } catch (err) {
-            err.propagate(msg => ({ msg: `Failed reading config from Keep: ${msg}`, term, confKeep: confKeep.desc(), content }));
-          }
-          
-        }));
-        
-        // Apply all KeepConfs (don't parallelize - apply them in order!)
-        for (let [ confKeepKey, confKeep ] of confKeeps) await extendConf(confKeep, { tolerateErrors: true });
-        
-      }
-      
-      // Finally merge the UserConf again (it outprioritizes KeepConf)
-      try { await extendConf(rawConf, { tolerateErrors: false }); } catch (err) {
-        if (!/unable to make progress on churn/.test(err.message)) throw err.mod(msg => `Unexpected error while churning: ${msg}`);
-        throw Error('Api: foundation rejection').mod({
-          cause: err,
-          feedback: [ 'Invalid configuration:', ...err.cause.map(err => `- ${err.message}`) ].join('\n')
-        });
-      }
-      
-    };
-    let resolveSubconOutput = async () => {
-      
-      // Call this function once `global.conf` is available to:
-      // - have `global.subconParams` actually read from the Conf
-      // - have `global.subconOutput` perform real output
-      
-      let vertDashChars = '166,124,33,9597,9599,9551,9483,8286,8992,8993,10650'.split(',').map(v => parseInt(v, 10).char());
-      let horzDashChars = '126,8212,9548,9148,9477'.split(',').map(v => parseInt(v, 10).char());
-      let junctionChars = '43,247,5824,9532,9547,9535,10775,10765,9533,9069,9178,11085'.split(',').map(v => parseInt(v, 10).char());
-      let vertDash = () => vertDashChars[Math.floor(Math.random() * vertDashChars.length)];
-      let horzDash = () => horzDashChars[Math.floor(Math.random() * horzDashChars.length)];
-      let junction = () => junctionChars[Math.floor(Math.random() * junctionChars.length)];
-      
-      // The index in the stack trace which is the callsite that invoked
-      // the subcon call (gets overwritten later when therapy requires
-      // calling subcons from deeper stack depths)
-      global.subcon.relevantTraceIndex = 2;
-      global.subconOutput = (sc, ...args) => { // Stdout; check "chatter" then format and output
-        
-        /// {DEBUG=
-        // TODO: Wrapping this in DEBUG does nothing; this file doesn't get compiled!
-        let trace = sc.params().active ? Error('trace').getInfo().trace : null;
-        /// =DEBUG}
-        
-        let leftColW = 28;
-        let terminalW = global.conf('global.terminal.width');
-        let rightColW = Math.max(terminalW - leftColW - 2, 30); // `- 2` considers the "| " divide between L/R cols
-        
-        thenAll(args.map(arg => isForm(arg, Function) ? arg(sc) : arg), args => {
-          
-          let { chatter=true, therapy=false, chatterFormat } = sc.params();
-          
-          if (chatterFormat) {
-            // The subcon's "chatterFormat" param takes the argument arr and returns a new arr, or
-            // `null` to silence this item
-            args = eval(chatterFormat)(...args);
-            if (args === null) return;
-            if (!isForm(args, Array)) args = [ args ];
-          }
-          
-          // Forced output for select subcons
-          if (!chatter && ![ 'gsc', 'warning' ].has(sc.term)) return;
-          
-          let depth = 7;
-          if (isForm(args[0], String) && /^[!][!][0-9]+$/.test(args[0])) {
-            depth = parseInt(args[0].slice(2), 10);
-            args = args.slice(1);
-          }
-          
-          let now = getDate();
-          
-          let leftLns = [ `[${sc.term.slice(-leftColW)}]`, now ];
-          let rightLns = args.map(v => {
-            if (!isForm(v, String)) v = formatAnyValue(v, { depth, width: rightColW });
-            return v.split(/\r?\n/);
-          }).flat();
-          
-          /// {DEBUG=
-          let call = trace?.[global.subcon.relevantTraceIndex];
-          call = call?.file && `${token.dive(call.file).at(-1)} ${call.row}:${call.col}`;
-          if (call) {
-            let extraChars = call.length - leftColW;
-            if (extraChars > 0) call = call.slice(extraChars + 1) + '\u2026';
-            leftLns.push(call);
-          }
-          /// =DEBUG}
-          
-          let logStr = Math.max(leftLns.length, rightLns.length).toArr(n => {
-            let l = (leftLns[n] || '').padTail(leftColW);
-            let r = rightLns[n] || '';
-            return l + vertDash() + ' ' + r;
-          }).join('\n');
-          
-          let topLine = leftColW.toArr(horzDash).join('') + junction() + (1 + rightColW).toArr(horzDash).join('');
-          console.log(topLine + '\n' + logStr);
-          
-        });
-        
-      };
-      
+    let globalConf = { 'hihi': 'abc' };
+    global.conf = (diveToken, def='TODOhijklmno') => {
+      let v = token.diveOn(diveToken, globalConf, def).val;
+      if (v === 'TODOhijklmno') throw Error('Api: bad conf dive token').mod({ diveToken });
+      return v;
     };
     
+    // The index in the stack trace which is the callsite that invoked the subcon call (gets
+    // overwritten later when therapy requires calling subcons from deeper stack depths)
+    let leftColW = 28;
+    let getStdoutSubcon = require('./util/getStdoutSubconOutputter.js');
+    
+    let resolveConf = require('./util/resolveConf.js');
     let t = getMs();
-    
-    await resolveConf()
-      .then(async () => {
+    globalConf = await resolveConf({
+      rawConf,                        // We pass in command-line args
+      rootKeep: global.keep.rootKeep, // `resolveConf` checks any additionally configured ConfKeeps
+      confUpdateCb: updatedConf => globalConf = updatedConf
+    }).fail(async err => {
+      
+      // Either an expected config-related refusal (nice output) or
+      // unexpected error (panic output); either way immediately exit
+      // after showing the output
+      
+      if (err.feedback) {
         
-        // Grab a reference the buffered logs written before we configured
-        let { buffered } = global.subconOutput;
+        global.subconOutput = getStdoutSubcon({
+          debug: true,           // Results in expensive stack traces - could be based on conf??
+          relevantTraceIndex: 2, // Hardcoded value; determined simply by testing
+          leftColW,
+          rightColW: 80 // `- 2` considers the "| " divide between L/R cols
+        });
+        gsc(err.feedback);
         
-        // Resolve subcon output; this makes `global.subconOutput` work!
-        await resolveSubconOutput();
+      } else {
         
-        // Now output any logs buffered before we were ready
+        let { buffered=[] } = global.subconOutput;
+        global.subconOutput.buffered = null;
+        global.subconOutput = (sc, ...args) => console.log('\n' + [ // Panic output
+          `SUBCON: "${sc.term}"`,
+          ...args.map(a => {
+            if (isForm(a, Function)) a = a();
+            if (!isForm(a, String)) a = global.formatAnyValue(a);
+            return a;
+          })
+        ].join('\n').indent('[panic] '));
+        
+        global.subconOutput(gsc, 'Error during initialization; panic! Dumping logs...');
         for (let args of buffered) global.subconOutput(...args);
         
-        setupSc.kid('conf')(`Configuration processed after ${(getMs() - t).toFixed(2)}ms`, global.conf([]));
+        global.subconOutput(gsc, err);
         
-      })
-      .fail(async err => {
-        
-        // Either an expected config-related refusal (nice output) or
-        // unexpected error (panic output); either way immediately exit
-        // after showing the output
-        
-        if (err.message === 'Api: foundation rejection') {
-          
-          await resolveSubconOutput();
-          gsc(err.feedback);
-          
-        } else {
-          
-          let { buffered=[] } = global.subconOutput;
-          global.subconOutput.buffered = null;
-          global.subconOutput = (sc, ...args) => console.log('\n' + [ // Panic output
-            `SUBCON: "${sc.term}"`,
-            ...args.map(a => {
-              if (isForm(a, Function)) a = a();
-              if (!isForm(a, String)) a = global.formatAnyValue(a);
-              return a;
-            })
-          ].join('\n').indent('[panic] '));
-          
-          global.subconOutput(gsc, 'Error during initialization; panic! Dumping logs...');
-          for (let args of buffered) global.subconOutput(...args);
-          
-          global.subconOutput(gsc, err);
-          
-        }
-        
-        return process.exitNow(1);
-        
-      });
+      }
+      
+      return process.exitNow(1);
+      
+    });
+    
+    // Grab a reference the buffered logs written before overwriting `global.subconOutput`
+    let { buffered } = global.subconOutput;
+    
+    // Overwrite `global.subconOutput` with a legit outputter
+    global.subconOutput = getStdoutSubcon({
+      debug: true,           // Results in expensive stack traces - could be based on conf??
+      relevantTraceIndex: 2, // Hardcoded value; determined simply by testing
+      leftColW,
+      rightColW: Math.max(global.conf('global.terminal.width') - leftColW - 2, 30) // `- 2` considers the "| " divide between L/R cols
+    });
+    
+    // Now output any buffered logs before we were ready
+    for (let args of buffered) global.subconOutput(...args);
+    
+    setupSc.kid('conf')(`Configuration processed after ${(getMs() - t).toFixed(2)}ms`, global.conf([]));
     
   };
   
@@ -1285,7 +188,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       
       /// {DEBUG=
       if (!isForm(features, Set)) throw Error(`Api: "features" must resolve to Set; got ${getFormName(features)}`);
-      let invalidFeature = features.find(f => !/^[a-z]+$/.test(f)).val;
+      let invalidFeature = features.seek(f => !/^[a-z]+$/.test(f)).val;
       if (invalidFeature) throw Error(`Invalid feature: "${invalidFeature}"`);
       /// =DEBUG}
       
@@ -1651,7 +554,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     })});
     
     let fakeLayout = FakeLayout();
-    let fakeReal = global.real = FakeReal({ name: 'nodejs.fakeReal', tech: {
+    global.real = FakeReal({ name: 'nodejs.fakeReal', tech: {
       render: Function.stub,
       informNavigation: Function.stub,
       getLayoutForm: name => FakeLayout,
@@ -1816,8 +719,8 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           
         };
         
-        // Now stack depth for subcon invocations has gotten deeper!
-        global.subcon.relevantTraceIndex += 1;
+        // Now stack depth for stdout subcon invocations has gotten deeper!
+        subconWriteStdout.relevantTraceIndex += 1;
         
       } else if (conf('global.features.loadtest')) {
         

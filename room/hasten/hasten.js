@@ -239,7 +239,7 @@ global.rooms['hasten'] = async foundation => {
                 // Figure out when every user is ready
                 let teamReadyChooser = Chooser();
                 team.relSrc('hst.userTeam').route(userTeam => userTeam.valSrc.route(() => {
-                  let anyUserWaiting = team.relRecs('hst.userTeam').find(ut => ut.getValue('status') === 'waiting').val;
+                  let anyUserWaiting = team.relRecs('hst.userTeam').seek(ut => ut.getValue('status') === 'waiting').val;
                   teamReadyChooser.choose(anyUserWaiting ? 'off' : 'onn');
                 }));
                 
@@ -259,7 +259,7 @@ global.rooms['hasten'] = async foundation => {
                 
               } else {
                 
-                let team = rec.relRecs('hst.team').find(team => team.getValue('code') === code).val;
+                let team = rec.relRecs('hst.team').seek(team => team.getValue('code') === code).val;
                 
                 if (!team) return;
                 if (team.relRecs('hst.userTeam').count() > 5) return;

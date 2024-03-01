@@ -376,7 +376,7 @@ global.rooms['record'] = async () => {
         let dups = mems.categorize(rec => rec.type.name).map((k, v) => (v.length > 1) ? k : skip);
         
         /// {DEBUG=
-        if (mems.find(v => !v).found) throw Error(`No nulls allowed in Array-style Group Members`);
+        if (mems.seek(v => !v).found) throw Error(`No nulls allowed in Array-style Group Members`);
         if (dups.length) throw Error(`Array-style GroupMembers has collisions for Type names: [ ${dups.join(', ')} ]`);
         /// =DEBUG}
         
@@ -797,7 +797,7 @@ global.rooms['record'] = async () => {
     init({ type, uid, group=Group(type.manager, {}), value=null, volatile=false }) {
       
       /// {DEBUG=
-      let offMem = group.mems.find( mem => mem.off() ).val;
+      let offMem = group.mems.seek( mem => mem.off() ).val;
       if (offMem) throw Error('Api: Record created with ended Member').mod({ member: offMem });
       if (!isForm(type, Type)) throw Error(`Api: "type" must be Type; got ${getFormName(type)}`).mod({ type });
       if (!isForm(uid, String)) throw Error(`Api: "uid" must be String; got ${getFormName(uid)}`).mod({ uid });
@@ -809,7 +809,7 @@ global.rooms['record'] = async () => {
       type.updateTypeTerms( group.mems.map(mem => mem.type) );
       
       // A Record is always volatile if any of its Members are
-      if (!volatile) volatile = group.mems.find(mem => mem.volatile).found;
+      if (!volatile) volatile = group.mems.seek(mem => mem.volatile).found;
       
       // Assign instance props
       Object.assign(this, {
@@ -1014,7 +1014,7 @@ global.rooms['record'] = async () => {
         
         // Try to get `term` as a key that has already been used to map
         // `this.type` to `type`
-        term = type.termTypes.find(preexistingType => preexistingType === this.type).key;
+        term = type.termTypes.seek(preexistingType => preexistingType === this.type).key;
         if (!term) {
           
           // First mention of this Type, and no Term specified; use the

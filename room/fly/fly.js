@@ -190,7 +190,7 @@ global.rooms['fly'] = async foundation => {
           if (testing.moment) {
             
             // Find the desired testing Moment
-            let { found, ind } = levelMomentsDef.find(moment => moment.name === testing.moment);
+            let { found, ind } = levelMomentsDef.seek(moment => moment.name === testing.moment);
             if (!found) throw Error(`Invalid moment name: "${testing.moment}"`);
             
             // Combine skipped Moment props; priority for later Moments
@@ -450,7 +450,7 @@ global.rooms['fly'] = async foundation => {
             let submitLevelPasswordAct = dep(hut.enableAction('fly.submitLevelPassword', ({ password }) => {
               
               /// {ABOVE=
-              let levelName = levels.find(v => v.password === password).key;
+              let levelName = levels.seek(v => v.password === password).key;
               if (!levelName) throw Error('Api: invalid password');
               console.log(`Lobby ${myLobby.desc()} set to ${levelName}`);
               myLobby.setValue({ levelMetadata: getLevelMetadata(levelName) });

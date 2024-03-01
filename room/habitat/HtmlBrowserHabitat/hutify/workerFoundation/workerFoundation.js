@@ -38,14 +38,21 @@ let hutifyPath = 'habitat.HtmlBrowserHabitat.hutify';
 global.rooms[`${hutifyPath}.workerFoundation`] = () => ({ init: async evt => {
   
   // This code needs to load fast!!!
+  let evtSrc = EventTarget.prototype;
+  Object.defineProperty(evtSrc, 'evt', { configurable: true, value: function(...args) {
+    this.addEventListener(...args);
+    return Endable(() => this.removeEventListener(...args)); // Won't work until Endable is globally defined
+  }});
   
+  /// {DEBUG=
   let onErr = evt => {
     // TODO: How does SharedWorker handle this?
     let err = evt.error ?? evt.reason;
     gsc(`Uncaught ${getFormName(err)}`, err);
   };
-  self.addEventHandler('unhandledrejection', onErr);
-  self.addEventHandler('error', onErr);
+  self.evt('unhandledrejection', onErr);
+  self.evt('error', onErr);
+  /// =DEBUG}
   
   global.getMs = () => performance.now() + performance.timeOrigin;
   
@@ -66,7 +73,7 @@ global.rooms[`${hutifyPath}.workerFoundation`] = () => ({ init: async evt => {
   global.getRooms = (names, { shorten=true, ...opts }={}) => {
     
     let unseenNames = names.filter(name => !global.rooms[name]);
-    console.log('Loading rooms', { names, unseenNames });
+    gsc('Loading rooms', { names, unseenNames });
     
     // Serially import all rooms! Note that we don't need to worry about descendent dependencies
     // here (i.e. where a descendent depends on a room that's already been loaded, and we want to
@@ -94,6 +101,21 @@ global.rooms[`${hutifyPath}.workerFoundation`] = () => ({ init: async evt => {
   };
   
   /// {DEBUG=
+  global.subconOutput = (sc, ...args) => {
+    
+    if (!global.subconParams(sc).chatter) return;
+    
+    args = args.map(arg => isForm(arg, Function) ? arg() : arg).sift();
+    if (!args.length) return;
+    
+    args = args.map(a => isForm(a?.desc, Function) ? a.desc() : a);
+    console.log(
+      `%c${getDate().padTail(60, ' ')}\n${('[' + sc.term + ']').padTail(60, ' ')}`,
+      'background-color: #dadada;font-weight: bold;',
+    );
+    console.log(...args);
+    
+  };
   global.mapCmpToSrc = (file, row, col) => {
     
     // Note `file` is a String with sequential slashes (bwds and fwds)
@@ -143,150 +165,158 @@ global.rooms[`${hutifyPath}.workerFoundation`] = () => ({ init: async evt => {
   document.cookie = 'hut=' + global.btoa(valToJson({ hid: belowHid }));
   */
   
-  // Enable `global.real`
-  await (async () => {
+  { // Enable `global.real`
     
-    let TextNode = document.createTextNode('').constructor;
-    
-    let Real = await global.getRoom('reality.real.Real');
-    let tech = {
-      installedAttrs: Set([ 'class', 'type', 'tabIndex' ]),
-      makeNode: real => {
-        let fullName = `${real.prefix}.${real.name}`;
-        let cssName = fullName.replace(/([^a-zA-Z0-9]+)([a-zA-Z0-9])?/g, (f, p, c) => c ? c.upper() : '');
-        real.node = document.createElement('div');
-        real.node.classList.add(cssName);
-        real.par.node.appendChild(real.node);
-        return real.node;
+    let FakeReal = form({ name: 'FakeReal', has: { Tmp }, props: (forms, Form) => ({
+      init({ name, tech }) {
+        forms.Tmp.init.call(this);
+        Object.assign(this, { name, tech, params: {
+          textInputSrc: { mod: Function.stub, route: fn => fn(''), send: Function.stub }
+        }});
       },
-      dropNode: real => real.node.remove(),
-      killInteractivity: real => {
-        real.node.removeAttribute('tabIndex');
-        real.node.style.pointerEvents = 'none';
-      },
-      reset: real => {
-        
-        let node = real.node;
-        
-        // Reset text - in Hut, browser text is always the only child
-        // within its parent Node; i.e. it is always wrapped
-        let kids = node.childNodes;
-        if (kids.length === 1 && kids[0].constructor === TextNode) kids[0].remove();
-        
-        for (let attr of node.getAttributeNames())
-          if (!tech.installedAttrs.has(attr))
-            node.removeAttribute(attr);
-        
-      },
-      getLayoutTech: name => {
-        let pcs = name.split(/[.$]/).map(cmp => cmp[0].lower() + cmp.slice(1));
-        return getRoom(`${hutifyPath}.layoutTech.${pcs.join('.')}`);
-      }
-    };
-    let body = document.body;
-    if (/^[\s]+$/.test(body.textContent)) body.textContent = '';
+      loaded: Promise.resolve(),
+      setTree() {},
+      addReal(/* real */) { return this; },
+      mod() {},
+      addLayout() { return  Tmp({ layout: fakeLayout }); },
+      getLayout() { return fakeLayout; },
+      getLayoutForm(/* name */) { return FakeLayout; },
+      getTech() { return this.tech; },
+      addNavOption() { return { activate: () => {} }; },
+      render() {}
+    })});
+    let FakeLayout = form({ name: 'FakeLayout', has: { Src }, props: forms => ({
+      init() { forms.Src.init.call(this); this.keysSrc = Src.stub; },
+      isInnerLayout() { return false; },
+      setText() {},
+      addReal() {},
+      route: Function.stub,
+      src: Src.stub
+    })});
     
-    global.real = Real({ prefix: 'foundation', name: 'root', tech, tree: Real.Tree(), node: body });
+    let fakeLayout = FakeLayout();
+    global.real = FakeReal({ name: 'nodejs.fakeReal', tech: {
+      render: Function.stub,
+      informNavigation: Function.stub,
+      getLayoutForm: name => FakeLayout,
+      getLayoutForms: names => names.toObj(name => [ name, FakeLayout ]),
+      render: Function.stub
+    }});
     
-    let clipboard = window.navigator.clipboard;
-    global.clipboard = clipboard
-      ? {
-        set: val => {
-          if (hasForm(val, Real)) {
-            // Set selection to encompass the Real
-            window.getSelection().removeAllRanges();
-            let range = window.document.createRange();
-            range.selectNodeContents(val.node);
-            window.getSelection().addRange(range);
-            
-            // Resolve the Real to its text
-            val = val.node.textContent;
-          }
-          
-          /// {DEBUG=
-          if (!isForm(val, String)) throw Error('Api: value must resolve to String').mod({ val });
-          /// =DEBUG}
-          
-          return clipboard.writeText(val.trim()).then(() => true, () => false);
-        },
-        get: () => clipboard.readText()
-      }
-      : { set: () => false, get: () => '' };
-    
-  })();
+  };
   
-  // Ensure single tab
-  let foundationTmp = Tmp();
-  (() => {
-    
-    let sc = global.subcon('ensureSingleTab');
-    
-    // TODO: Support multiple tabs! (Probably with a SharedWorker)
-    let { localStorage: storage } = window;
-    if (!storage) throw Error('Api: no localStorage available');
-    
-    // Set our view under the hid; end this Foundation if the value ever
-    // changes (indicating another Foundation has taken over)
-    let viewId = (Number.int32 * Math.random()).encodeStr(String.base32, 7);
-    let hutKey = `view/${belowHid}`;
-    storage.setItem(hutKey, `${viewId}/${Date.now().toString(32)}`);
-    
-    foundationTmp.endWith(window.evt('storage', evt => {
-      
-      if (evt.key !== hutKey) return;
-      
-      // Any other event means another tab took control
-      sc(`Lost view priority (hut: ${belowHid}, view: ${viewId})`, evt);
-      
-      let val = window.localStorage.getItem(`view/${belowHid}`);
-      if (val.hasHead(`${viewId}/`)) window.localStorage.removeItem(`view/${belowHid}`);
-      foundationTmp.end();
-      
-      for (let child of document.body.querySelectorAll(':scope > *')) child.remove();
-      
-      let anchor = document.createElement('a');
-      anchor.setAttribute('href', (window.location.pathname ?? '/') + (window.location.search ?? ''));
-      Object.assign(anchor.style, {
-        display: 'block',
-        position: 'absolute',
-        left: '0', right: '0', top: '0', bottom: '0',
-        margin: 'auto',
-        width: '65vmin', height: '65vmin',
-        textAlign: 'center',
-        fontSize: 'calc(10px + 1vmin)',
-        backgroundColor: '#0002'
-      });
-      
-      let span = document.createElement('span');
-      Object.assign(span.style, {
-        position: 'absolute',
-        left: '0', right: '0', top: '0', bottom: '0',
-        margin: 'auto'
-      });
-      span.textContent = 'To use this tab click or refresh';
-      anchor.appendChild(span);
-      
-      document.body.appendChild(anchor);
-      
-    }));
-    
-    sc(`Took view priority (hut: ${belowHid}, view: ${viewId})`);
-    
-  })();
+  let confPrm = global.confPrm;
   
   // `global` is set up... now run a Hut based on settings
   let loftName = global.conf('deploy.loft.name');
-  let { hut, record, WeakBank, [loftName.split('.').at(-1)]: loft, ...pclServers } = await global.getRooms([
+  let roomsPrm = await global.getRooms([
     'setup.hut',
     'record',
     
-    // TODO: Maybe something like localstorage could allow BELOW to
-    // work with KeepBank? (Would be blazing-fast client-side!!)
+    // TODO: Maybe something like localstorage could allow BELOW to work with KeepBank? (Would be blazing-fast client-side!!)
     'record.bank.WeakBank',
     loftName,
     ...pcls.map(p => `${hutifyPath}.protocol.${p.name}`)
   ]);
   
+  gsc('Waiting for conf + rooms...');
+  confPrm.then(conf => gsc('GOT CONF', { conf }));
+  roomsPrm.then(rooms => gsc('GOT ROOMS', { rooms }));
+  let [ conf, rooms ] = await Promise.all([ confPrm, roomsPrm ]);
+  
+  gsc('OMG, GOT CONF + ROOMS!');
+  
+  {
+    
+    let WorkerRoadAuthority = form({ name: 'WorkerRoadAuthority', props: (forms, Form) => ({
+      
+      init({ aboveHut, sc=subcon(`road.sw`) }) {
+        Object.assign(this, { aboveHut, sc });
+      },
+      desc() { return `sw://localhost`; },
+      activate() {
+        
+        let { worker } = global;
+        
+        /// {DEBUG=
+        if (worker['~authority']) throw Error(`Multiple WorkerRoadAuthorities using same Worker!`);
+        worker['~authority'] = this;
+        /// =DEBUG}
+        
+        // Get `bufferedTabs` and `bufferedEvts` - together these contain the full information of all
+        // Road events which already happened, concerning this WorkerRoadAuthority
+        let { bufferedTabs, bufferedEvts } = worker;
+        delete worker.initialFn;
+        delete worker.bufferedTabs;
+        
+        // Clear the buffering logic for the Worker and replace with real Tab connection handler
+        // TODO: If it turns out that each Port in `tab.ports` can close independently, it may make
+        // sense to consider each Port a different Road! (Could have some silly effects on, e.g.,
+        // heartbeat, though)
+        worker.removeEventListener('connect', worker.initialFn);
+        worker.evt('connect', tab => this.tab(tab));
+        
+        // Clear the buffering logic for each Port of each Tab
+        // (Note: the stupid thing is that there's almost certainly only 1 Port per Tab)
+        for (let { tab } of bufferedTabs) {
+          for (let port of tab.ports) port.removeEventListener('message', tab.initialFn);
+          delete tab.initialFn;
+        }
+        
+        // Process all events which occurred before installing the WorkerRoadAuthority
+        // There should be no issue processing all Tabs, then all Evts
+        for (let tab of bufferedTabs) this.tab(tab);
+        for (let { tab, evt } of bufferedEvts) this.evt(tab, evt);
+        
+      },
+      makeRoad(belowHut, params /* { tab } */) { return (0, Form.WorkerRoad)({ roadAuth: this, belowHut, ...params }); },
+      
+      tab(tab) {
+        
+        let { belowHut, road } = this.aboveHut.getBelowHutAndRoad({
+          roadAuth: this, trn: 'async', hid: tab.origin, // TODO: "origin"?
+          params: { tab }
+        });
+        /// {DEBUG=
+        if (tab['~belowHut']) throw Error('Multiple BelowHuts for same Tab');
+        if (tab['~road']) throw Error('Multiple Roads for same Tab');
+        /// =DEBUG}
+        Object.assign(tab, { '~belowHut': belowHut, '~road': road });
+        
+      },
+      evt(tab, evt) {
+        
+        // Called when a tab sends us an event
+        this.aboveHut.hear({ src: tab['~belowHut'], road: tab['~road'], msg: evt.data });
+        
+      },
+      
+      $WorkerRoad: form({ name: 'WorkerRoad', has: { Tmp }, props: forms => ({
+        init({ roadAuth, belowHut, tab }) {
+          
+          forms.Tmp.init.call(this);
+          Object.assign(this, { roadAuth, belowHut, tab });
+          
+          let handlers = tab.ports.map(port => port.evt('message', evt => roadAuth.evt(tab, evt)));
+          this.endWith(() => handlers.each(h => h.end()));
+          
+          // tab.evt('close', () => this.end()); // TODO: Never happens! Need heartbeat to detect tab closed (should get that for free?)
+          
+        },
+        desc() { return `${getFormName(this)}(${this.roadAuth.desc()} <-> ${this.belowHut.hid}@[localhost])`; },
+        currentCost() { return 0.1; },
+        tellAfar(msg) { this.tab.ports[0].postMessage(msg); }
+      })})
+      
+    })});
+    let roadAuth = WorkerRoadAuthority({ aboveHut });
+    gsc({ roadAuth });
+    
+  }
+  
+  return;
+  
+  let { hut, record, WeakBank, [loftName.split('.').at(-1)]: loft, ...pclServers } = rooms;
   let bank = WeakBank({ sc: global.subcon('bank') });
   let recMan = record.Manager({ bank });
   

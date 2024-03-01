@@ -50,9 +50,8 @@ global.rooms['setup.hut.hinterland.RoadAuthority'] = async () => form({ name: 'R
       Object.assign(this, { roadAuth, belowHut });
     },
     desc() {
-      // TODO: pass NetworkAddress to `aboveHut.getBelowHutAndRoad`
-      let netAddr = this.belowHut.getKnownNetAddrs()[0];
-      return `${getFormName(this)}(${this.roadAuth.desc()} <-> ${netAddr} / ${this.belowHut.hid})`;
+      let netAddrs = this.belowHut.getKnownNetAddrs()[0];
+      return `${getFormName(this)}(${this.roadAuth.desc()} <-> ${this.belowHut.hid}@[${netAddrs.join('+')}])`;
     },
     currentCost() { throw Error('Not implemented'); },
     tellAfar() {

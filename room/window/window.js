@@ -827,7 +827,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
     if (isForm(seq2, String)) seq2 = seq2.split('').map(c => c.code());
     
     if (seq1.count() !== seq2.count()) return false;
-    if (seq1.find((v, n) => v !== seq2[n]).found) return false;
+    if (seq1.seek((v, n) => v !== seq2[n]).found) return false;
     return true;
   };
   let applyMods = (text, mods) => {

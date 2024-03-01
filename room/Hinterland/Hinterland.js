@@ -299,6 +299,7 @@ global.rooms['Hinterland'] = async () => {
         let belowScp = Scope(Src(), belowHooks, (_, dep) => {
           belowHut.followRec(loftRec);
           let lofterRh = handleBelowLofter(loftRec, belowHut, dep);
+          
           this.below({
             pfx: prefix,
             record: loftRec,

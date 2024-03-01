@@ -1,292 +1,205 @@
 /// <reference path="../ts/hut.d.ts" />
+'use strict';
 
 require('../room/setup/clearing/clearing.js');
+require('./util/installV8ErrorStacktraceHandler.js')();
+require('./util/installTopLevelHandler.js')();
 
+// Foundation
 (() => {
   
-  // Make Errors better! (https://v8.dev/docs/stack-trace-api)
-  Error.prepareStackTrace = (err, callSites) => {
-    
-    let trace = callSites.map(cs => {
-      
-      let file = cs.getFileName();
-      if (!file || file.hasHead('node:')) return skip;
-      
-      //Object.getOwnPropertyNames(Object.getPrototypeOf(cs)),
-      
-      return {
-        type: 'line',
-        fnName: cs.getFunctionName(),
-        keepTerm: [ '', '[file]', ...cs.getFileName().split(/[/\\]+/) ].join('/'),
-        row: cs.getLineNumber(),
-        col: cs.getColumnNumber()
-      };
-      
-    });
-    
-    return `>>>HUTTRACE>>>${valToJson(trace)}<<<HUTTRACE<<<`;
-    
-  };
+  global.formatAnyValue = require('./util/formatAnyValue.js');
+  global.subconOutput = require('./util/getStdoutSubconOutputter.js')();
   
-  let vertDashChars = '166,124,33,9597,9599,9551,9483,8286,8992,8993,10650'.split(',').map(v => parseInt(v, 10).char());
-  let horzDashChars = '126,8212,9548,9148,9477'.split(',').map(v => parseInt(v, 10).char());
-  let junctionChars = '43,247,5824,9532,9547,9535,10775,10765,9533,9069,9178,11085'.split(',').map(v => parseInt(v, 10).char());
-  let vertDash = () => vertDashChars[Math.floor(Math.random() * vertDashChars.length)];
-  let horzDash = () => horzDashChars[Math.floor(Math.random() * horzDashChars.length)];
-  let junction = () => junctionChars[Math.floor(Math.random() * junctionChars.length)];
-  
-  global.subconOutput = (sc, ...args) => { // Stdout; check "chatter" then format and output
-    
-    /// {DEBUG=
-    // TODO: Wrapping this in DEBUG does nothing; this file doesn't get compiled!
-    let trace = sc.params().active ? Error('trace').getInfo().trace : null;
-    /// =DEBUG}
-    
-    let leftColW = 28;
-    let terminalW = global.conf('global.terminal.width');
-    let rightColW = Math.max(terminalW - leftColW - 2, 30); // `- 2` considers the "| " divide between L/R cols
-    
-    thenAll(args.map(arg => isForm(arg, Function) ? arg(sc) : arg), args => {
-      
-      let { chatter=true, therapy=false, chatterFormat } = sc.params();
-      
-      if (chatterFormat) {
-        // The subcon's "chatterFormat" param takes the argument arr and returns a new arr, or
-        // `null` to silence this item
-        args = eval(chatterFormat)(...args);
-        if (args === null) return;
-        if (!isForm(args, Array)) args = [ args ];
-      }
-      
-      // Forced output for select subcons
-      if (!chatter && ![ 'gsc', 'warning' ].has(sc.term)) return;
-      
-      let depth = 7;
-      if (isForm(args[0], String) && /^[!][!][0-9]+$/.test(args[0])) {
-        depth = parseInt(args[0].slice(2), 10);
-        args = args.slice(1);
-      }
-      
-      let now = getDate();
-      
-      let leftLns = [ `[${sc.term.slice(-leftColW)}]`, now ];
-      let rightLns = args.map(v => {
-        if (!isForm(v, String)) v = formatAnyValue(v, { depth, width: rightColW });
-        return v.split(/\r?\n/);
-      }).flat();
-      
-      /// {DEBUG=
-      let call = trace?.[global.subcon.relevantTraceIndex];
-      call = call?.file && `${token.dive(call.file).at(-1)} ${call.row}:${call.col}`;
-      if (call) {
-        let extraChars = call.length - leftColW;
-        if (extraChars > 0) call = call.slice(extraChars + 1) + '\u2026';
-        leftLns.push(call);
-      }
-      /// =DEBUG}
-      
-      let logStr = Math.max(leftLns.length, rightLns.length).toArr(n => {
-        let l = (leftLns[n] || '').padTail(leftColW);
-        let r = rightLns[n] || '';
-        return l + vertDash() + ' ' + r;
-      }).join('\n');
-      
-      let topLine = leftColW.toArr(horzDash).join('') + junction() + (1 + rightColW).toArr(horzDash).join('');
-      console.log(topLine + '\n' + logStr);
-      
-    });
-    
-  };
-  
-  let modCode = (...codes) => '\u001b[' + codes.map(c => c.toString(10)).join(';') + 'm';
-  let modMapping = {
-    
-    // https://stackoverflow.com/a/41407246/830905
-    
-    red:       '\u001b[31m',
-    green:     '\u001b[32m',
-    yellow:    '\u001b[33m',
-    blue:      '\u001b[34m',
-    
-    subtle:    '\u001b[2m',
-    
-    bold:      '\u001b[1m',
-    italic:    '\u001b[3;22m',
-    underline: '\u001b[4;22m',
-    
-    rgbRed: '\u001b[38;2;255;0;0m', // Must be 38, then 2, then the next 3 are R,G,B
-    
-    reset:     '\u001b[0m'
-  };
-  let ansi = (str, modName) => `${modMapping[modName]}${str}${modMapping.reset}`;
-  let remAnsi = (str) => str.replace(/\u{1b}\[[^a-zA-Z]+[a-zA-Z]/ug, '');
-  let bolded = Map();
-  let bold = (str, b = bolded.get(str)) => b || (bolded.set(str, b = ansi(str, 'bold')), b);
-  
-  let format = (val, opts={}, d=0, pfx='', seen=Map()) => {
-    
-    // `opts.d` is the maximum depth; the "<limit>" indicator will be returned beyond it
-    // `d` is the current depth
-    // `opts.w` is the initial width
-    // `pfx` is the string which will precede the first line of any output from this `format`
-    // call; it should be considered in order to break excessively long lines
-    
-    let pfxLen = pfx.length;
-    
-    if (val === undefined) return ansi('undefined', 'green');
-    if (val === null) return ansi('null', 'green');
-    
-    if (isForm(val, String)) return ansi(`'${val.replaceAll('\n', '\\n')}'`, 'green');
-    if (isForm(val, Number)) return ansi(`${val}`, 'green');
-    if (isForm(val, Boolean)) return ansi(val ? 'T' : 'F', 'green');
-    
-    if (d > opts.d) return ansi('<limit>', 'red');
-    
-    if (seen.has(val)) return seen.get(val);
-    
-    if (Object.getPrototypeOf(val) === null) {
-      
-      seen.set(val, '<cyc> PlainObject(...)');
-      seen.set(val, str);
-      let str = `PlainObject ${format({ ...val }, opts, d, 'PlainObject ', seen)}`;
-      return str;
-      
-    }
-    
-    if (hasForm(val, Function)) {
-      
-      let str = 'Fn: ' + val.toString().split('\n').map(ln => ln.trim() ?? skip).join(' ');
-      
-      let maxW = Math.max(8, opts.w - pfxLen - d * 4 - 1); // Subtract 1 for the trailing ","
-      str = ansi(str.ellipsis(maxW), 'blue');
-      
-      seen.set(val, str);
-      return str;
-      
-    }
-    
-    if (isForm(val, Set)) {
-      
-      seen.set(val, '<cyc> Set(...)');
-      let str = `Set ${format([ ...val ], opts, d, 'Set ', seen)}`;
-      seen.set(val, str);
-      return str;
-      
-    }
-    
-    if (isForm(val, Map)) {
-      
-      seen.set(val, '<cyc> Map(...)');
-      let str = `Map ${format(Object.fromEntries(val), opts, d, 'Map ', seen)}`;
-      seen.set(val, str);
-      return str;
-      
-    }
-    
-    if (isForm(val?.desc, Function)) {
-      
-      try {
-        let str = ansi(val.desc(), 'blue');
-        seen.set(val, str);
-        return str;
-      } catch (err) {
-        // Ignore any errors from calling `val.desc`
-      }
-      
-    }
-    
-    if (isForm(val, Object)) {
-      
-      if (val.empty()) return bold('{}');
-      
-      seen.set(val, '<cyc> { ... }');
-      let keyLen = Math.max(...val.toArr((v, k) => k.length));
-      
-      let str = (() => {
-        
-        let formatted = val.map((v, k) => format(v, opts, d + 1, `${k.padTail(keyLen, ' ')}: `, seen));
-        
-        let oneLine = `${bold('{')} ${formatted.toArr((v, k) => `${k}${bold(':')} ${v}`).join(bold(',') + ' ')} ${bold('}')}`;
-        let canOneLine = true
-          && !oneLine.has('\n')
-          && remAnsi(oneLine).length < (opts.w - d * 4);
-        if (canOneLine) return oneLine;
-        
-        let multiLineItems = formatted.toArr((v, k) => {
-          
-          let paddingAmt = keyLen - k.length;
-          let padding = '';
-          if (paddingAmt) padding += ' ';
-          padding += '-'.repeat(Math.max(paddingAmt - 1, 0));
-          let paddedKey = k + ansi(padding, 'subtle');
-          return `${paddedKey}${bold(':')} ${v}`;
-          
-        });
-        
-        // Using `Math.max` means there's no sorting preference for items less than 10 chars long
-        let multiLine = multiLineItems.valSort(v => {
-          
-          let noAnsi = remAnsi(v);
-          let numLines = (noAnsi.match(/\n/g) ?? []).length + 1;
-          
-          // The first line of `noAnsi` embeds `keyLen` chars and ": "
-          let numChars = noAnsi.length - (keyLen + ': '.length);
-          if (numLines === 1 && numChars < 50) numChars = 50; // Avoid reordering short single-lines values
-          
-          return numChars * 1 + numLines * 7;
-        })
-          .map(v => v.indent(ansi('\u00a6', 'subtle') + '   '))
-          .join(bold(',') + '\n')
-        
-        return `${bold('{')}\n${multiLine}\n${bold('}')}`;
-        
-      })();
-      
-      seen.set(val, str);
-      return str;
-      
-    }
-    
-    if (isForm(val, Array)) {
-      
-      if (val.empty()) return bold('[]');
-      
-      seen.set(val, '<cyc> [ ... ]');
-      
-      let str = (() => {
-        
-        let formatted = val.map(v => format(v, opts, d + 1, '', seen));
-        
-        let oneLine = `${bold('[')} ${formatted.join(bold(',') + ' ')} ${bold(']')}`;
-        let canOneLine = true
-          && !oneLine.has('\n')
-          && remAnsi(oneLine).length < (opts.w - d * 4);
-        if (canOneLine) return oneLine;
-        
-        let multiLine = formatted.map(v => v.indent(ansi('\u00a6', 'subtle') + '   ')).join(bold(',') + '\n');
-        return `${bold('[')}\n${multiLine}\n${bold(']')}`;
-        
-      })();
-      
-      seen.set(val, str);
-      return str;
-      
-    }
-    
-    let formName = getFormName(val);
-    seen.set(val, `<cyc> ${formName}(...)`);
-    let str = `${ansi(formName, 'blue')} ${format({ ...val }, opts, d, `${formName} `, seen)}`;
-    seen.set(val, str);
-    return str;
-    
-  };
-  global.formatAnyValue = (val, { colours=true, width=conf('global.terminal.width'), depth=7 }={}) => {
-    return format(val, { colours, w: width, d: depth });
-  };
-  
-})()
+})();
 
-let cnttt = 0;
+let nestedRepeaterExperiments = () => {
+  
+  let permutationPicks = function*(size, n) {
+    
+    if (n === 0) return yield [];
+    
+    for (let innerPick of permutationPicks(size, n - 1))
+      for (let v = 0; v < size; v++)
+        yield [ v, ...innerPick ];
+    
+  };
+  let rangePowerSetAwful = function*(range1, range2) {
+    
+    for (let outer = range1.start; outer <= range1.end; outer++) {
+      
+      // `outer` determines how many times we pick values in the range [ rbHead, rbTail ]
+      // We add together all such picked values
+      
+      let range2Size = (range2.end - range2.start) + 1; // Add 1; ranges are inclusive on both ends
+      for (let pick of permutationPicks(range2Size, outer))
+        yield 0
+          // Each index in `pick` should be offset by the number of skipped items at the beginning of
+          // the inner range; we are summing anyways and there are `outer` such items that need to be
+          // offset so we can perform all offsets at once like so
+          + range2.start * outer // note that `outer === pick.length`
+          + pick.reduce((m, v) => m + v, 0);
+      
+    }
+    
+  };
+
+  let rangePowerSet = function*(r1, r2) {
+    
+    let min = r1.start * r2.start;
+    let max = r1.end * r2.end;
+    
+    yield min;
+    if (min === max) return;
+    
+    for (let n = min + 1; n < max; n++) {
+      
+      // Consider that we're trying to pick a valid sum. Increasing the number of picks boosts both
+      // the minimum and maximum possible sums; boosting the minimum is unfavourable, but boosting
+      // the maximum is favourable. Overall we need to find a number of picks to satisfy the upper
+      // and lower bounds.
+      // 
+      // Lower bound: `r2.start * numPicks`; upper bound: `r2.end * numPicks`
+      // Overall we require a number of `picks` such that:
+      //    | let contained = n >= r2.start * picks && n <= r2.end * picks
+      // For minimum value:
+      //    | n                >= r2.start * picks
+      //    | r2.start * picks <= n
+      //    | picks            <= n / r2.start
+      // For maximum value:
+      //    | n                <= r2.end * picks
+      //    | r2.end * picks   >= n
+      //    | picks            >= n / r2.end
+      
+      // We need a value of `picks` which satisfies both:
+      // - `picks <= n / r2.start`
+      // - `picks >= n / r2.end`
+      
+      // Apply `ceil` and `floor`:
+      // - `picks <= Math.floor(n / r2.start)`
+      // - `picks >= Math.ceil (n / r2.end)`
+      
+      let maxPicks = Math.floor(n / r2.start);
+      let minPicks = Math.ceil(n / r2.end);
+      if (maxPicks >= minPicks) yield n;
+      
+      // SCAFFOLD:
+      //    | // Is `n` covered??
+      //    | let contained = (() => {
+      //    |   
+      //    |   // The number of picks can be any value in `r1`
+      //    |   for (let numPicks = r1.start; numPicks <= r1.end; numPicks++) {
+      //    |     
+      //    |     // Now we have to pick `numPicks` ints from `r2` such that they sum to `n`
+      //    |     
+      //    |     // Note that in an `r2` with `start > 0` every pick results in a minimum of `r2.start`
+      //    |     // being added to the sum, for a total minimum of `r2.start * numPicks` (`boost`); we can
+      //    |     // immediately add this value, and then consider `r2` as shifted so that it starts at 0; we
+      //    |     // can consider this the "normalized" `r2`, which is really just `r2Size`, an int
+      //    |     // representing the distance from 0
+      //    |     
+      //    |     // SCAFFOLD:
+      //    |     //    | let boost = r2.start * numPicks; // Normalizing `r2`; size is constant, start is 0
+      //    |     //    | let normN = n - boost;           // Normalized `r2` corresponds to `normN`, not `n`
+      //    |     //    | if (normN < 0) continue;         // The boost is too large; we'll always overpick
+      //    |     //    | 
+      //    |     //    | let maxNormSum = (r2.end - r2.start) * numPicks; // If biggest item always picked
+      //    |     //    | if (normN > maxNormSum) continue; // Biggest sum is insufficient
+      //    |     //    | 
+      //    |     //    | return true; // If the bounding checks didn't fail, this value can be picked!
+      //    |     
+      //    |     // Determine if `n` is in the range
+      //    |     if (n < r2.start * numPicks) continue; // `n` is too small
+      //    |     if (n > r2.end   * numPicks) continue; // `n` is too large
+      //    |     
+      //    |     return true;
+      //    |     
+      //    |   }
+      //    |   
+      //    |   return false;
+      //    |   
+      //    | })();
+      //    | 
+      //    | if (contained) yield n;
+      
+    }
+    
+    yield max;
+    
+  };
+
+  let getResults = fn => {
+    
+    // Note for `rangeMult([ a, b ], [ c, d ])`, the max value will always be `b * d`
+    let raw = fn().toArr(v => v);
+    let set = Set(raw);
+    let setSorted = set.toArr(v => v).valSort(v => v);
+    let max = setSorted.at(-1);
+    
+    return {
+      raw,
+      vals: setSorted,
+      max,
+      visual:  `(0> ${(max + 1).toArr(n => set.has(n) ? '\u2022' : '-').join('')} <${max})`
+    };
+    
+  };
+
+  for (let i = 0; i < 30; i++) {
+    
+    let r = (a, b) => a + Math.floor((b - a) * Math.random());
+    
+    /** @type 'compare'|'run' */
+    let type = 'compare'; // "compare" can ensure the results of an improved fn match expectations
+    
+    let top = { compare: 6, run: 30 }[type];
+    let a = r(0, top);
+    let b = a + r(0, top);
+
+    let c = r(0, top);
+    let d = c + r(0, top);
+    
+    if (type === 'run') {
+      
+      let { visual } = getResults(() => rangePowerSet({ start: a, end: b }, { start: c, end: d }));
+      
+      let [ , str ] = visual.match(/[ ](.*)[ ]/);
+      str = str.replaceAll('\u2022', '+');
+      
+      let opts = [
+        '++--+',
+        '+--++',
+        '--++-',
+        '-++--'
+      ];
+      
+      if (true || opts.some(v => str.has(v))) {
+        console.log(`[${a}:${b}] x [${c}:${d}]`);
+        console.log(visual);
+      }
+      
+    } else if (type === 'compare') {
+      
+      let { visual: v1 } = getResults(() => rangePowerSet({ start: a, end: b }, { start: c, end: d }));
+      let { visual: v2 } = getResults(() => rangePowerSetAwful({ start: a, end: b }, { start: c, end: d }));
+      
+      if (v1 !== v2) {
+        
+        console.log('OW');
+        console.log(`[${a}:${b}] x [${c}:${d}]`);
+        console.log(`??: ${v1}\n!!: ${v2}\n\n`);
+        
+      }
+      
+      continue;
+      
+    }
+    
+  }
+
+  process.exit(0);
+  
+};
 
 let lib = (() => {
   
@@ -331,32 +244,22 @@ let lib = (() => {
   
   let Parser = form({ name: 'Parser', props: (forms, Form) => ({
     
-    init({ lang, name, norm=false, ...cfg }) {
+    init({ lang, name, ...cfg }) {
       
       if (!isForm(lang, Language)) throw Error('Lang param must be a language').mod({ lang });
       if (!cfg.empty()) throw Error('Unexpected config').mod({ cfg });
       
-      Object.assign(this, { lang, name, norm });
+      Object.assign(this, { lang, name });
       
     },
     
-    // Note that in order to qualify as a loop, there must be no stepping
-    sometimesLoops(...args) { throw Error('Not implemented'); },
+    sometimesLoops(...args) { throw Error('Not implemented'); /* Note that stepping breaks loops */ },
     certainlyHalts(...args) { return !this.sometimesLoops(...args); },
     certainlySteps(...args) { throw Error('Not implemented'); },
     
     getEstimatedComplexity() { return 1; },
-    normalize(...args) {
-      
-      if (this.norm) return this;
-      
-      let norm = this.normalize0(...args);
-      if (!norm.norm) throw Error('normalize0 failed to set "norm"').mod({ form: getFormName(this), norm });
-      
-      return norm;
-      
-    },
-    normalize0() { throw Error('Not implemented'); },
+    normalize() { throw Error('Not implemented'); /* Returns an equivalent, but normalized, Parser - should not mutate anything */ },
+    clone(...args) { throw Error('Not implemented'); },
     parse(src, ...args) {
       
       // This function is the user's entrypoint; it's called once per Parser.Src and simply
@@ -370,7 +273,7 @@ let lib = (() => {
         if (p.str.length > best.str.length) best = p;
       }
       
-      return best;
+      throw Error('Unable to parse').mod({ best });
       
     },
     * run(src, ...args) {
@@ -394,6 +297,8 @@ let lib = (() => {
       throw Error('Not implemented');
       
     },
+    getTerm() { return getFormName(this).slice(0, 3).lower(); },
+    visualize(seen=Set()) { throw Error('not implemented'); },
     
     $Src: form({ name: 'Src', props: (forms, Form) => ({
       init({ str }) {
@@ -437,10 +342,7 @@ let lib = (() => {
   
   let NopParser = form({ name: 'NopParser', has: { Parser }, props: (forms, Form) => ({
     
-    init(cfg) {
-      forms.Parser.init.call(this, cfg);
-      Object.assign(this, { norm: true });
-    },
+    init(cfg) { forms.Parser.init.call(this, cfg); },
     
     sometimesLoops() { return false; },
     certainlySteps() { return false; }, // In fact, a NopParser *never* steps (nor does it loop)
@@ -452,15 +354,18 @@ let lib = (() => {
   
   let ImmediateParser = form({ name: 'ImmediateParser', has: { Parser }, props: (forms, Form) => ({
     
+    // Note that ImmediateParsers are immutable
+    
     init({ sgs=false /* "strip global seqs" */, ...cfg }) {
       
       forms.Parser.init.call(this, cfg);
-      Object.assign(this, { norm: true, sgs });
+      Object.assign(this, { sgs });
       
     },
-    
+    clone(...args) { return this; },
     * getDelegationChains(chain=[]) { yield [ ...chain, this ]; }, // ImmediateParsers don't delegate (could also call them "Terminal" parsers, or "Leaf" parsers)
-    normalize0() { return this; },
+    normalize() { return this; },
+    visualize() { return this.desc(); }
     
   })});
   let TokenParser = form({ name: 'TokenParser', has: { ImmediateParser }, props: (forms, Form) => ({
@@ -522,45 +427,193 @@ let lib = (() => {
       
     },
     desc(seen=Set()) {
-      if (seen.has(this)) return '<cyc>';
+      if (seen.has(this)) return `<cyc ${this.name || this.getTerm()}>`;
       seen.add(this);
-      return this.name || `${getFormName(this).slice(0, 3)}(${this.getDelegates().map(d => d.desc(seen)).join(', ') || '<empty>'})`;
+      return this.name || `${this.getTerm()}(${this.getDelegates().map(d => d.desc(seen)).join(', ') || '<empty>'})`;
     },
-    normalize0() {
+    normalize() {
       
-      for (let chain of this.getDelegationChains()) {
+      let mut = this.clone(); // "mutable"
+      
+      let getNextLrChain = delegatingParser => {
         
-        let last = chain.at(-1);
-        let ind = chain.indexOf(last);
-        if (ind === chain.length) continue; // The final item is unique - no cycle!
+        // Find next LR chain...
+        for (let chain of delegatingParser.getDelegationChains()) {
+          
+          if (chain.length < 2) throw Error('Whoa... chain is too short??').mod({ chain });
+          
+          let lastInd = chain.length - 1;
+          let last = chain.at(-1);
+          let ind = chain.indexOf(last);
+          if (ind < lastInd) return chain.slice(ind); // Return the cyclical part of the chain (ignore any linear prefix)
+          
+        }
         
-        // LR chain detected
-        // Note that `chain` now only consists of `DelegatingParser`s - if it didn't, it couldn't
-        // have a cycle of delegations
+        return null; // No LR chain found
         
-        // Note that `chain` is conceptually cyclical (`chain.at(0)` is adjacent to `chain.at(-1)`)
-        // Note that `chain` will never consist entirely of `AllParser`s (since an AllParser always
-        // delegates, a chain of only `AllParser`s would always infinitely delegate - I'm quite
-        // sure a chain of only AllParsers always indicates a user error)
-        // Note that any `RepeatParser`s in `chain` have a Kid defined (never `null`)
-        // Note that `AllParser` and `RepeatParser` are thematically similar; their haltiness is
-        // defined by the first application of a Kid/Req Parser which Loops or Halts (non-looping,
-        // non-halting Kid/Req Parsers which come earlier have no bearing on haltiness)
-        // Note that an `AnyParser` containing a RepeatParser with `minReps === 0` can be replaced
-        // with an `AnyParser` with an additional `NopParser` option, and `minReps === 1` instead
+      };
+      let traverse = (parser, fn, par=null, seen=Set()) => {
         
-        // Consider a chain A -> B -> C -> D -> A
-        // Note that the topmost decision about how to treat this cycle depends on whether any
-        // Parser in the cycle is an AllParser (there will always be at least one AnyParser -
-        // cycles of only AllParsers always define either halts, zero token consumption [in the
-        // case of a RepeatParser with minReps=0], or infinite token consumption!)
-        // Note that if we could ignore RepeatParsers, such nested AnyParsers can be logically
-        // flattened without altering the parse tree.
+        if (seen.has(parser)) return;
+        seen.add(parser);
         
-        let lrChain = chain.slice(ind);
-        let findAllParser = chain.find(p => isForm(p, AllParser));
+        // Allow consumer to process this `par` and `parser`
+        let proceed = fn(parser, par);
+        if (!isForm(proceed, Boolean)) throw Error('Traverse function returned non-boolean').mod({ fn: fn.toString() });
+        if (!proceed) return;
+        
+        if (!hasForm(parser, DelegatingParser)) return;
+        
+        // Traverse based on the type of DelegatingParser
+        let name = parser.getTerm();
+        if (name === 'any')               for (let opt of parser.opts) traverse(opt, fn, parser, seen);
+        if (name === 'all')               for (let req of parser.reqs) traverse(req, fn, parser, seen);
+        if (name === 'rep' && parser.kid)                              traverse(parser.kid, fn, parser, seen);
+        
+      };
+      
+      while (true) { // Loop until all LR chains are refactored
+        
+        /*
+          LR chain detected
+          Note that `chain` now only consists of `DelegatingParser`s - if it didn't, it couldn't
+          have a cycle of delegations
+          
+          Note that `chain` is conceptually cyclical (`chain.at(0)` is adjacent to `chain.at(-1)`)
+          Note that `chain` will never consist entirely of `AllParser`s (since an AllParser always
+          delegates, a chain of only `AllParser`s would always infinitely delegate - I'm quite
+          sure a chain of only AllParsers always indicates a user error)
+          Note that any `RepeatParser`s in `chain` have a Kid defined (never `null`)
+          Note that `AllParser` and `RepeatParser` are thematically similar; their haltiness is
+          defined by the first application of a Kid/Req Parser which Loops or Halts (non-looping,
+          non-halting Kid/Req Parsers which come earlier have no bearing on haltiness)
+          Note that an `AnyParser` containing a RepeatParser with `minReps === 0` can be replaced
+          with an `AnyParser` with an additional `NopParser` option, and `minReps === 1` instead
+          
+          Consider a chain A -> B -> C -> D -> A
+          Note that the topmost decision about how to treat this cycle depends on whether any
+          Parser in the cycle is an AllParser (there will always be at least one AnyParser -
+          cycles of only AllParsers always define either halts, zero token consumption [in the
+          case of a RepeatParser with minReps=0], or infinite token consumption!)
+          Note that if we could ignore RepeatParsers, such nested AnyParsers can be logically
+          flattened without altering the parse tree.
+          
+          Consider an LR loop consisting of any number of Anys and Reps (no Alls). To normalize
+          we can produce a single Rep whose Kid is a single Any. The Any directly contains all
+          Opts available to all Anys in the loop, and all Kids available to all Reps, *except* for
+          any links which cause another cycle. This is relatively easy to understand: arbitrarily
+          nested Anys can each get to any Opt of any other such Any; hardly any different from if
+          all the Opts were flattened under a single Any. Now if we consider a case where the
+          cycle also contains some Reps, we can *almost* replace each Rep with its Kid. Note that
+          if the rest of the chain is only Anys, the cycle behaves exactly the same regardless of
+          where a single Rep is spliced into it. This is because any Any can access the Rep, and
+          the Rep's Kid can also access any Any. The only difference is that the entire loop is
+          able to parse some number of times depending on the Rep, instead of exactly once - so we
+          have to replace this ability to repeat; hence the design of a single Rep containing a
+          single Any. The last issue is to address towers of nested Reps; this feels like a number
+          theory problem and is possibly(??) very difficult to compute for large towers of Reps.
+          I will probably take a shortcut here and assume that a stack of Reps can be resolved to
+          a single Rep with:
+             | {
+             |   minReps: arr.map(rep => rep.minReps).reduce((m, v) => m * v, 1), // Account for Infinities (zero outprioritizes Infinity here!)
+             |   maxReps: arr.map(rep => rep.maxReps).reduce((m, v) => m * v, 1), // Account for Infinities (zero outprioritizes Infinity here!)
+             | }
+          but note that the range of possible repetitions is often not contiguous, and computing
+          it exactly is probably very hard or at least inefficient.
+        */
+        
+        let lrChain = getNextLrChain(mut);
+        if (!lrChain) break; // No more LR chains!
+        
+        // We need to break `lrChain`. Whether or not `lrChain` contains an All determines the
+        // overall strategy.
+        let alls = lrChain.filter(v => isForm(v, AllParser));
+        let anys = lrChain.filter(v => isForm(v, AnyParser));
+        let reps = lrChain.filter(v => isForm(v, RepeatParser));
+        if (alls.empty()) {
+          
+          // No `AllParser`! Are there RepeatParsers? If so we'll normalize to a Rep whose Kid is
+          // an Any, otherwise we normalize simply to an Any, which is essentially a flattened
+          // version of `mutable` with cycles broken.
+          
+          // Add all Opts of all Anys to a single flattened Any! (Exclude Opts which happen to be
+          // part of the current LR cycle!) TODO: O(n^2); `lrChains.has(...)` is O(n) - improve!
+          let flatOpts = anys.map(any => any.opts).flat(1).filter(opt => !lrChain.has(opt));
+          let normalized = AnyParser({ lang: mut.lang, name: `flatAny(${anys.toArr(any => any.name).join(' + ')})`, opts: flatOpts });
+          
+          // Resolves to either `any([ ...flattenedOpts ])`, or `rep(any([ ...flattenedOpts ]))`
+          if (reps.length)
+            normalized = RepeatParser({
+              lang: mut.lang,
+              name: `flatRep(${reps.toArr(any => any.name).join(' + ')})`,
+              minReps: reps.map(rep => rep.minReps).reduce((m, v) => m * v, 1), // Can't be `0 * Infinity` as `minReps` is never `Infinity`
+              maxReps: reps.map(rep => rep.maxReps).reduce((m, v) => m * v, 1), // Can't be `0 * Infinity` as `maxReps` is never `0`
+              kid: normalized // `flattenedAny` from above
+            });
+          
+          if (anys.has(this)) {
+            
+            // Literally the whole Parser being normalized is resolved to `normRoot`
+            return normRoot; // `mut` is completely irrelevant!
+            
+          } else {
+            
+            // `mutable` itself wasn't refactored by normalization; we need to traverse every child
+            // Parser reachable from `mutable`, and whenever we find one of the Anys that was
+            // flattened, we replace it with `normRoot`!
+            
+            let op = (node, seen=Set()) => {
+              
+              if (seen.has(node)) return; seen.add(node);
+              
+              switch (node.getTerm()) {
+                
+                case 'any':
+                  
+                  // If the Any has Opts which feed into the LR chain, remove all such Opts and add
+                  // the single `normalized` node as a new Opt
+                  // TODO: O(n^2)
+                  let optsLrRemoved = node.opts.filter(opt => !lrChain.has(opt));
+                  if (optsLrRemoved.length < node.opts.length)
+                    node.opts = [ ...optsLrRemoved, normalized ]; // TODO: Optimize Opt ordering later? (AnyParser.prototype.optimizeOptOrder?)
+                  
+                  for (let opt of optsLrRemoved) op(opt, seen);
+                  return;
+                  
+                case 'all':
+                  
+                  // Each Req which is part of the LR chain must be replaced with `normalized`
+                  node.reqs = node.reqs.map(req => lrChain.has(req) ? normalized : req);
+                  
+                  for (let req of node.reqs) if (req !== normalized) op(req, seen);
+                  return;
+                  
+                case 'rep':
+                  
+                  if (lrChain.has(node.kid)) node.kid = normalized;
+                  else                       op(node.kid, seen);
+                  return;
+                  
+                default: /* ignore anything else */ return;
+                
+              }
+              
+            };
+            op(mut);
+            
+            return mut;
+            
+          }
+          
+        } else {
+          
+          // There's at least one `AllParser` in the chain; this is the tricky part!
+          
+        }
         
       }
+      
+      return mut;
       
     }
     
@@ -603,9 +656,36 @@ let lib = (() => {
       
     },
     getDelegates() { return [ ...this.opts ]; },
+    clone(map=Map()) {
+      
+      if (map.has(this)) return map.get(this);
+      
+      let any = AnyParser({ ...this, opts: [] });
+      map.set(this, any);
+      
+      for (let opt of this.opts) any.addOpt(opt.clone(map));
+      
+      return any;
+      
+    },
     * run0(input) {
       
       for (let opt of this.opts) yield* opt.run(input);
+      
+    },
+    visualize(seen=Set()) {
+      
+      let d = `Any "${this.name || '<anon>'}"`;
+      
+      if (seen.has(this)) return `Cyc: ${d}`;
+      seen.add(this);
+      
+      if (this.opts.length) d += '\n' + this.opts
+        .map(opt => opt.visualize(seen))
+        .map(desc => { let [ ln0, ...lns ] = desc.split('\n'); return [ `- ${ln0}`, ...lns.map(ln => `  ${ln}`) ].join('\n'); })
+        .join('\n');
+      
+      return d;
       
     }
     
@@ -672,7 +752,7 @@ let lib = (() => {
       if (seen.has(this)) return false;
       seen.add(this);
       
-      for (let req of this.reqs) if (req.certainlySteps()) return true;
+      for (let req of this.reqs) if (req.certainlySteps(seen)) return true;
       return false;
       
     },
@@ -689,6 +769,18 @@ let lib = (() => {
         
       }
       return ret;
+      
+    },
+    clone(map=Map()) {
+      
+      if (map.has(this)) return map.get(this);
+      
+      let all = AllParser({ ...this, reqs: [] });
+      map.set(this, all);
+      
+      for (let req of this.reqs) all.addReq(req.clone(map));
+      
+      return all;
       
     },
     * run0(src) {
@@ -708,6 +800,21 @@ let lib = (() => {
       
       for (let reqTrgs of allTrgChains(src)) yield Parser.Trg({ prs: this, trgs: reqTrgs });
       
+    },
+    visualize(seen=Set()) {
+      
+      let d = `All "${this.name || '<anon>'}"`;
+      
+      if (seen.has(this)) return `Cyc: ${d}`;
+      seen.add(this);
+      
+      if (this.reqs.length) d += '\n' + this.reqs
+        .map(req => req.visualize(seen))
+        .map(desc => { let [ ln0, ...lns ] = desc.split('\n'); return [ `- ${ln0}`, ...lns.map(ln => `  ${ln}`) ].join('\n'); })
+        .join('\n');
+      
+      return d;
+      
     }
     
   })});
@@ -715,10 +822,12 @@ let lib = (() => {
     
     init({ kid, minReps=0, maxReps=Infinity, ...cfg }) {
       
-      if (!hasForm(kid, Parser)) throw Error('Kid param must be parser').mod({ kid });
+      if (!hasForm(kid, Parser))    throw Error('Kid param must be parser').mod({ kid });
       if (!isForm(minReps, Number)) throw Error('Min-reps param must be number').mod({ minReps });
+      if (minReps >= Inf) throw Error('Min-reps param must be number').mod({ minReps });
       if (!isForm(maxReps, Number)) throw Error('Max-reps param must be number').mod({ maxReps });
-      if (maxReps < 1) throw Error('Max-reps param must be >= 1').mod({ maxReps });
+      if (maxReps < 1)              throw Error('Max-reps param must be >= 1').mod({ maxReps });
+      if (maxReps < minReps)        throw Error('Max-reps param must be greater than min-reps').mod({ minReps, maxReps });
       
       forms.DelegatingParser.init.call(this, cfg);
       Object.assign(this, { kid, minReps, maxReps });
@@ -746,6 +855,18 @@ let lib = (() => {
       
     },
     getDelegates() { return this.kid ? [ this.kid ] : []; },
+    clone(map=Map()) {
+      
+      if (map.has(this)) return map.get(this);
+      
+      let rep = RepeatParser({ ...this, kid: null });
+      map.set(this, rep);
+      
+      if (this.kid) rep.setKid(this.kid.clone(map));
+      
+      return rep;
+      
+    },
     * run0(src) {
       
       let { minReps, maxReps, kid } = this;
@@ -753,7 +874,7 @@ let lib = (() => {
       
       let allTrgChains = function*(src, chain=[]) {
         
-        if (chain.length >= maxReps) return; // No more parsing after `maxReps` exceeded
+        if (chain.length > maxReps) return; // No more parsing after `maxReps` exceeded
         
         // If the current `chain` meets the minimum size, yield it; it's already a valid parsing,
         // even if it's possible for the Kid to successfully repeat (resulting in another parsing)
@@ -766,6 +887,21 @@ let lib = (() => {
       };
       
       for (let kidTrgs of allTrgChains(src)) yield Form.Trg({ prs: this, trgs: kidTrgs });
+      
+    },
+    visualize(seen=Set()) {
+      
+      let d = `Rep(${this.name || '<anon>'})`;
+      
+      if (seen.has(this)) return `Cyc: ${d}`;
+      seen.add(this);
+      
+      if (this.kid) d += '\n' + [ this.kid ]
+        .map(req => req.visualize(seen))
+        .map(desc => { let [ ln0, ...lns ] = desc.split('\n'); return [ `- ${ln0}`, ...lns.map(ln => `  ${ln}`) ].join('\n'); })
+        .join('\n');
+      
+      return d;
       
     }
     
@@ -786,15 +922,48 @@ let lib = (() => {
     let { nop, tok, reg, all, any, rep } = lang.fns();
     
     let main = any([]);
-    main.addOpt(reg('numm', '[1-9][0-9]*'));
-    main.addOpt(all('brak', [ tok('('), main, tok(')') ]));
-    main.addOpt(all('plus', [ tok('+'), main, tok(':'), main ]));
+    main.addOpt(tok('str', 'ab-'));
     
-    gsc('PARSE', main.parse('(+(+1:(2)):3)'));
+    let rep1 = rep('rep1', { minReps: 2, maxReps: 4, kid: main });
+    let rep2 = rep('rep2', { minReps: 1, maxReps: 5, kid: rep1 });
+    gsc('PARSE', rep2.parse('ab-ab-ab-ab-'));
     
   };
   
-  let math = () => {
+  let anyLr = () => {
+    
+    let lang = Language({ name: 'toy' });
+    let { nop, tok, reg, all, any, rep } = lang.fns();
+    
+    let any1 = any('one', []);
+    let any2 = any('two', []);
+    let any3 = any('thr', []);
+    
+    any1.addOpt(any1);
+    any1.addOpt(any2);
+    any1.addOpt(any3);
+    
+    any2.addOpt(any1);
+    any2.addOpt(any3);
+    
+    any3.addOpt(any2);
+    any3.addOpt(any3);
+    
+    any1.addOpt(tok('x'));
+    any2.addOpt(tok('y'));
+    any3.addOpt(tok('z'));
+    
+    gsc('BEFORE', any1.visualize());
+    
+    let norm = any1.normalize();
+    gsc('AFTER (norm)', norm.visualize());
+    
+    //gsc('POST-NORM PARSE:');
+    //gsc(norm.parse('xzyz'));
+    
+  };
+  
+  let mathLr = () => {
     
     let lang = Language({ name: 'math' });
     let { nop, tok, reg, all, any, rep } = lang.fns();
@@ -821,7 +990,7 @@ let lib = (() => {
     let inlineValue = any({ name: 'inlineValue', opts: [] });
     inlineValue.addOpt(tok('null'));
     inlineValue.addOpt(tok('undefined'));
-    inlineValue.addOpt(any({ name: 'boolean', opts: [ tok('true'), tok('false') ] }));
+    inlineValue.addOpt(any('boolean', [ tok('true'), tok('false') ]));
     inlineValue.addOpt(reg('binInt',  '[+-]?0b[0-1]+'));
     inlineValue.addOpt(reg('octInt',  '[+-]?0[0-7]+'));
     inlineValue.addOpt(reg('hexInt',  '[+-]?0x[0-9a-fA-F]+'));
@@ -866,142 +1035,145 @@ let lib = (() => {
     
   };
   
-  ({ toy, math, js }['math'])();
+  ({ toy, mathLr, anyLr, js }['anyLr'])();
   
-  /*
+  process.exit(0);
   
-  value -> binaryOp -> add -> value
-  
-  value -> (binaryOp -> add) * n -> (value - binaryOp)
-  
-  // LR 1:
-  let value = any([]);
-  
-  value.addOpt(reg('[1-9][0-9]*'));
-  
-  let binaryOp = any([]);
-  
-  let add = all([ value, tok('+'), value ]);
-  binaryOp.addOpt(add);
-  
-  let sub = all([ value, tok('-'), value ]);
-  binaryOp.addOpt(sub);
-  
-  value.addOpt(binaryOp);
-  
-  // NORMALIZED 1:
-  let repeatable = any([]);
-  let value0 = any([]);
-  let value = all(value0, repeatable); // The main `value`!
-  
-  value0.addOpt(reg('[1-9][0-9]*'));
-  
-  // `binaryOp` now acts like options for "repeatable suffixes"
-  let binaryOp = any([]);
-  
-  // Note the leading `value` has been REMOVED
-  let add = all([ tok('+'), value ]);
-  binaryOp.addOpt(add);
-  
-  // Note the leading `value` has been REMOVED
-  let sub = all([ tok('-'), value ]);
-  binaryOp.addOpt(sub);
-  
-  repeatable.addOpt(binaryOp);
-  
-  // LR 2:
-  let value = any([]);
-  
-  value.addOpt(reg('[1-9][0-9]*([.][0-9]+)?')); // floats
-  
-  let binaryOp = any([]);
-  
-  let add = all([ value, tok('+'), value ]);
-  binaryOp.addOpt(add);
-  
-  let sub = all([ value, tok('*'), value ]);
-  binaryOp.addOpt(sub);
-  
-  value.addOpt(binaryOp);
-  
-  // Here's the tricky shiz:
-  let brk = all([ tok('('), value, tok(')') ]);
-  value.addOpt(brk);
-  
-  // NORMALIZED 2:
-  let repeatable = any([]);
-  let value0 = any([]);
-  let value = all(value0, repeatable); // The main `value`!
-  
-  value0.addOpt(reg('[1-9][0-9]*([.][0-9]+)?'));
-  
-  let binaryOp = any([]);
-  
-  let add = all([ tok('+'), value ]);
-  binaryOp.addOpt(add);
-  
-  let sub = all([ tok('-'), value ]);
-  binaryOp.addOpt(sub);
-  
-  repeatable.addOpt(binaryOp);
-  
-  // No LR here - this `all` always consumes, because its first child always consumes!!!
-  value0.addOpt(all([ tok('('), value0, tok(')') ]));
-  
-  // LR 3:
-  let value = any([]);
-  
-  let inlineValue = any([]);
-  inlineValue.addOpt(reg('[a-zA-Z]+'));
-  inlineValue.addOpt(value);            // Doesn't really make sense, but should be tolerated??
-  
-  value.addOpt(inlineValue);
-  value.addOpt(all([ tok('('), value, tok(')') ]));
-  
-  // NORMALIZED 3:
-  let value = any([]);
-  
-  let inlineValue = any([]);
-  inlineValue.addOpt(reg('[a-zA-Z]+'));
-  // Literally just *DELETE* `inlineValue.addOpt(value)` - `value` can already be reached within the cycle!
-  
-  value.addOpt(inlineValue);
-  value.addOpt(all([ tok('('), value, tok(')') ]));
-  
-  // CYCLE BREAK:
-  - Note that the cycle must contain at least one AnyParser, at least one AllParser, and zero or
-    more RepeatParsers
-  - RepeatParsers are not relevant to the chain as their haltiness is equal to the haltiness of
-    their Kid, so they can, in this context, logically be replaced with their Kid
-  - Minimum one AnyParser: if the cycle (ignoring RepeatParsers) only consisted of AllParsers we
-    are guaranteed to either empty loop, or consume zero or infinite tokens: AllParsers always
-    delegate to all their Reqs, so a chain of only AllParsers never stops delegating - unless to a
-    RepeatParser with 0 minReps, in which case zero tokens are consumed
-  - At least one AllParser: ????? MAYBE FALSE ?????
-  
-  
-  - Note the cycle: "value" -> "binaryOp" -> "add" -> "value"
-  - Note that if `value` is the Parser being normalized, the furthest we can break this chain is
-    when `add` loops back to `value`, at the "add" -> "value" step (I claim breaking at the
-    furthest point produces the most intuitive results)
-  - The idea is to produce this parser setup instead:
-  
-  */
-  
-  /*
-  // of the "plane" is probably hard to stretch to the normalized parser topology?
-  // TODO: Implementing this could be funky when normalization is being factored in, e.g. the idea
-  let htmlEnt = all([
-    token('<'),
-    reg('(?<tagName>[a-zA-Z0-9]+)'),
-    rep(all([ reg('[a-zA-Z]+'), tok('='), tok('"'), reg('[^"]+'), tok('"') ])),
-    token('>'),
+  if (0) { /*
     
-    token('</'),
-    reg('(!<tagName>)'),
-    token('>')
-  ]);
-  */
+    value -> binaryOp -> add -> value
+    
+    value -> (binaryOp -> add) * n -> (value - binaryOp)
+    
+    // LR 1:
+    let value = any([]);
+    
+    value.addOpt(reg('[1-9][0-9]*'));
+    
+    let binaryOp = any([]);
+    
+    let add = all([ value, tok('+'), value ]);
+    binaryOp.addOpt(add);
+    
+    let sub = all([ value, tok('-'), value ]);
+    binaryOp.addOpt(sub);
+    
+    value.addOpt(binaryOp);
+    
+    // NORMALIZED 1:
+    let repeatable = any([]);
+    let value0 = any([]);
+    let value = all(value0, repeatable); // The main `value`!
+    
+    value0.addOpt(reg('[1-9][0-9]*'));
+    
+    // `binaryOp` now acts like options for "repeatable suffixes"
+    let binaryOp = any([]);
+    
+    // Note the leading `value` has been REMOVED
+    let add = all([ tok('+'), value ]);
+    binaryOp.addOpt(add);
+    
+    // Note the leading `value` has been REMOVED
+    let sub = all([ tok('-'), value ]);
+    binaryOp.addOpt(sub);
+    
+    repeatable.addOpt(binaryOp);
+    
+    // LR 2:
+    let value = any([]);
+    
+    value.addOpt(reg('[1-9][0-9]*([.][0-9]+)?')); // floats
+    
+    let binaryOp = any([]);
+    
+    let add = all([ value, tok('+'), value ]);
+    binaryOp.addOpt(add);
+    
+    let sub = all([ value, tok('*'), value ]);
+    binaryOp.addOpt(sub);
+    
+    value.addOpt(binaryOp);
+    
+    // Here's the tricky shiz:
+    let brk = all([ tok('('), value, tok(')') ]);
+    value.addOpt(brk);
+    
+    // NORMALIZED 2:
+    let repeatable = any([]);
+    let value0 = any([]);
+    let value = all(value0, repeatable); // The main `value`!
+    
+    value0.addOpt(reg('[1-9][0-9]*([.][0-9]+)?'));
+    
+    let binaryOp = any([]);
+    
+    let add = all([ tok('+'), value ]);
+    binaryOp.addOpt(add);
+    
+    let sub = all([ tok('-'), value ]);
+    binaryOp.addOpt(sub);
+    
+    repeatable.addOpt(binaryOp);
+    
+    // No LR here - this `all` always consumes, because its first child always consumes!!!
+    value0.addOpt(all([ tok('('), value0, tok(')') ]));
+    
+    // LR 3:
+    let value = any([]);
+    
+    let inlineValue = any([]);
+    inlineValue.addOpt(reg('[a-zA-Z]+'));
+    inlineValue.addOpt(value);            // Doesn't really make sense, but should be tolerated??
+    
+    value.addOpt(inlineValue);
+    value.addOpt(all([ tok('('), value, tok(')') ]));
+    
+    // NORMALIZED 3:
+    let value = any([]);
+    
+    let inlineValue = any([]);
+    inlineValue.addOpt(reg('[a-zA-Z]+'));
+    // Literally just *DELETE* `inlineValue.addOpt(value)` - `value` can already be reached within the cycle!
+    
+    value.addOpt(inlineValue);
+    value.addOpt(all([ tok('('), value, tok(')') ]));
+    
+    // CYCLE BREAK:
+    - Note that the cycle must contain at least one AnyParser, at least one AllParser, and zero or
+      more RepeatParsers
+    - RepeatParsers are not relevant to the chain as their haltiness is equal to the haltiness of
+      their Kid, so they can, in this context, logically be replaced with their Kid
+    - Minimum one AnyParser: if the cycle (ignoring RepeatParsers) only consisted of AllParsers we
+      are guaranteed to either empty loop, or consume zero or infinite tokens: AllParsers always
+      delegate to all their Reqs, so a chain of only AllParsers never stops delegating - unless to a
+      RepeatParser with 0 minReps, in which case zero tokens are consumed
+    - At least one AllParser: ????? MAYBE FALSE ?????
+    
+    
+    - Note the cycle: "value" -> "binaryOp" -> "add" -> "value"
+    - Note that if `value` is the Parser being normalized, the furthest we can break this chain is
+      when `add` loops back to `value`, at the "add" -> "value" step (I claim breaking at the
+      furthest point produces the most intuitive results)
+    - The idea is to produce this parser setup instead:
+    
+    */
+    
+    /*
+    // of the "plane" is probably hard to stretch to the normalized parser topology?
+    // TODO: Implementing this could be funky when normalization is being factored in, e.g. the idea
+    let htmlEnt = all([
+      token('<'),
+      reg('(?<tagName>[a-zA-Z0-9]+)'),
+      rep(all([ reg('[a-zA-Z]+'), tok('='), tok('"'), reg('[^"]+'), tok('"') ])),
+      token('>'),
+      
+      token('</'),
+      reg('(!<tagName>)'),
+      token('>')
+    ]);
+    
+  */ }
   
 })()
   .catch(err => gsc('FATAL', err));

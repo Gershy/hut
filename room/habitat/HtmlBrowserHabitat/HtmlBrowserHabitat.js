@@ -1,5 +1,12 @@
 global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabitat', props: () => ({
   
+  // This is the Habitat which prepares ABOVE to facilitate a BELOW which is using a browser as an
+  // interface; the logic here makes it possible for the BELOW to request all the needed resources
+  // it requires to run appropriately; importantly this Habitat defines a "hut:hutify" command
+  // serving html which also loads the "habitat.HtmlBrowserHabitat.hutify.foundation", where the
+  // root BELOW Hut bootstrap occurs (note "habitat.HtmlBrowserHabitat.hutify.workerFoundation") is
+  // also an important part of the BELOW bootstrap logic)
+  
   // TODO: All road names should be overridable - in fact if there are
   // multiple HtmlBrowserHabitat instances, no two should share a road
   // name. This would be easier by simply providing a unique prefix
@@ -94,10 +101,13 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
       // full sync is consumed here, to be included within the html response (the initial html and
       // sync data will always arrive together)
       
+      // TODO: Now with the move to SharedWorker we don't want to "consume" any pending sync - we
+      // just want a complete representation of the Below's Record state so that this tab can
+      // quickly render without needing to wait for an initial sync from the SharedWorker
       let initComm = src.consumePendingSync({ fromScratch: true });
       
       let roomScript = (scriptLoadStrategy='async', room) => {
-        let src = uri({ path: '-hut:room', query: { room } });
+        let src = uri({ path: '-hut:room', query: { room } }); // Remember that "-hut:room" is equal to `{ trn: 'anon', command: 'hut:room' }`
         return `<script ${scriptLoadStrategy} src="${src}" data-room="${room}"></script>`;
       };
       
@@ -144,13 +154,23 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
             ${roomScript('defer', 'habitat.HtmlBrowserHabitat.hutify.foundation')}
             ${protocolRooms.toArr(n => roomScript('defer', n)).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur... just kinda hurts my soul */ }
             <script>
-              // TODO: Use SharedWorker? (caching is funky for the html:worker response!)
-              //console.log('START', window.performance.now());
-              //let worker = new SharedWorker('${uriRaw({ path: '-html:worker', cacheBust: hut.hid })}');
-              //worker.port.onmessage = evt => console.log('MSG', window.performance.now(), evt.data);
-              //worker.port.start();
-              //Object.assign(window.global = window, { rooms: Object.create(null), worker });
-              Object.assign(window.global = window, { rooms: Object.create(null) });
+              // Note SharedWorker script cache busting takes both Above and Below hids - the Below
+              // hid is needed to ensure, e.g., that different iframes in html:multi connect to
+              // different SharedWorkers
+              // Note caching is funky for the html:worker response!
+              let worker = new SharedWorker('${uriRaw({ path: '-html:worker', cacheBust: `${hut.hid}.${src.hid}` })}');
+              worker.buffered = [];
+              global.workerReady = new Promise(rsv => {
+                worker.addEventListener('message', evt => {
+                  console.log('Got worker ACKKK', evt.data);
+                }, { once: true });
+              });
+              worker.port.start();
+              
+              worker.port.postMessage({ lmao: 'LMAO' });
+              
+              Object.assign(window.global = window, { rooms: Object.create(null), worker });
+              
               let evtSrc = EventTarget.prototype;
               Object.defineProperty(evtSrc, 'evt', { configurable: true, value: function(...args) {
                 this.addEventListener(...args);
@@ -160,19 +180,21 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
               // - Can't use window.evt since Endable isn't defined yet (clearing.js hasn't run)
               // - rooms['habitat.HtmlBrowserHabitat.hutify.foundation'] will exist because that
               //   script was deferred (it executes fully before the "DOMContentLoaded" event)
-              window.addEventListener('DOMContentLoaded', e => rooms['habitat.HtmlBrowserHabitat.hutify.foundation']().init(e));
+              window.addEventListener('DOMContentLoaded', e => {
+                rooms['habitat.HtmlBrowserHabitat.hutify.foundation']().init(e);
+              });
             </script>
             
-            ${preloadRooms.toArr(n => roomScript('async', n)).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur */ }
+            ${preloadRooms.toArr(n => roomScript('async', n)).join('\n') /* TODO: This is unindented when it shouldn't be :( ... everything else gets unindented too, but this is the wrong level for the unindentation to occur... just kinda hurts my soul */ }
 
             <link rel="stylesheet" type="text/css" href="${uri({ path: '-html:css' })}">
             
-            <script>Object.assign(global,{rawConf:JSON.parse('${valToJson({
+            <script>global.rawConf = JSON.parse('${valToJson({
               
               // This gets encoded server-side; will be decoded client-side
               hid: src.uid, ...belowConf, locus, initComm
               
-            }).replace(/[\\']/g, '\\$&') /* The JSON string is wrapped in single-quotes; escape any embedded single-quotes */ }')})</script>
+            }).replace(/[\\']/g, '\\$&') /* Escape any embedded single-quotes and backslashes (the json appears literally inside single-quotes) */ }');</script>
             
           </head>
           <body></body>
@@ -238,17 +260,47 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
         'setup.clearing',
         'setup.hut.hinterland.RoadAuthority',
         'habitat.HtmlBrowserHabitat.hutify.workerFoundation'
-      ].map(room => uri({ path: '-hut:room', query: { room }}));
+      ];
       
       reply(String.multiline(`
-        self.global = Object.assign(self, { rooms: Object.create(null) });
-        self.importScripts(${deps.map(d => `'${d}'`).join(', ')});
-        self.addEventListener('connect', conn => conn.ports.each(port => {
-          let uid = Math.random().toString(36).slice(2);
-          console.log('A new tab connected', { uid });
-          port.postMessage({ desc: 'hello new tab, i assigned you a uid', uid });
-          port.addEventListener('message', evt => console.log('A tab is messaging me', { uid, evt }));
-        }));
+        let { worker } = Object.assign(self, { global: self, worker: self, rooms: Object.create(null) });
+        
+        let shwUid = Math.random().toString(36).slice(2);
+        global.confPrm = new Promise(r => global.resolveConf = r);
+        worker.bufferedTabs = [];
+        worker.bufferedEvts = [];
+        worker.addEventListener('connect', worker.initialFn = tab => {
+          
+          worker.bufferedTabs.push(tab);
+          tab.initialFn = evt => {
+            if (evt.data?.command === 'hut:conf') global.resolveConf(evt.data.conf);
+            worker.bufferedEvts.push({ tab, evt });
+          }
+          for (let port of tab.ports) port.addEventListener('message', tab.initialFn);
+          
+          // ---------------------------------------------------------------------------
+          // The rest is pure debug
+          
+          let tabUid = Math.random().toString(36).slice(2);
+          gsc('Hi its the Worker. A new tab connected to me', { tabUid, tab });
+          
+          tab.ports.each(port => {
+            port.postMessage({ desc: 'hello new tab, i assigned u a uid as "tabUid"', shwUid, tabUid });
+            port.addEventListener('message', evt => console.log('Hi its the worker - a connected tab is messaging me', { shwUid, tabUid, evt }));
+          });
+          
+        });
+        
+        // Prevent "importScripts" from synchronously blocking adding the "connect" listener; I
+        // believe (TODO: be certain??) that the order of events will always be:
+        // 1. listen to "connect"
+        // 2. all scripts get imported
+        // 3. the "connect" event fires
+        // This is the *only* stable order of events!! The order should be good because listening
+        // for "connect" happens immediately, but there should at least be a process tick before
+        // any event is propagated to the listener; "importScripts" should resolve synchronously
+        // before that next tick is processed
+        global.importScripts(${deps.map(room => `'` + uri({ path: '-hut:room', query: { room }}) + `'`).join(', ')});
       `));
       
     });
