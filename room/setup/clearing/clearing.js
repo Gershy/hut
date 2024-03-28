@@ -824,8 +824,8 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   },
   getFormName: v => {
     if (v === null) return 'Null';
-    if (v === undefined) return 'Undefined';
-    if (v !== v) return 'UndefinedNumber';
+    if (v === undefined) return 'Undef';
+    if (v !== v) return 'UndefNum';
     return Object.getPrototypeOf(v)?.constructor.name ?? 'Prototypeless'; // e.g. `getFormName(Object.plain()) === 'Prototypeless'`
   },
   isForm: (fact, Form) => {

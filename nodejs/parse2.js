@@ -1,6 +1,7 @@
 /// <reference path="../ts/hut.d.ts" />
 'use strict';
 
+global.rooms = Object.create(null);
 require('../room/setup/clearing/clearing.js');
 require('./util/installV8ErrorStacktraceHandler.js')();
 require('./util/installTopLevelHandler.js')();
@@ -9,7 +10,7 @@ require('./util/installTopLevelHandler.js')();
 (() => {
   
   global.formatAnyValue = require('./util/formatAnyValue.js');
-  global.subconOutput = require('./util/getStdoutSubconOutputter.js')();
+  global.subconOutput = require('./util/getStdoutSubconOutputter.js')({ relevantTraceIndex: 2 });
   
 })();
 
@@ -173,10 +174,8 @@ let nestedRepeaterExperiments = () => {
         '-++--'
       ];
       
-      if (true || opts.some(v => str.has(v))) {
-        console.log(`[${a}:${b}] x [${c}:${d}]`);
-        console.log(visual);
-      }
+      if (true || opts.some(v => str.has(v)))
+        gsc(`[${a}:${b}] x [${c}:${d}]`, { visual });
       
     } else if (type === 'compare') {
       
@@ -185,9 +184,11 @@ let nestedRepeaterExperiments = () => {
       
       if (v1 !== v2) {
         
-        console.log('OW');
-        console.log(`[${a}:${b}] x [${c}:${d}]`);
-        console.log(`??: ${v1}\n!!: ${v2}\n\n`);
+        gsc(String.baseline(`
+          | OWWWW
+          | [${a}:${b}] x [${c}:${d}]
+          | ??: ${v1}\n!!: ${v2}\n\n
+        `));
         
       }
       
@@ -206,7 +207,6 @@ let lib = (() => {
   let Language = form({ name: 'Language', props: (forms, Form) => ({
     
     $resolveCfg: (term, Cls, cfg) => {
-      
       
       // `term` prefixed with "!" indicates `hasForm` instead of `isForm`
       let clsCheck = term.hasHead('!') ? hasForm : isForm;
@@ -231,35 +231,59 @@ let lib = (() => {
       
     },
     
-    nop(...cfg) { return    NopParser({ lang: this, ...cfg }); },
+    nvr(...cfg) { return  NeverParser({ lang: this, ...cfg }); },
+    yld(...cfg) { return  YieldParser({ lang: this, ...cfg }); },
     tok(...cfg) { return  TokenParser({ lang: this, ...Form.resolveCfg('token', String, cfg) }); },
     reg(...cfg) { return  RegexParser({ lang: this, ...Form.resolveCfg('regex', String, cfg) }); },
     any(...cfg) { return    AnyParser({ lang: this, ...Form.resolveCfg('opts',  Array,  cfg) }); },
     all(...cfg) { return    AllParser({ lang: this, ...Form.resolveCfg('reqs',  Array,  cfg) }); },
     rep(...cfg) { return RepeatParser({ lang: this, ...Form.resolveCfg('!kid',  Parser, cfg) }); },
     
-    fns() { return 'nop,tok,reg,any,all,rep'.split(',').toObj(v => [ v, this[v].bind(this) ]); }
+    fns() { return 'nvr,yld,tok,reg,any,all,rep'.split(',').toObj(v => [ v, this[v].bind(this) ]); }
     
   })});
   
   let Parser = form({ name: 'Parser', props: (forms, Form) => ({
     
-    init({ lang, name, ...cfg }) {
+    $cnt: 0,
+    
+    init({ lang, name, c, ...cfg }) {
       
       if (!isForm(lang, Language)) throw Error('Lang param must be a language').mod({ lang });
       if (!cfg.empty()) throw Error('Unexpected config').mod({ cfg });
       
-      Object.assign(this, { lang, name });
+      Object.assign(this, { lang, name, c: Form.cnt++ });
       
     },
     
+    // Recursive overview
     sometimesLoops(...args) { throw Error('Not implemented'); /* Note that stepping breaks loops */ },
     certainlyHalts(...args) { return !this.sometimesLoops(...args); },
     certainlySteps(...args) { throw Error('Not implemented'); },
-    
     getEstimatedComplexity() { return 1; },
-    normalize() { throw Error('Not implemented'); /* Returns an equivalent, but normalized, Parser - should not mutate anything */ },
+    * getDelegationChains(chain=[]) {
+      
+      // Yields all possible delegation chains beginning with this Parser
+      
+      // Note that a "delegation chain" implies an array of Parsers which may consume zero tokens,
+      // and ending with a Parser that either always consumes at least one token, or which has
+      // already been seen in the chain (implying that the chain is cyclical). Note that no chain
+      // will ever contain multiple instances of the same Parser, with the exception of the case
+      // where the final Parser has already appeared earlier in the chain!
+      
+      throw Error('Not implemented');
+      
+    },
+    
+    // Compound
+    getCompoundKids() { return []; },
+    
+    // Normalization
     clone(...args) { throw Error('Not implemented'); },
+    simplify() { throw Error('Not implemented'); },
+    normalize() { throw Error('Not implemented'); /* Returns an equivalent, but normalized, Parser - should not mutate anything */ },
+    
+    // Parsing
     parse(src, ...args) {
       
       // This function is the user's entrypoint; it's called once per Parser.Src and simply
@@ -284,21 +308,29 @@ let lib = (() => {
       
     },
     * run0() { throw Error('Not implemented'); },
-    * getDelegationChains(chain=[]) {
+    
+    // Observability
+    getTerm() { return getFormName(this).slice(0, 3).lower(); },
+    getVisualizeParams() { return [ `"${this.name || '<anon>'}"` ]; },
+    visualize(seen=Set()) {
       
-      // Yields all possible delegation chains beginning with this Parser
+      let d = `${this.getTerm()}(${this.getVisualizeParams().join(', ')})`;
+      let kids = this.getCompoundKids();
       
-      // Note that a "delegation chain" implies an array of Parsers which may consume zero tokens,
-      // and ending with a Parser that either always consumes at least one token, or which has
-      // already been seen in the chain (implying that the chain is cyclical). Note that no chain
-      // will ever contain multiple instances of the same Parser, with the exception of the case
-      // where the final Parser has already appeared earlier in the chain!
+      // Only need to do `seen`-checking for Parsers with Kids
+      if (kids.length) {
+        if (seen.has(this)) return `cyc [ ${d} ]`;
+        seen.add(this);
+      }
       
-      throw Error('Not implemented');
+      if (kids.length) d += '\n' + kids
+        .map(kid => kid.visualize(seen))
+        .map(desc => { let [ ln0, ...lns ] = desc.split('\n'); return [ `- ${ln0}`, ...lns.map(ln => `  ${ln}`) ].join('\n'); })
+        .join('\n');
+      
+      return d;
       
     },
-    getTerm() { return getFormName(this).slice(0, 3).lower(); },
-    visualize(seen=Set()) { throw Error('not implemented'); },
     
     $Src: form({ name: 'Src', props: (forms, Form) => ({
       init({ str }) {
@@ -340,15 +372,32 @@ let lib = (() => {
     
   })});
   
-  let NopParser = form({ name: 'NopParser', has: { Parser }, props: (forms, Form) => ({
+  let TrivialParser = form({ name: 'TrivialParser', has: { Parser }, props: (forms, Form) => ({
     
     init(cfg) { forms.Parser.init.call(this, cfg); },
     
+    // TrivialParsers neither step or loop
     sometimesLoops() { return false; },
-    certainlySteps() { return false; }, // In fact, a NopParser *never* steps (nor does it loop)
-    
+    certainlySteps() { return false; },
     * getDelegationChains(chain=[]) { yield [ ...chain, this ]; },
-    desc() { return this.name || 'Nop'; }
+    
+    simplify() { return this; },
+    
+    clone(...args) { return this; },
+    simplify() { return this; },
+    
+  })});
+  
+  let NeverParser = form({ name: 'NeverParser', has: { TrivialParser }, props: (forms, Form) => ({
+    
+    * run0() {},
+    desc() { return this.name || 'never()'; }
+    
+  })});
+  let YieldParser = form({ name: 'YieldParser', has: { TrivialParser }, props: (forms, Form) => ({
+    
+    * run0() { yield ''; },
+    desc() { return this.name || 'yield()'; }
     
   })});
   
@@ -362,10 +411,14 @@ let lib = (() => {
       Object.assign(this, { sgs });
       
     },
-    clone(...args) { return this; },
+    
+    sometimesLoops() { return false; },
+    
     * getDelegationChains(chain=[]) { yield [ ...chain, this ]; }, // ImmediateParsers don't delegate (could also call them "Terminal" parsers, or "Leaf" parsers)
-    normalize() { return this; },
-    visualize() { return this.desc(); }
+    
+    clone(...args) { return this; },
+    simplify() { return this; },
+    normalize() { return this; }
     
   })});
   let TokenParser = form({ name: 'TokenParser', has: { ImmediateParser }, props: (forms, Form) => ({
@@ -380,12 +433,14 @@ let lib = (() => {
       
     },
     
-    sometimesLoops() { return false; },
     certainlySteps() { return true; },
+    
     * run0(src) {
       if (src.str.hasHead(this.token)) yield Parser.Trg({ prs: this, str: this.token });
     },
-    desc() { return this.name || `Tok(${this.token})`; }
+    
+    desc() { return this.name || `tok(${this.token})`; },
+    getVisualizeParams() { return [ ...forms.ImmediateParser.getVisualizeParams.call(this), this.token ]; }
     
   })});
   let RegexParser = form({ name: 'RegexParser', has: { ImmediateParser }, props: (forms, Form) => ({
@@ -403,19 +458,24 @@ let lib = (() => {
       
     },
     
-    sometimesLoops() { return false; },
     certainlySteps() { return !this.z; }, // Steps if non-zeroable (`this.z`)
+    
     * run0(input) {
       let [ match ] = input.str.match(this.regex) ?? [];
       if (match) yield Parser.Trg({ prs: this, str: match });
     },
-    desc() {
-      return this.name || `Reg('${this.regex.toString().slice(3, -2)}')`; // Slice off "/^(" at the front and ")/" at the end (note: could be unexpected if user supplied e.g. "^abc" without brackets)
+    
+    desc() { return this.name || `reg('${this.regex.toString().slice(3, -2)}')`; },
+    getVisualizeParams() {
+      return [
+        ...forms.ImmediateParser.getVisualizeParams.call(this),
+        this.regex.toString().slice(3, -2) // Slice off "/^(" at the front and ")/" at the end (note: could be unexpected if user supplied e.g. "^abc", without brackets)
+      ];
     }
     
   })});
   
-  let DelegatingParser = form({ name: 'DelegatingParser', has: { Parser }, props: (forms, Form) => ({
+  let CompoundParser = form({ name: 'CompoundParser', has: { Parser }, props: (forms, Form) => ({
     
     getDelegates() { throw Error('Not implemented'); },
     * getDelegationChains(chain=[]) {
@@ -426,10 +486,19 @@ let lib = (() => {
       for (let dlg of this.getDelegates()) yield* dlg.getDelegationChains(dlgChain);
       
     },
-    desc(seen=Set()) {
-      if (seen.has(this)) return `<cyc ${this.name || this.getTerm()}>`;
-      seen.add(this);
-      return this.name || `${this.getTerm()}(${this.getDelegates().map(d => d.desc(seen)).join(', ') || '<empty>'})`;
+    
+    simplify(seen=Set()) {
+      
+      // This method will deal with directly-nested Parsers only (limited recursivity)
+      // Mutates and returns `this`
+      
+      // - Nested Anys can be flattened into a single Any
+      // - Nested Alls can be flattened into a single All
+      // - Nested Reps can be flattened into a single Rep, whose minReps/maxReps are a
+      //   multiplication of the nested Reps' values
+      
+      throw Error('Not implemented');
+      
     },
     normalize() {
       
@@ -440,7 +509,7 @@ let lib = (() => {
         // Find next LR chain...
         for (let chain of delegatingParser.getDelegationChains()) {
           
-          if (chain.length < 2) throw Error('Whoa... chain is too short??').mod({ chain });
+          if (chain.length < 2) throw Error('Whoa... chain is too short?? NAHHH').mod({ chain });
           
           let lastInd = chain.length - 1;
           let last = chain.at(-1);
@@ -452,31 +521,12 @@ let lib = (() => {
         return null; // No LR chain found
         
       };
-      let traverse = (parser, fn, par=null, seen=Set()) => {
-        
-        if (seen.has(parser)) return;
-        seen.add(parser);
-        
-        // Allow consumer to process this `par` and `parser`
-        let proceed = fn(parser, par);
-        if (!isForm(proceed, Boolean)) throw Error('Traverse function returned non-boolean').mod({ fn: fn.toString() });
-        if (!proceed) return;
-        
-        if (!hasForm(parser, DelegatingParser)) return;
-        
-        // Traverse based on the type of DelegatingParser
-        let name = parser.getTerm();
-        if (name === 'any')               for (let opt of parser.opts) traverse(opt, fn, parser, seen);
-        if (name === 'all')               for (let req of parser.reqs) traverse(req, fn, parser, seen);
-        if (name === 'rep' && parser.kid)                              traverse(parser.kid, fn, parser, seen);
-        
-      };
       
       while (true) { // Loop until all LR chains are refactored
         
         /*
           LR chain detected
-          Note that `chain` now only consists of `DelegatingParser`s - if it didn't, it couldn't
+          Note that `chain` now only consists of `CompoundParser`s - if it didn't, it couldn't
           have a cycle of delegations
           
           Note that `chain` is conceptually cyclical (`chain.at(0)` is adjacent to `chain.at(-1)`)
@@ -513,16 +563,13 @@ let lib = (() => {
           single Any. The last issue is to address towers of nested Reps; this feels like a number
           theory problem and is possibly(??) very difficult to compute for large towers of Reps.
           I will probably take a shortcut here and assume that a stack of Reps can be resolved to
-          a single Rep with:
-             | {
-             |   minReps: arr.map(rep => rep.minReps).reduce((m, v) => m * v, 1), // Account for Infinities (zero outprioritizes Infinity here!)
-             |   maxReps: arr.map(rep => rep.maxReps).reduce((m, v) => m * v, 1), // Account for Infinities (zero outprioritizes Infinity here!)
-             | }
-          but note that the range of possible repetitions is often not contiguous, and computing
-          it exactly is probably very hard or at least inefficient.
+          a single Rep whose `minReps` and `maxReps` are the multiplications of the corresponding
+          values of all stacked Reps; this is an approximation and may allow for certain repetition
+          amounts which would ordinarily be impossible; the exact range of possible repetitions is
+          often not contiguous, and computing it is probably very hard or at least inefficient.
         */
         
-        let lrChain = getNextLrChain(mut);
+        let lrChain = getNextLrChain(mut)?.slice(0, -1); // Slice off the final looping item; `lrChain` contains unique items!
         if (!lrChain) break; // No more LR chains!
         
         // We need to break `lrChain`. Whether or not `lrChain` contains an All determines the
@@ -537,24 +584,29 @@ let lib = (() => {
           // version of `mutable` with cycles broken.
           
           // Add all Opts of all Anys to a single flattened Any! (Exclude Opts which happen to be
-          // part of the current LR cycle!) TODO: O(n^2); `lrChains.has(...)` is O(n) - improve!
+          // part of the current LR cycle!) TODO: O(n^2); `lrItems.has(...)` is O(n) - improve!
           let flatOpts = anys.map(any => any.opts).flat(1).filter(opt => !lrChain.has(opt));
-          let normalized = AnyParser({ lang: mut.lang, name: `flatAny(${anys.toArr(any => any.name).join(' + ')})`, opts: flatOpts });
+          let flatAny = AnyParser({ lang: mut.lang, name: `flatAny(${anys.toArr(any => any.name).join(' + ')})`, opts: flatOpts });
           
-          // Resolves to either `any([ ...flattenedOpts ])`, or `rep(any([ ...flattenedOpts ]))`
-          if (reps.length)
-            normalized = RepeatParser({
-              lang: mut.lang,
-              name: `flatRep(${reps.toArr(any => any.name).join(' + ')})`,
-              minReps: reps.map(rep => rep.minReps).reduce((m, v) => m * v, 1), // Can't be `0 * Infinity` as `minReps` is never `Infinity`
-              maxReps: reps.map(rep => rep.maxReps).reduce((m, v) => m * v, 1), // Can't be `0 * Infinity` as `maxReps` is never `0`
-              kid: normalized // `flattenedAny` from above
-            });
+          // Resolves to either `any([ ...flatOpts ])`, or `rep(any([ ...flatOpts ]))`
+          let normalized = reps.empty() ? flatAny : RepeatParser({
+            lang: mut.lang,
+            name: `flatRep(${reps.toArr(any => any.name).join(' + ')})`,
+            // TODO: The true set of "rep" possibilies may be not be a contiguous range! This is
+            // explored in the `nestedRepeaterExperiments` function, and on SE here:
+            // https://stackoverflow.com/questions/78008791
+            minReps: reps.map(rep => rep.minReps).reduce((m, v) => m * v, 1), // Can't be `0 * Infinity` as `minReps` is never `Infinity`
+            maxReps: reps.map(rep => rep.maxReps).reduce((m, v) => m * v, 1), // Can't be `0 * Infinity` as `maxReps` is never `0`
+            kid: flatAny // `flatAny` from above
+          });
           
           if (anys.has(this)) {
             
-            // Literally the whole Parser being normalized is resolved to `normRoot`
-            return normRoot; // `mut` is completely irrelevant!
+            // Literally the whole Parser being normalized is resolved to `normRoot` at once; note
+            // here we don't even need to do `mut = normRoot`; we can immediately return `normRoot`
+            // as it is guaranteed to be entirely LR-free! (The reason to set `mut = normRoot` is
+            // to continue to check `mut` for any additional LR)
+            return normRoot;
             
           } else {
             
@@ -562,7 +614,7 @@ let lib = (() => {
             // Parser reachable from `mutable`, and whenever we find one of the Anys that was
             // flattened, we replace it with `normRoot`!
             
-            let op = (node, seen=Set()) => {
+            let replaceLrItemsOp = (node, seen=Set()) => {
               
               if (seen.has(node)) return; seen.add(node);
               
@@ -577,7 +629,7 @@ let lib = (() => {
                   if (optsLrRemoved.length < node.opts.length)
                     node.opts = [ ...optsLrRemoved, normalized ]; // TODO: Optimize Opt ordering later? (AnyParser.prototype.optimizeOptOrder?)
                   
-                  for (let opt of optsLrRemoved) op(opt, seen);
+                  for (let opt of optsLrRemoved) replaceLrItemsOp(opt, seen);
                   return;
                   
                 case 'all':
@@ -585,13 +637,13 @@ let lib = (() => {
                   // Each Req which is part of the LR chain must be replaced with `normalized`
                   node.reqs = node.reqs.map(req => lrChain.has(req) ? normalized : req);
                   
-                  for (let req of node.reqs) if (req !== normalized) op(req, seen);
+                  for (let req of node.reqs) if (req !== normalized) replaceLrItemsOp(req, seen);
                   return;
                   
                 case 'rep':
                   
                   if (lrChain.has(node.kid)) node.kid = normalized;
-                  else                       op(node.kid, seen);
+                  else                       replaceLrItemsOp(node.kid, seen);
                   return;
                   
                 default: /* ignore anything else */ return;
@@ -599,15 +651,35 @@ let lib = (() => {
               }
               
             };
-            op(mut);
-            
-            return mut;
+            replaceLrItemsOp(mut);
             
           }
           
         } else {
           
-          // There's at least one `AllParser` in the chain; this is the tricky part!
+          // There's at least one `AllParser` in the chain; this is the tricky part! We're going to
+          // break the LR chain at the All; consider the chain A -> B -> C -> D -> A; first we'll
+          // rotate the chain so that D is always an AllParser; we'll then sever its link to A.
+          
+          // Some "ParentParser" `P` delegates to the cycle-closing All, `A`, which then delegates
+          // directly loops ("loops", in the strong sense) to `P`. The strategy prevents `A`
+          // delegating back to `P`, and we need to keep in mind that this topology is always
+          // equivalent to one where any non-looping delegate of `P` first parses, and then `A`,
+          // minus its loop-back, may parse any number of times. To get an overall sense of the
+          // approach, look at the `mathLr` and `mathNorm` examples which directly define
+          // equivalent parsers, but the natural definition contains LR while `mathNorm` does not.
+          
+          // Two important questions:
+          // 1. Which parent of the offending All should get refactored? (Answer: the All's Req!)
+          // 2. What about Alls with multiple Delegates?
+          
+          let allToNormalize = alls[0];
+          let allInd = lrChain.indexOf(allToNormalize);
+          let req = lrChain[(allInd + 1) % lrChain.length];
+          
+          gsc('LR', lrChain);
+          
+          return mut;
           
         }
         
@@ -615,22 +687,38 @@ let lib = (() => {
       
       return mut;
       
-    }
+    },
+    
+    getVisualizeArgs() { return ''; },
+    desc(seen=Set()) {
+      if (seen.has(this)) return `<cyc:${this.name || this.getTerm()}>`;
+      seen.add(this);
+      
+      let visArgs = this.getVisualizeArgs();
+      let visKids = this.getCompoundKids().map(d => d.desc(seen)).join(', ') || '<empty>';
+      let visStr = visArgs ? `${visArgs} ${visKids}` : visKids;
+      
+      return this.name || `${this.getTerm()}(${visStr})`;
+    },
     
   })});
-  let AnyParser = form({ name: 'AnyParser', has: { DelegatingParser }, props: (forms, Form) => ({
+  let AnyParser = form({ name: 'AnyParser', has: { CompoundParser }, props: (forms, Form) => ({
     
     init({ opts=[], ...cfg }) {
       
       if (!isForm(opts, Array)) throw Error('Opts param must be array').mod({ opts });
       if (opts.some(v => !hasForm(v, Parser))) throw Error('Opts array must only contains parsers').mod({ opts });
       
-      forms.DelegatingParser.init.call(this, cfg);
+      forms.CompoundParser.init.call(this, cfg);
       Object.assign(this, { opts });
       
     },
     
+    // Compound
+    getCompoundKids() { return this.opts; },
     addOpt(opt) { this.opts.push(opt); return { all: this, opt }; },
+    
+    // Recursive overview
     sometimesLoops(seen=Set()) {
       
       // An AnyParser is able to loop if any of its delegates can loop or it eventually delegates
@@ -656,6 +744,35 @@ let lib = (() => {
       
     },
     getDelegates() { return [ ...this.opts ]; },
+    
+    // Normalization
+    simplify(seen=Set()) {
+      
+      if (seen.has(this)) return this;
+      seen.add(this);
+      
+      let gatherDirectlyNestedOpts = function*(any, seenAnys=Set()) {
+        
+        if (seenAnys.has(any)) return;
+        seenAnys.add(any);
+        
+        for (let opt of any.opts) {
+          if (isForm(opt, AnyParser)) yield* gatherDirectlyNestedOpts(opt, seenAnys);
+          else                        yield opt;
+        }
+        
+      };
+      
+      // Simplify all Opts
+      this.opts = gatherDirectlyNestedOpts(this).toArr(opt => opt.simplify(seen));
+      
+      // Factor out irrelevant AnyParser
+      if (this.opts.length === 0) return NeverParser({ lang: this.lang }); // An Any without Opts never parses
+      if (this.opts.length === 1) return (this === this.opts[0]) ? Error('Trivial loop').propagate() : this.opts[0];
+      
+      return this;
+      
+    },
     clone(map=Map()) {
       
       if (map.has(this)) return map.get(this);
@@ -668,41 +785,28 @@ let lib = (() => {
       return any;
       
     },
-    * run0(input) {
-      
-      for (let opt of this.opts) yield* opt.run(input);
-      
-    },
-    visualize(seen=Set()) {
-      
-      let d = `Any "${this.name || '<anon>'}"`;
-      
-      if (seen.has(this)) return `Cyc: ${d}`;
-      seen.add(this);
-      
-      if (this.opts.length) d += '\n' + this.opts
-        .map(opt => opt.visualize(seen))
-        .map(desc => { let [ ln0, ...lns ] = desc.split('\n'); return [ `- ${ln0}`, ...lns.map(ln => `  ${ln}`) ].join('\n'); })
-        .join('\n');
-      
-      return d;
-      
-    }
+    
+    // Parsing
+    * run0(input) { for (let opt of this.opts) yield* opt.run(input); },
     
   })});
-  let AllParser = form({ name: 'AllParser', has: { DelegatingParser }, props: (forms, Form) => ({
+  let AllParser = form({ name: 'AllParser', has: { CompoundParser }, props: (forms, Form) => ({
     
     init({ reqs=[], ...cfg }) {
       
       if (!isForm(reqs, Array)) throw Error('Reqs param must be array').mod({ reqs });
       if (reqs.some(v => !hasForm(v, Parser))) throw Error('Reqs array must only contains parsers').mod({ reqs });
       
-      forms.DelegatingParser.init.call(this, cfg);
+      forms.CompoundParser.init.call(this, cfg);
       Object.assign(this, { reqs });
       
     },
     
+    // Compound
+    getCompoundKids() { return this.reqs; },
     addReq(req) { this.reqs.push(req); return { all: this, req }; },
+    
+    // Recursive overview
     sometimesLoops(seen=Set()) {
       
       // An AllParser delegates to all its Reqs in order, so it loops if a Req loops *before* any
@@ -771,6 +875,8 @@ let lib = (() => {
       return ret;
       
     },
+    
+    // Normalization
     clone(map=Map()) {
       
       if (map.has(this)) return map.get(this);
@@ -783,6 +889,50 @@ let lib = (() => {
       return all;
       
     },
+    simplify(seen=Set()) {
+      
+      // TODO: HEEERE look at that output :( this is tricky!
+      
+      console.log('SIMPLIFY', seen.has(this), this.desc());
+      
+      if (seen.has(this)) return this;
+      seen.add(this);
+      
+      let gatherDirectlyNestedReqs = function*(all, seenAlls=Set()) {
+        
+        if (seenAlls.has(all)) return;
+        seenAlls.add(all);
+        
+        for (let req of all.reqs) {
+          if (isForm(req, AllParser)) yield* gatherDirectlyNestedReqs(req, seenAlls);
+          else                        yield req;
+        }
+        
+      };
+      
+      // Simplify all Reqs
+      this.reqs = gatherDirectlyNestedReqs(this).toArr(req => req.simplify(seen));
+      
+      // Note the existence of "intractable" loops which are trivial, but can't be determined to
+      // either Yield or Return:
+      //    | let any0 = any([]);
+      //    | let all0 = all([]);
+      //    | any0.addOpt(all0);
+      //    | all0.addReq(any0);
+      // This can always (?) be detected by checking, after recursively simplifying, whether:
+      //    | this.reqs.length === 1 && this.reqs[0] === this
+      // Any inner Parsers will have already been simplified; if it was an All or Any with only one
+      // Kid, that Kid will be returned in place of the All/Any; if the tight loop exists, the Kid
+      // will be `this`!
+      
+      // Factor out irrelevant AllParser
+      if (this.reqs.length === 0) return YieldParser({ lang: this.lang }); // An All without Reqs yields immediately
+      if (this.reqs.length === 1) return (this === this.reqs[0]) ? Error('Trivial loop').propagate() : this.reqs[0];
+      return this;
+      
+    },
+    
+    // Parsing
     * run0(src) {
       
       let { reqs } = this;
@@ -801,40 +951,34 @@ let lib = (() => {
       for (let reqTrgs of allTrgChains(src)) yield Parser.Trg({ prs: this, trgs: reqTrgs });
       
     },
-    visualize(seen=Set()) {
-      
-      let d = `All "${this.name || '<anon>'}"`;
-      
-      if (seen.has(this)) return `Cyc: ${d}`;
-      seen.add(this);
-      
-      if (this.reqs.length) d += '\n' + this.reqs
-        .map(req => req.visualize(seen))
-        .map(desc => { let [ ln0, ...lns ] = desc.split('\n'); return [ `- ${ln0}`, ...lns.map(ln => `  ${ln}`) ].join('\n'); })
-        .join('\n');
-      
-      return d;
-      
-    }
     
   })});
-  let RepeatParser = form({ name: 'RepeatParser', has: { DelegatingParser }, props: (forms, Form) => ({
+  let RepeatParser = form({ name: 'RepeatParser', has: { CompoundParser }, props: (forms, Form) => ({
     
     init({ kid, minReps=0, maxReps=Infinity, ...cfg }) {
       
-      if (!hasForm(kid, Parser))    throw Error('Kid param must be parser').mod({ kid });
-      if (!isForm(minReps, Number)) throw Error('Min-reps param must be number').mod({ minReps });
-      if (minReps >= Inf) throw Error('Min-reps param must be number').mod({ minReps });
-      if (!isForm(maxReps, Number)) throw Error('Max-reps param must be number').mod({ maxReps });
-      if (maxReps < 1)              throw Error('Max-reps param must be >= 1').mod({ maxReps });
-      if (maxReps < minReps)        throw Error('Max-reps param must be greater than min-reps').mod({ minReps, maxReps });
+      kid = kid || NeverParser({ lang: cfg.lang }); // Anything falsy resolves to `null`
       
-      forms.DelegatingParser.init.call(this, cfg);
+      for (let [ numName, num ] of { minReps, maxReps }) {
+        if (!isForm(num, Number)) throw Error(`${numName} param must be number`).mod({ [numName]: num });
+        if (num < 0)              throw Error(`${numName} param must be >= 0`).mod({ [numName]: num });
+      }
+      
+      if (kid && !hasForm(kid, Parser)) throw Error('Kid param must be parser').mod({ kid });
+      if (minReps >= Infinity)          throw Error('Min-reps param must be number').mod({ minReps });
+      if (maxReps < 1)                  throw Error('Max-reps param must be >= 1').mod({ maxReps });
+      if (maxReps < minReps)            throw Error('Max-reps param must be greater than min-reps').mod({ minReps, maxReps });
+      
+      forms.CompoundParser.init.call(this, cfg);
       Object.assign(this, { kid, minReps, maxReps });
       
     },
     
+    // Compound
+    getCompoundKids() { return this.kid ? [ this.kid ] : []; },
     setKid(kid) { this.kid = kid; return { rep: this, kid }; },
+    
+    // Recursive overview
     sometimesLoops(seen=Set()) {
       
       if (seen.has(this)) return true;
@@ -855,6 +999,8 @@ let lib = (() => {
       
     },
     getDelegates() { return this.kid ? [ this.kid ] : []; },
+    
+    // Normalization
     clone(map=Map()) {
       
       if (map.has(this)) return map.get(this);
@@ -867,6 +1013,33 @@ let lib = (() => {
       return rep;
       
     },
+    simplify(seen=Set()) {
+      
+      if (seen.has(this)) return this;
+      seen.add(this);
+      
+      let [ minReps, maxReps ] = [ 1, 1 ];
+      
+      let toFirstNonRepKid = this; // The "to" language implies it "resolves to" (the first non-RepeatParser Kid)
+      while (isForm(toFirstNonRepKid, RepeatParser)) {
+        minReps *= toFirstNonRepKid.minReps;
+        maxReps *= toFirstNonRepKid.maxReps;
+        toFirstNonRepKid = toFirstNonRepKid.kid;
+      }
+      
+      Object.assign(this, { minReps, maxReps, kid: toFirstNonRepKid.simplify(seen) });
+      
+      // Factor out irrelevant RepeatParser (where minReps = maxReps = 1)
+      if (this.maxReps === 1 && this.minReps === 1)
+        return (this === this.kid)
+          ? Error('Trivial loop').propagate()
+          : this.kid;
+      
+      return this;
+      
+    },
+    
+    // Parsing
     * run0(src) {
       
       let { minReps, maxReps, kid } = this;
@@ -889,20 +1062,18 @@ let lib = (() => {
       for (let kidTrgs of allTrgChains(src)) yield Form.Trg({ prs: this, trgs: kidTrgs });
       
     },
-    visualize(seen=Set()) {
-      
-      let d = `Rep(${this.name || '<anon>'})`;
-      
-      if (seen.has(this)) return `Cyc: ${d}`;
-      seen.add(this);
-      
-      if (this.kid) d += '\n' + [ this.kid ]
-        .map(req => req.visualize(seen))
-        .map(desc => { let [ ln0, ...lns ] = desc.split('\n'); return [ `- ${ln0}`, ...lns.map(ln => `  ${ln}`) ].join('\n'); })
-        .join('\n');
-      
-      return d;
-      
+    
+    // Observability
+    getVisualizeArgs() {
+      let [ min, max ] = [ this.minReps, this.maxReps ].map(v => v === Infinity ? 'inf' : v.toString());
+      return `[${min}:${max}]`;
+    },
+    getVisualizeParams() {
+      return [
+        ...forms.CompoundParser.getVisualizeParams.call(this),
+        `min=${this.minReps}`,
+        `max=${this.maxReps}`
+      ];
     }
     
   })});
@@ -916,10 +1087,261 @@ let lib = (() => {
   /** @type HutNodejsParse.LanguageForm */
   let Language = lib.Language;
   
+  // Simplification tests
+  (() => {
+    
+    let simplifyTests = [
+      { name: 'simple Anys',
+        genParser: () => Language({ name: 'test' }).any([]),
+        expected: 'never()'
+      },
+      { name: 'nested Anys 2x',
+        genParser: () => {
+          let lang = Language({ name: 'test' });
+          let any1 = lang.any([]);
+          let any2 = any1.addOpt(lang.any([])).opt;
+          any2.addOpt(lang.tok('a'));
+          return any1;
+        },
+        expected: 'tok(a)'
+      },
+      { name: 'nested Anys 3x',
+        genParser: () => {
+          let lang = Language({ name: 'test' });
+          let any1 = lang.any([]);
+          let any2 = any1.addOpt(lang.any([])).opt;
+          let any3 = any2.addOpt(lang.any([])).opt;
+          any3.addOpt(lang.tok('a'));
+          return any1;
+        },
+        expected: 'tok(a)'
+      },
+      { name: 'nested Anys 3x, multiple opts as siblings',
+        genParser: () => {
+          let lang = Language({ name: 'test' });
+          let any1 = lang.any([]);
+          let any2 = any1.addOpt(lang.any([])).opt;
+          let any3 = any2.addOpt(lang.any([])).opt;
+          any3.addOpt(lang.tok('a'));
+          any3.addOpt(lang.reg('[c-e]'));
+          return any1;
+        },
+        expected: `any(tok(a),reg('[c-e]'))`
+      },
+      { name: 'nested Anys 4x, multiple opts at different levels',
+        genParser: () => {
+          let lang = Language({ name: 'test' });
+          
+          let any1 = lang.any([]);
+          any1.addOpt(lang.tok('a'));
+          
+          let any2 = any1.addOpt(lang.any([])).opt;
+          
+          let any3 = any2.addOpt(lang.any([])).opt;
+          any3.addOpt(lang.tok('b'));
+          any3.addOpt(lang.tok('c'));
+          
+          let any4 = any3.addOpt(lang.any([])).opt;
+          any4.addOpt(lang.tok('d'));
+          
+          return any1;
+        },
+        expected: `any(tok(a),tok(b),tok(c),tok(d))`
+      },
+      { name: 'nested Anys 4x and looping, multiple opts at different levels',
+        genParser: () => {
+          let lang = Language({ name: 'test' });
+          
+          let any1 = lang.any([]);
+          any1.addOpt(lang.tok('a'));
+          
+          let any2 = any1.addOpt(lang.any([])).opt;
+          
+          let any3 = any2.addOpt(lang.any([])).opt;
+          any3.addOpt(lang.tok('b'));
+          any3.addOpt(lang.tok('c'));
+          
+          let any4 = any3.addOpt(lang.any([])).opt;
+          any4.addOpt(lang.tok('d'));
+          
+          // VERY cyclical!
+          for (let anyA of [ any1, any2, any3, any4 ])
+            for (let anyB of [ any1, any2, any3, any4 ])
+              anyA.addOpt(anyB);
+          
+          return any1;
+        },
+        expected: `any(tok(a),tok(b),tok(c),tok(d))`
+      },
+      
+      { name: 'simple All',
+        genParser: () => Language({ name: 'test' }).all([]),
+        expected: 'yield()'
+      },
+      { name: 'nested Alls 2x',
+        genParser: () => {
+          let lang = Language({ name: 'test' });
+          let all1 = lang.all([]);
+          let all2 = all1.addReq(lang.all([])).req;
+          all2.addReq(lang.tok('a'));
+          return all1;
+        },
+        expected: 'tok(a)'
+      },
+      { name: 'nested Alls 3x',
+        genParser: () => {
+          let lang = Language({ name: 'test' });
+          
+          let all1 = lang.all([]);
+          all1.addReq(lang.tok('a'));
+          
+          let all2 = all1.addReq(lang.all([])).req;
+          all2.addReq(lang.tok('b'));
+          
+          let all3 = all2.addReq(lang.all([])).req;
+          all3.addReq(lang.tok('c'));
+          
+          return all1;
+        },
+        expected: 'all(tok(a),tok(b),tok(c))'
+      },
+      { name: 'nested Alls looping',
+        genParser: () => {
+          let lang = Language({ name: 'test' });
+          let all1 = lang.all([]);
+          let all2 = all1.addReq(lang.all([])).req;
+          let all3 = all2.addReq(lang.all([])).req;
+          all3.addReq(all1);
+          return all1;
+        },
+        expected: Error('AllParsers nest each other')
+      },
+      
+      { name: 'simple Rep',
+        genParser: () => Language({ name: 'test' }).rep({}),
+        expected: 'rep([0:inf]never())'
+      },
+      { name: 'nested Reps 2x',
+        genParser: () => {
+          let { rep, tok } = Language({ name: 'test' }).fns();
+          let rep1 = rep({ minReps: 1, maxReps: 2 });
+          let rep2 = rep1.setKid(rep({ minReps: 2, maxReps: 3 })).kid
+          rep2.setKid(tok('a'));
+          return rep1;
+        },
+        expected: 'rep([2:6]tok(a))'
+      },
+      
+      { name: 'trivial loop 1',
+        genParser: () => {
+          
+          let { any, all, rep, tok } = Language({ name: 'test' }).fns();
+          
+          // let any1 = any([]);
+          // any1.addOpt(tok('a'));
+          // let all1 = any1.addOpt(all([])).opt;
+          // let all2 = all1.addReq(all([])).req;
+          // let any2 = all2.addReq(any([])).req;
+          // any2.addOpt(any1);
+          
+          //let all1 = all([]);
+          //let all2 = all1.addReq(all([])).req;
+          //let any2 = all2.addReq(any([])).req;
+          //let any1 = any2.addOpt(any([])).opt;
+          //any1.addOpt(tok('a'));
+          //any1.addOpt(all1);
+          
+          let anyy = any([]);
+          let alll = all([]);
+          
+          anyy.addOpt(alll);
+          alll.addReq(anyy);
+          
+          return anyy;
+          
+        },
+        expected: Error('Trivial loop')
+      },
+      { name: 'trivial loop 1',
+        genParser: () => {
+          
+          let { any, all, rep, tok } = Language({ name: 'test' }).fns();
+          
+          let any1 = any([]);
+          let any2 = any([]);
+          let all1 = all([]);
+          let all2 = all([]);
+          
+          any1.addOpt(all1);
+          all1.addReq(any2);
+          any2.addOpt(all2);
+          all2.addReq(any1);
+          
+          return any1;
+          
+        },
+        expected: Error('Trivial loop')
+      },
+      
+      { name: 'mixed 1',
+        genParser: () => {
+          
+          let { any, all, rep, tok } = Language({ name: 'test' }).fns();
+          
+          let any1 = any([]);
+          let all1 = any1.addOpt(all([])).opt;
+          let all2 = all1.addReq(all([])).req;
+          let any2 = all2.addReq(any([])).req;
+          any2.addOpt(any1);
+          any2.addOpt(tok('a'));
+          
+          return any1;
+          
+        },
+        expected: ''
+      }
+    ];
+    
+    for (let { name, genParser, expected } of simplifyTests) {
+      
+      if (name !== 'mixed 1') continue;
+      
+      if (hasForm(expected, Error)) {
+        
+        let gotError = true;
+        try { genParser().simplify(); gotError = false; } catch (err) {
+          
+          if (!err.message.includes(expected.message))
+            throw Error('Test failed as expected, but with unexpected error').mod({
+              name, received: err.message, expected: expected.message
+            });
+          
+        }
+        
+        if (!gotError) throw Error('Test was expected to fail, but it passed').mod({
+          name, received: '<success>', expected: expected.message
+        });
+        
+      } else {
+        
+        let parser = genParser();
+        let received = parser.simplify().desc().replaceAll(' ', '');
+        if (received !== expected) throw Error('Test succeeded as expected but with wrong result').mod({ name, received, expected });;
+        
+      }
+      
+    }
+    
+    gsc('Simplification tests passed');
+    
+  })();
+  
+  return;
+  
   let toy = () => {
     
     let lang = Language({ name: 'toy' });
-    let { nop, tok, reg, all, any, rep } = lang.fns();
+    let { yld, nvr, tok, reg, all, any, rep } = lang.fns();
     
     let main = any([]);
     main.addOpt(tok('str', 'ab-'));
@@ -933,7 +1355,7 @@ let lib = (() => {
   let anyLr = () => {
     
     let lang = Language({ name: 'toy' });
-    let { nop, tok, reg, all, any, rep } = lang.fns();
+    let { yld, nvr, tok, reg, all, any, rep } = lang.fns();
     
     let any1 = any('one', []);
     let any2 = any('two', []);
@@ -948,6 +1370,7 @@ let lib = (() => {
     
     any3.addOpt(any2);
     any3.addOpt(any3);
+    any3.addOpt(rep(any1));
     
     any1.addOpt(tok('x'));
     any2.addOpt(tok('y'));
@@ -956,17 +1379,16 @@ let lib = (() => {
     gsc('BEFORE', any1.visualize());
     
     let norm = any1.normalize();
-    gsc('AFTER (norm)', norm.visualize());
+    gsc('NORM:', norm.visualize());
     
-    //gsc('POST-NORM PARSE:');
-    //gsc(norm.parse('xzyz'));
+    gsc(norm.parse('xzyz'));
     
   };
   
   let mathLr = () => {
     
     let lang = Language({ name: 'math' });
-    let { nop, tok, reg, all, any, rep } = lang.fns();
+    let { yld, nvr, tok, reg, all, any, rep } = lang.fns();
     
     let num = any([]);
     num.addOpt(reg('num', '[1-9][0-9]*'));
@@ -974,16 +1396,209 @@ let lib = (() => {
     num.addOpt(all('add', [ num, tok('+'), num ]));
     num.addOpt(all('sub', [ num, tok('-'), num ]));
     
-    gsc('NORM', num.normalize());
+    return num;
+    
+    //gsc('ORIG', num.visualize());
+    
+    //num = num.normalize();
+    
+    //gsc('NORM', num.visualize());
     
     //gsc('PARSE', num.normalize().parse('1+10+12'));
+    
+  };
+  
+  let mathNorm = () => {
+    
+    let lang = Language({ name: 'math' });
+    let { yld, tok, reg, all, any, rep } = lang.fns();
+    
+    let normStep = any([]);
+    let normLoop = any([ yld() ]);
+    let norm = all([ normStep, normLoop ]);
+    
+    normStep.addOpt(reg('num', '[1-9][0-9]*'));
+    normStep.addOpt(all('brk', [ tok('('), norm, tok(')') ]));
+    
+    normLoop.addOpt(all('add', [ /* first value NORMALIZED AWAY */ tok('+'), norm ]));
+    normLoop.addOpt(all('sub', [ /* first value NORMALIZED AWAY */ tok('-'), norm ]));
+    
+    let parsed = norm.parse('1-1-1-1-1');
+    gsc('STRUCTURE', parsed);
+    gsc(`Parsed: "${parsed.str}"`);
+    
+  };
+  
+  let trickyLr = () => {
+    
+    let lang = Language({ name: 'math' });
+    let { yld, tok, reg, all, any, rep } = lang.fns();
+    
+    let obj = any([]);
+    obj.addOpt(tok('a'));
+    obj.addOpt(tok('b'));
+    
+    let val = any([]);
+    val.addOpt(obj);
+    val.addOpt(all([ tok('<'), val, tok('>') ]));
+    val.addOpt(all([ val, tok('#'), val ]));
+    val.addOpt(all([ rep(tok('&')), rep(tok('$')), val, tok('!'), val ]));
+    
+  };
+  
+  let trickyNorm = () => {
+    
+    let lang = Language({ name: 'math' });
+    let { yld, tok, reg, all, any, rep } = lang.fns();
+    
+    // `val` from `trickyLr` is conceptually `supernorm` here
+    // There are still "step" and "loop" parser pairs, but this time there are multiple pairs, and
+    // some can only be accessed by specific state-machine paths (reflecting the fact that Alls
+    // make it impossible to access certain paths unless prefix Reqs have already passed)
+    
+    // Note that for each step+loop pair, the steps are always the same - these reflect the
+    // immediately-stepping state-machine paths! (E.g. simply numeric tokens in "math").
+    
+    let steps = any([]);
+    obj.addOpt(tok('a'));
+    obj.addOpt(tok('b'));
+    
+    let supernorm = any([]);
+    let trackNorm = fn => {
+      
+      let step = any([]);
+      let loop = any([ yld() ]);
+      let norm = all([ step, loop ]);
+      
+      supernorm.addOpt(norm);
+      
+      fn({ step, loop, norm, addEntries: ents => norm.reqs = [ ...ents, ...norm.reqs ] });
+      
+    };
+    
+    let obj = any([]);
+    obj.addOpt(tok('a')).opt;
+    obj.addOpt(tok('b')).opt;
+    
+    let brk = all([ tok('<'), val, tok('>') ]);
+    
+    let simpleSteps = [];
+    simpleSteps.push(obj);
+    simpleSteps.push(brk);
+    
+    // HANDLE `val.addOpt(all([ val, tok('#'), val ]));`
+    (() => {
+      
+      trackNorm(({ step, loop }) => {
+        
+        for (let s of simpleSteps) step.addOpt(s);
+        
+        loop.addOpt(all([ tok('#'), supernorm ]));
+        
+      });
+      
+    })();
+    
+    // HANDLE `val.addOpt(all([ rep(tok('&')), rep(tok('$')), val, tok('!'), val ]));`
+    // Note that the Delegates are `[ rep(tok('&')), rep(tok('$')), val ]`
+    (() => {
+      
+      // Consider the case where we skip Delegates #1 and #2 (leaving only `val`)
+      // This means the troublesome Opt is really just `all([ val, tok('!'), val ])` - which we
+      // know how to handle! It's exactly like `all([ val, tok('#'), val ])`!
+      
+      // Overall we pick to skip delegates like so, in turn:
+      //   1     2
+      // - SKIP  SKIP
+      // - SKIP  TAKE
+      // - TAKE  SKIP
+      // - TAKE  TAKE
+      
+      trackNorm(({ step, loop, addEntries }) => {
+        
+        for (let s of simpleSteps) step.addOpt(s);
+        loop.addOpt(all([ tok('!'), supernorm ]));
+        
+      });
+      
+      // Skip only Delegate #1! This creates an "entry" before `val` gets reached:
+      
+      trackNorm(({ step, loop, addEntries }) => {
+        
+        // This *must* run before any of the "steps"
+        addEntries([ rep({ minReps: 1, kid: tok('&') }) ]);
+        
+        for (let s of simpleSteps) step.addOpt(s);
+        
+        loop.addOpt(all([ tok('!'), supernorm ]));
+        
+      });
+      
+      // Skip only Delegate #2! This creates an "entry" before `val` gets reached:
+      
+      trackNorm(({ step, loop, addEntries }) => {
+        
+        // This *must* run before any of the "steps"
+        addEntries([ rep({ minReps: 1, kid: tok('$') }) ]);
+        
+        for (let s of simpleSteps) step.addOpt(s);
+        
+        loop.addOpt(all([ tok('!'), supernorm ]));
+        
+      });
+      
+      // Skip *no* Delegates! This creates multiple always-stepping entries:
+      
+      trackNorm(({ step, loop, addEntries }) => {
+        
+        // This *must* run before any of the "steps"
+        addEntries([
+          rep({ minReps: 1, kid: tok('&') }),
+          rep({ minReps: 1, kid: tok('$') })
+        ]);
+        
+        for (let s of simpleSteps) step.addOpt(s);
+        
+        loop.addOpt(all([ tok('!'), supernorm ]));
+        
+      });
+      
+    })();
+    
+    // Add all certainly-stepping items to `normStep`, unchanged (TODO: is there *always* a
+    // certainly-stepping item? I think the answer is "somehow, yes"!)
+    norm1.step.addOpt(obj);
+    norm1.step.addOpt();
+    
+    // Add sometimes-looping items to `normLoop`, but they are *modified*: they cannot Delegate
+    // back to `norm`!
+    norm1.loop.add(all([ tok('#'), supernorm ]));
+    
+    // Deal with `val.addOpt(all([ rep(item1), val, tok('!'), val ]));`
+    // To deal with the `rep` (with `minReps=0`) we'll create two branches: one where the `rep`
+    // *must* consume, by upping its `minReps` to `1`, and another where it doesn't exist at all
+    // (to capture the case where 0 repetitions are used)
+    // - The `rep(item1)` may not step, allowing the 1st `val` to form an LR loop
+    // - Every item in the 
+    norm1.loop.add(all([ tok('!'), val ])); // rep x 0
+    
+    loop.add(all([ rep({ minReps: 1, kid: tok('$') }), tok('!'), val ])); // any other number of reps
+    
+    let testInput = [
+      '<a>',
+      '<<a>>',
+      'a#b',
+      '$$$$b!a',
+      '$$$$<b>!a',
+      '$$$$<b>!<$a!a>',
+    ];
     
   };
   
   let js = () => {
     
     let lang = Language({ name: 'js' });
-    let { nop, tok, reg, all, any, rep } = lang.fns();
+    let { yld, nvr, tok, reg, all, any, rep } = lang.fns();
     
     let value = any('value', []);
     
@@ -1035,7 +1650,7 @@ let lib = (() => {
     
   };
   
-  ({ toy, mathLr, anyLr, js }['anyLr'])();
+  ({ toy, mathLr, mathNorm, anyLr, js, trickyLr, trickyNorm }['mathNorm'])();
   
   process.exit(0);
   
