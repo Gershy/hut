@@ -1,6 +1,7 @@
 'use strict';
 
 require('../room/setup/clearing/clearing.js');
+let nodejsPath = require('node:path');
 
 let getUid = () => (Number.int32 * Math.random()).encodeStr(String.base32, 7);
 
@@ -18,7 +19,7 @@ let Filepath = form({ name: 'Filepath', props: (forms, Form) => ({
   $validComponentRegex: /^[a-zA-Z0-9!@][-a-zA-Z0-9!@._ ]*$/,
   $filteredComponentRegex: /^[.]+$/, // Remove components composed purely of "."
   
-  init(vals, path=require('path')) {
+  init(vals, path=nodejsPath) {
     
     if (!isForm(vals, Array)) vals = [ vals ];
     vals = vals.flat(Infinity);
@@ -60,8 +61,11 @@ let Filepath = form({ name: 'Filepath', props: (forms, Form) => ({
     if (!this.fspVal) {
       let fspVal = this.path.resolve('/', ...this.cmps);
       /// {ASSERT=
-      if (!/^([A-Z]+[:])?[/\\]/.test(fspVal)) throw Error('Api: path doesn\'t start with optional drive indicator (e.g. "C:") followed by "/" or "\\"').mod({ fp: this, fsp: fspVal });
+      if (!/^([A-Z]{1,2}[:])?[/\\]/.test(fspVal)) throw Error('Api: path doesn\'t start with optional drive indicator (e.g. "C:") followed by "/" or "\\"').mod({ fp: this, fsp: fspVal });
       /// =ASSERT}
+      
+      if (this.path === nodejsPath.win32 && !/^[/\\]/.test(fspVal)) fspVal = `C:${fspVal}`;
+      
       this.fspVal = fspVal;
     }
     return this.fspVal;
@@ -746,8 +750,8 @@ module.exports = {
       { // Ensure filepaths resolve as expected
         
         // Note that "\\" (an irrelevant char) is mapped to backslash
-        let win = { name: 'win', path: require('path').win32 };
-        let nix = { name: 'nix', path: require('path').posix };
+        let win = { name: 'win', path: nodejsPath.win32 };
+        let nix = { name: 'nix', path: nodejsPath.posix };
         let tests = [
           
           [ win, [],              'C:\\' ],
@@ -759,6 +763,7 @@ module.exports = {
           [ win, '\\\\',          'C:\\' ],
           [ win, '\\\\\\',        'C:\\' ],
           [ win, '/\\/\\/\\',     'C:\\' ],
+          
           [ nix, [],              '/' ],
           [ nix, '',              '/' ],
           [ nix, '/',             '/' ],
@@ -789,7 +794,7 @@ module.exports = {
           
         ];
         
-        let paths = { win: require('path').win32, nix: require('path').posix };
+        let paths = { win: nodejsPath.win32, nix: nodejsPath.posix };
         for (let [ { name, path }, inp, exp ] of tests) {
           
           if (hasForm(exp, RegExp)) {
