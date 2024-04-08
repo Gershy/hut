@@ -158,7 +158,10 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
               // hid is needed to ensure, e.g., that different iframes in html:multi connect to
               // different SharedWorkers
               // Note caching is funky for the html:worker response!
-              let worker = new SharedWorker('${uriRaw({ path: '-html:worker', cacheBust: `${hut.hid}.${src.hid}` })}');
+              
+              Object.assign(window.global = window, { rooms: Object.create(null), worker: null });
+              
+              let worker = global.worker = new SharedWorker('${uriRaw({ path: '-html:worker', cacheBust: `${hut.hid}.${src.hid}` })}');
               worker.buffered = [];
               global.workerReady = new Promise(rsv => {
                 worker.addEventListener('message', evt => {
@@ -166,10 +169,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
                 }, { once: true });
               });
               worker.port.start();
-              
               worker.port.postMessage({ lmao: 'LMAO' });
-              
-              Object.assign(window.global = window, { rooms: Object.create(null), worker });
               
               let evtSrc = EventTarget.prototype;
               Object.defineProperty(evtSrc, 'evt', { configurable: true, value: function(...args) {

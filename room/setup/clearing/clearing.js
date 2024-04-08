@@ -184,9 +184,8 @@ Object.assign(global, {
       for (let i = 0; i < len; i++) { let v = it(this[i], i); if (v !== skip) ret.push(v); }
       return Object.fromEntries(ret);
     },
-    find(fn) { console.log('Deprecated "find" method'); return this.seek(fn); },
+    find(fn) { console.log('Deprecated "find" method'); return this.seek(fn); }, // TODO: Remove!
     seek(fn) { // Iterator: (val, ind) => bool; returns { found=false, val=null, ind=null }
-      // TODO: Maybe not good to overwrite `Array.prototype.find`??
       let n = this.length;
       for (let i = 0; i < n; i++) if (fn(this[i], i)) return { found: true, val: this[i], ind: i };
       return { found: false, val: null, ind: null };
@@ -1346,6 +1345,12 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
     getHeadStream: C.noFn('getHeadStream'), // The "head" precedes the content; it allows piping *into* the Keep
     getTailStream: C.noFn('getTailStream') // The "tail" comes after the conent; it allows piping *out of* the Keep
     /// =DEBUG}
+    
+  })});
+  
+  let Potential = form({ name: 'Potential', props: (forms, Form) => ({
+    
+    init({}) { Object.assign(this, { par: null }); }
     
   })});
   

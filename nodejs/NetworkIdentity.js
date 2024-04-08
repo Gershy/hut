@@ -1121,14 +1121,14 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     /// =DEBUG}
     
     sc(''
-      + `Opening "${term}" using (${this.secureBits ? 'secure' : 'unsafe'}) hosts:\n`
+      + `Opening "${term}" using hosts (${this.secureBits ? 'secure' : 'unsafe'}):\n`
       + portServers.toArr((servers, port) => {
           return `Port ${port}:\n` + servers.toArr(s => `  - ${s.protocol}://${s.netAddr}:${port}`).join('\n')
         }).join('\n')
     );
     
     tmp.endWith(() => sc(''
-      + `Shutting "${term}" using (${this.secureBits ? 'secure' : 'unsafe'}) hosts:\n`
+      + `Shutting "${term}" using hosts (${this.secureBits ? 'secure' : 'unsafe'}):\n`
       + portServers.toArr((servers, port) => {
           return `Port ${port}:\n` + servers.toArr(s => `  - ${s.protocol}://${s.netAddr}:${port}`).join('\n')
         }).join('\n')

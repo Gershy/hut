@@ -12,15 +12,14 @@ let NetworkIdentity = require('./NetworkIdentity.js');
 // Set up basic monitoring
 let { processExitSrc } = require('./util/installTopLevelHandler.js')();
 
-// Avoid "//" within String by processing non-String-open characters, or
-// fully enclosed Strings (note: may fail to realize that a String stays
-// open if it has escaped quotes e.g. 'i criii :\')'; note lookbehind
-// ("?<=") excludes its contents from the actual match
+// Avoid "//" within String by processing non-String-open characters, or fully enclosed Strings
+// (note: may fail to realize that a String with escaped quotes stays open e.g. `'i criii :\')'`)
+// Note lookbehind ("?<=") excludes its capture from the match result
 let captureLineCommentRegex = Regex.readable(String.baseline(`
   | (?<=                                  )
   |     ^(      |       |       |       )* [ ]*
   |       [^'"#] '[^']*' "[^"]*" #[^#]*#       [/][/].*
-`).replace(/#/g, '`')); // Simple way to include literal "`" in regex
+`).replace(/#/g, '`')); // Simple way to include literal "`" in regex using 1 char
 
 // Avoid "/*" within Strings; capture terminating "*/" on the same line
 let captureInlineBlockCommentRegex = Regex.readable('g', String.baseline(`
@@ -65,7 +64,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     let rootFsKeep = FsKeep(rootTrn, Filepath([]));
     let hutKeep = await hutKeepPrm;
     let millKeep = hutKeep.seek('mill');
-    hutKeep.forbid = { mill: 1, '.git': 1 };
+    hutKeep.forbid = { 'mill': 1, '.git': 1 };
     
     let rootKeep = RootKeep({
       'file': rootFsKeep,
@@ -80,11 +79,9 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     
   }
   
-  console.log('yo');
-  
   { // Resolve configuration and get subcon output working
     
-    let globalConf = { 'hihi': 'abc' };
+    let globalConf = {};
     global.conf = (diveToken, def='TODOhijklmno') => {
       let v = token.diveOn(diveToken, globalConf, def).val;
       if (v === 'TODOhijklmno') throw Error('Api: bad conf dive token').mod({ diveToken });
@@ -160,17 +157,16 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     
   };
   
-  { // Enable `global.(getCmpKeep|mapCmpToSrc|getRooms)`
+  { // Enable `global.getCmpKeep`, `global.mapCmpToSrc`, `global.getRooms`
     
     let srcKeep = keep('[file:code:src]');
     let cmpKeep = keep('[file:code:cmp]');
     let loadedRooms = Map();
     
-    // Note these "default features" should only define features which
-    // are always synced up regardless of the bearing; Hut by default
-    // expects to run at multiple bearings, so there are no "default"
-    // values for bearing-specific features! (They should always be
-    // passed when calling `getCmpCode` from a particular context!)
+    // Note "default features" should only define features which are always synced up no matter the
+    // bearing; Hut by default expects to run at multiple bearings, so there are no "default"
+    // values for bearing-specific features! (They must always be passed when calling`getCmpCode`
+    // from a particular context!)
     let defaultFeatures = {
       debug:  conf('global.maturity') === 'dev',
       assert: conf('global.maturity') === 'dev',
@@ -179,7 +175,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     let getCmpCode = async (keep, features=Object.stub) => {
       
       // Take a Keep containing source code and return compiled code and all data necessary to map
-      // compiled codepoints; note we DON'T write to any Keep! (that's done by `getCmpKeep`)
+      // compiled codepoints; note nothing is persisted to a Keep! (that's done by `getCmpKeep`)
       
       let t = getMs();
       
@@ -195,7 +191,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       let content = await keep.getContent('utf8');
       if (!content) throw Error(`Api: no sourcecode available from ${keep.desc()}`);
       
-      let srcLines = content.split('\n'); // TODO: What about \r?? Is that a concern?
+      let srcLines = content.split(/\r?\n/);
       
       // Matches, e.g., '{BEL/OW=', '{ABO/VE=', etc.
       let featureHeadReg = /[{]([a-zA-Z]+)[=]/i;
@@ -611,7 +607,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       activateTmp.endWith(aboveHut);
       
       // Server management...
-      let servers = await Promise.all(protocols.toArr(async protocolOpts => {
+      let roadAuths = await Promise.all(protocols.toArr(async protocolOpts => {
         
         let { name: protocol, port, compression, ...opts } = protocolOpts;
         
@@ -630,7 +626,8 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         
       }));
       
-      // TODO: Drift! loadtest's server must inherit from RoadAuthority
+      // TODO: Drift! loadtest's server must inherit from RoadAuthority. Basically need to test
+      // loadtesting; it's going to fail in a whole bunch of ways at first...
       let loadtest = null;
       if (loftConf.name === 'therapy') {
         
@@ -733,13 +730,12 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           getServerSessionKey: getSessionKey,
           sc: global.subcon('loadtest')
         });
-        servers.push(loadtest.server);
+        roadAuths.push(loadtest.roadAuth);
         
       }
       
-      // Each server gets managed by the NetworkIdentity, and is routed
-      // so that Sessions are put in contact with the Hut
-      for (let server of servers) netIden.addServer(server);
+      // RoadAuths are managed by the NetIden (RoadAuths connect remote sessions to the AboveHut)
+      for (let server of roadAuths) netIden.addServer(server);
       
       let runOnNetworkTmp = netIden.runOnNetwork(loftConf.name);
       activateTmp.endWith(runOnNetworkTmp);
@@ -777,8 +773,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
   
 };
 
-// TODO: Only need to assign the regex props so that tests can reference
-// and test them - should instead avoid exporting these props; rather
-// trigger their effects in tests (e.g. test compiling a variety of
-// sources) and verify if the results are expected 
+// TODO: Only need to assign the regex props so that tests can reference and test them - should
+// instead avoid exporting these props; rather trigger their effects in tests (e.g. test compiling
+// a variety of sources) and verify if the results are expected 
 Object.assign(module.exports, { captureLineCommentRegex, captureInlineBlockCommentRegex });

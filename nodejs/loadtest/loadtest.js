@@ -60,7 +60,7 @@ let InsulatedInstance = form({ name: 'InsulatedInstance', has: { Tmp }, props: (
   
 })});
 
-let makeServer = ({ getSessionKey }) => {
+let makeRoadAuth = ({ getSessionKey }) => {
   
   let serverOpen = async (security=null, adjacentServerPrms={}) => {
     
@@ -139,10 +139,10 @@ module.exports = async ({ aboveHut, netIden, instancesKeep, getServerSessionKey,
   let { minTtlMs=240*1000, maxTtlMs=600*1000 } = loadtest;
   let { minSpawnMs=200, maxSpawnMs=5000 } = loadtest;
   
-  let server = makeServer({ getSessionKey: getServerSessionKey });
+  let roadAuth = makeRoadAuth({ getSessionKey: getServerSessionKey });
   
   return {
-    server,
+    roadAuth,
     run: () => {
       
       let tmp = Tmp();
@@ -163,7 +163,7 @@ module.exports = async ({ aboveHut, netIden, instancesKeep, getServerSessionKey,
             hid: name,
             ...aboveHut.getBelowConf(),
           },
-          server
+          server: roadAuth
         });
         
         // Kill `inst` after `ms` elapses

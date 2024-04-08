@@ -120,7 +120,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       if (!msg.command.has(':')) msg.command = `${this.aboveHut.getDefaultLoftPrefix()}:${msg.command}`;
       
       subcon('roadAuth.http')(() => ({
-        incomingCtx: { path, msg: { ...hutCookie, ...query, ...body } },
+        incomingCtx: { path, msg: { hutCookie, query, body } },
         resolvedCtx: msg
       }));
       

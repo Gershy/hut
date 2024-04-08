@@ -7,14 +7,21 @@ module.exports = () => {
   
   // https://nodejs.org/api/process.html#signal-events
   let processExitSrc = Src();
+  processExitSrc.route(() => process.stdout.write('\u001b[0m'));
+  
   process.exitNow = process.exit;
+  process.exitSig = null;
   process.exit = code => {
+    
     process.explicitExit = true;
     
-    let err = Error(`Process explicitly exited (${code})`);
-    processExitSrc.route(() => gsc(err));
-    processExitSrc.route(() => process.stdout.write('\u001b[0m'));
+    if (!process.exitSig) {
+      let err = Error(`Process explicitly exited (${code})`);
+      processExitSrc.route(() => gsc(err));
+    }
+    
     return process.exitNow(code);
+    
   };
 
   // NOTE: Trying to catch SIGKILL or SIGSTOP crashes posix!
@@ -23,7 +30,10 @@ module.exports = () => {
   let haltEvts = Set('int,term,quit'.split(','));
   for (let evt of evts) process.on(`sig${evt}`.upper(), (...args) => {
     gsc(`Received event: "${evt}"`, args);
-    haltEvts.has(evt) && process.exit(isForm(args[1], Number) ? args[1] : -1);
+    if (haltEvts.has(evt)) {
+      process.exitSig = evt;
+      process.exit(isForm(args[1], Number) ? args[1] : -1);
+    }
   });
 
   let onErr = err => {
