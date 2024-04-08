@@ -143,6 +143,7 @@ let confyRoot = (() => {
       // 'localhost'
       // '127.0.0.1'
       // '211.122.42.7'
+      // 'mysite.com'
       // '!<auto>'
       
       if (netAddr === '!<auto>') {
@@ -241,8 +242,8 @@ let confyRoot = (() => {
         
       }
       
-      if (netAddr !== 'localhost' && !ipRegex.test(netAddr))
-        throw Error(`requires valid network address; got "${netAddr}"`);
+      if (!isForm(netAddr, String))                                throw Error(`requires String; got ${getFormName(netAddr)}`).mod({ netAddr });
+      if (netAddr !== 'localhost' && !netAddr.test(/[^.][.][^.]/)) throw Error(`received invalid-looking value`).mod({ netAddr });
       
       return netAddr;
       
