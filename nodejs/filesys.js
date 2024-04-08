@@ -64,11 +64,7 @@ let Filepath = form({ name: 'Filepath', props: (forms, Form) => ({
       if (!/^([A-Z]{1,2}[:])?[/\\]/.test(fspVal)) throw Error('Api: path doesn\'t start with optional drive indicator (e.g. "C:") followed by "/" or "\\"').mod({ fp: this, fsp: fspVal });
       /// =ASSERT}
       
-      console.log(this.path === nodejsPath.win32);
-      console.log('000: ' + fspVal);
-      
       if (this.path === nodejsPath.win32 && [ '/', '\\' ].has(fspVal[0])) fspVal = `C:${fspVal}`;
-      console.log('111: ' + fspVal);
       
       this.fspVal = fspVal;
     }
