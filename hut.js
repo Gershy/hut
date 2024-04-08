@@ -6,6 +6,15 @@ process.stdout.write('\u001b[0m'); // Clear any ansi set by previous output
 
 require('./nodejs/util/installV8ErrorStacktraceHandler.js');
 
+(() => {
+  
+  let err = Error('hello hellooo');
+  console.log('DESC: ' + err.desc());
+  
+  if ((() => 1)()) process.exit(0);
+  
+})();
+
 // Require clearing.js (it's under "rooms", but simply modifies global
 // state so it can be required directly)
 Object.assign(global, { rooms: Object.create(null) });
