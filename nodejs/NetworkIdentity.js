@@ -1064,7 +1064,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   },
   
   addServer(server) { this.servers.add(server); },
-  runOnNetwork(term = '<unknown>') {
+  async runOnNetwork(term = '<unknown>') {
     
     // TODO: (?) Certify every NetworkAddress in `this.servers`
     
@@ -1072,7 +1072,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     let tmp = Tmp();
     
     // Maybe spin up a server to redirect http->https if port 80 is free?
-    if (this.redirectHttp80 && this.secureBits > 0) (() => {
+    if (this.redirectHttp80 && this.secureBits > 0) await (async () => {
       
       let httpsServer = this.servers.seek(server => server.protocol === 'http').val;
       if (!httpsServer) return; // No point redirecting if there's no secure server
@@ -1083,10 +1083,8 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       sc(`Will redirect http port 80 to -> ${httpsServer.desc()}`);
       let { netAddr, port: httpsPort } = httpsServer;
       
-      let redirectServer = require('./server/http.js')({
-        secure: false, netProc: `${netAddr}:80`,
-        doCaching: false,
-      });
+      let HttpRoadAuth = await require('./server/http.js');
+      let redirectServer = HttpRoadAuth({ secure: false, netProc: `${netAddr}:80`, doCaching: false });
       
       redirectServer.intercepts.push((req, res) => {
         res.writeHead(302, { 'Location': `https://${netAddr}:${httpsPort}${req.url}` }).end();

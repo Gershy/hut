@@ -737,7 +737,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       // RoadAuths are managed by the NetIden (RoadAuths connect remote sessions to the AboveHut)
       for (let server of roadAuths) netIden.addServer(server);
       
-      let runOnNetworkTmp = netIden.runOnNetwork(loftConf.name);
+      let runOnNetworkTmp = await netIden.runOnNetwork(loftConf.name);
       activateTmp.endWith(runOnNetworkTmp);
       await runOnNetworkTmp.prm;
       
