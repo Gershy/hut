@@ -243,7 +243,7 @@ let confyRoot = (() => {
       }
       
       if (!isForm(netAddr, String))                                throw Error(`requires String; got ${getFormName(netAddr)}`).mod({ netAddr });
-      if (netAddr !== 'localhost' && !netAddr.test(/[^.][.][^.]/)) throw Error(`received invalid-looking value`).mod({ netAddr });
+      if (netAddr !== 'localhost' && !/[^.][.][^.]/.test(netAddr)) throw Error(`received invalid-looking value`).mod({ netAddr });
       
       return netAddr;
       
