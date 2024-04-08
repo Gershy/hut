@@ -813,9 +813,9 @@ module.exports = {
             
           } else {
             
+            console.log({ name, inp, exp, fsp });
             let fsp = Filepath(inp, path).fsp();
             if (fsp !== exp) {
-              gsc({ name, inp, exp, fsp });
               throw Error('Failed').mod({ name, inp, exp, fsp });
             }
             
