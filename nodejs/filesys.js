@@ -805,7 +805,10 @@ module.exports = {
           } else {
             
             let fsp = Filepath(inp, path).fsp();
-            if (fsp !== exp) throw Error('Failed').mod({ name, inp, exp, fsp });
+            if (fsp !== exp) {
+              gsc({ name, inp, exp, fsp });
+              throw Error('Failed').mod({ name, inp, exp, fsp });
+            }
             
           }
           
@@ -1014,10 +1017,6 @@ module.exports = {
         if (result.toString() !== 'JAZZY TIMES on a SUNDAY') throw Error(`Unexpected: "${result.toString()}"`);
         
       }
-      
-    } catch (err) {
-      
-      gsc('TESTS FAILED', err.desc());
       
     } finally {
       
