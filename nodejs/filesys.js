@@ -67,8 +67,8 @@ let Filepath = form({ name: 'Filepath', props: (forms, Form) => ({
       console.log(this.path === nodejsPath.win32);
       console.log('000: ' + fspVal);
       
-      if (this.path === nodejsPath.win32 && !/^[/\\]/.test(fspVal)) fspVal = `C:${fspVal}`;
-      console.log('111: ' + fspVal0);
+      if (this.path === nodejsPath.win32 && [ '/', '\\' ].has(fspVal[0])) fspVal = `C:${fspVal}`;
+      console.log('111: ' + fspVal);
       
       this.fspVal = fspVal;
     }
@@ -798,7 +798,6 @@ module.exports = {
           
         ];
         
-        let paths = { win: nodejsPath.win32, nix: nodejsPath.posix };
         for (let [ { name, path }, inp, exp ] of tests) {
           
           if (hasForm(exp, RegExp)) {
@@ -813,11 +812,8 @@ module.exports = {
             
           } else {
             
-            console.log({ name, inp, exp, fsp });
             let fsp = Filepath(inp, path).fsp();
-            if (fsp !== exp) {
-              throw Error('Failed').mod({ name, inp, exp, fsp });
-            }
+            if (fsp !== exp) throw Error('Failed').mod({ name, inp, exp, fsp });
             
           }
           
