@@ -363,12 +363,11 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
       let nodeLock = { type: 'nodeWrite', fp };
       
       let uid = Math.random().toString(36).slice(2);
-      dbg('QUEUE', { uid, fp, type, data });
+      dbg('QUEUE', { uid, fp, data });
       return this.doLocked({ name: 'setData', locks: [ ...lineageLocks, nodeLock ], fn: async () => {
         
-        dbg('RUN', { uid, fp, type, data });
-        
         let type = await this.xGetType(fp);
+        dbg('RUN', { uid, fp, type, data });
         
         if (type === null) {
           
