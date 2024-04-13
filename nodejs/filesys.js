@@ -362,11 +362,13 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
       let lineageLocks = this.fp.getLineage(fp).toArr(fp => ({ type: 'nodeWrite', fp }));
       let nodeLock = { type: 'nodeWrite', fp };
       
+      let uid = Math.random().toString(36).slice(2);
+      dbg('QUEUE', { uid, fp, type, data });
       return this.doLocked({ name: 'setData', locks: [ ...lineageLocks, nodeLock ], fn: async () => {
         
-        let type = await this.xGetType(fp);
+        dbg('RUN', { uid, fp, type, data });
         
-        dbg({ fp, type, data });
+        let type = await this.xGetType(fp);
         
         if (type === null) {
           
@@ -393,7 +395,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
           
         }
         
-        dbg('Set data succcess!');
+        dbg('DONE', { uid });
         
       }});
       
