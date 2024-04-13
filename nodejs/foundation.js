@@ -636,6 +636,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         `record.bank.${keep ? 'KeepBank' : 'WeakBank'}`
       ]);
       
+      gsc({ netIdenConf });
       let netIden = NetworkIdentity(netIdenConf);
       let secure = netIden.secureBits > 0;
       
