@@ -328,6 +328,8 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     
     this.checkFp(fp);
     
+    gsc({ fp });
+    
     if (data === null || data.length === 0) {
       
       // Instead of writing a Buffer of 0 length we remove leafs set to
