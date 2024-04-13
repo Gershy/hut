@@ -329,7 +329,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     this.checkFp(fp);
     
     gsc({ fp });
-    let dbg = fp.has('swapswap') ? gsc : Function.stub;
+    let dbg = fp.fsp().has('swapswap') ? gsc : Function.stub;
     
     dbg('DATA:', data?.length === 0 ? data : getFormName(data));
     
