@@ -6,56 +6,12 @@ process.stdout.write('\u001b[0m'); // Clear any ansi set by previous output
 
 require('./nodejs/util/installV8PrepareStackTrace.js')();
 
-// Require clearing.js (it's under "rooms", but simply modifies global
-// state so it can be required directly)
+// Require clearing.js - it simply modifies global state so it can  be required directly
 Object.assign(global, { rooms: Object.create(null) });
 require('./room/setup/clearing/clearing.js');
 
 // Do nothing more if this isn't the main file
 if (process.argv[1] !== __filename) return;
-
-if (0 || process.cwd() === '/hut') { // Low-level debug
-  
-  let intervalMs = (process.cwd() === '/hut' ? 10 : 30) * 1000;
-  let showThreshold = 1;
-  let maxMetrics = 22; // Consider `Infinity`
-  let metrics = {};
-
-  global.mmm = (term, val) => {
-    if (!metrics.has(term)) metrics[term] = 0;
-    metrics[term] += val;
-    if (!metrics[term]) delete metrics[term];
-  };
-  (async () => {
-    
-    while (true) {
-      
-      await new Promise(rsv => setTimeout(rsv, intervalMs));
-      
-      let bToMb = 1 / (1000 ** 2);
-      let { heapUsed, heapTotal } = process.memoryUsage();
-      let consumed = heapUsed * bToMb;
-
-      let relevantMetrics = metrics
-        .toArr((v, k) => (v < showThreshold) ? skip : [ k, v ])
-        .valSort(([ k, v ]) => -Math.abs(v))
-        .slice(0, maxMetrics);
-      
-      if (relevantMetrics.empty()) {
-        
-        gsc(`Heap: ${consumed.toFixed(2)}mb\n  (No metrics)`);
-        
-      } else {
-        
-        gsc(`Heap: ${consumed.toFixed(2)}mb\n` + relevantMetrics.map(([ k, v ]) => `  METRIC - ${k.padTail(20)}${v}`).join('\n'));
-        
-      }
-      
-    }
-    
-  })();
-  
-}
 
 let conf = (() => { // Parse command-line conf
   
@@ -109,5 +65,4 @@ let conf = (() => { // Parse command-line conf
   
 })();
 
-require('./nodejs/foundation.js')({ hutFp: __dirname, conf })
-  .fail(err => console.log('FATAL', err));
+require('./nodejs/foundation.js')({ hutFp: __dirname, conf }).fail(gsc);

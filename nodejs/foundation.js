@@ -153,7 +153,56 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     // Now output any buffered logs before we were ready
     for (let args of buffered) global.subconOutput(...args);
     
+    // It's tempting to show "linearized" conf, but the keys get very long and difficult to view
+    //let showConf = [ ...global.conf([]).linearize() ].toObj(a => a);
     setupSc.kid('conf')(`Configuration processed after ${(getMs() - t).toFixed(2)}ms`, global.conf([]));
+    
+  };
+  
+  { // Set up any configured profiling
+    
+    if (global.conf('global.profiling.memoryUsage')) {
+      
+      let intervalMs = (process.cwd() === '/hut' ? 10 : 30) * 1000;
+      let showThreshold = 1;
+      let maxMetrics = 20; // Consider `Infinity`
+      let metrics = {};
+      
+      global.mmm = (term, val) => {
+        if (!metrics.has(term)) metrics[term] = 0;
+        metrics[term] += val;
+        if (!metrics[term]) delete metrics[term];
+      };
+      (async () => {
+        
+        while (true) {
+          
+          await new Promise(rsv => setTimeout(rsv, intervalMs));
+          
+          let bToMb = 1 / (1000 ** 2);
+          let { heapUsed, heapTotal } = process.memoryUsage();
+          let consumed = heapUsed * bToMb;
+          
+          let relevantMetrics = metrics
+            .toArr((v, k) => (v < showThreshold) ? skip : [ k, v ])
+            .valSort(([ k, v ]) => -Math.abs(v))
+            .slice(0, maxMetrics);
+          
+          if (relevantMetrics.empty()) {
+            
+            gsc(`Heap: ${consumed.toFixed(2)}mb\n  (No metrics)`);
+            
+          } else {
+            
+            gsc(`Heap: ${consumed.toFixed(2)}mb\n` + relevantMetrics.map(([ k, v ]) => `  METRIC - ${k.padTail(20)}${v}`).join('\n'));
+            
+          }
+          
+        }
+        
+      })();
+      
+    }
     
   };
   
@@ -515,9 +564,11 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
   };
   
   { // Run tests
+    
     let t = getMs();
     await require('./test.js')();
     subcon('setup.test')(`Tests completed after ${(getMs() - t).toFixed(2)}ms`);
+    
   };
   
   { // Enable `global.real`

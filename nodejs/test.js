@@ -1,5 +1,7 @@
 'use strict';
 
+require('../room/setup/clearing/clearing.js');
+
 module.exports = async () => {
   
   // TODO: I think tests should be written modularly alongside the

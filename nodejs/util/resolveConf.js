@@ -69,6 +69,10 @@ let confyRoot = (() => {
     }})
   });
   confyGlb.kids.therapy = ConfyNullable(ConfySet());
+  confyGlb.kids.profiling = ConfySet({ kids: {
+    memoryUsage: ConfyVal({ settle: 'bln', def: false }),
+    networkUsage: ConfyVal({ settle: 'bln', def: false }) // TODO: Not yet consumed anywhere!
+  }});
   
   confyGlb.kids.terminal = ConfySet({ kids: {
     width: ConfyVal({ settle: 'num', def: () => 140 })

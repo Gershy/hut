@@ -161,7 +161,15 @@ Object.assign(global, {
       return ret;
       
     },
-    *[Symbol.iterator]() { for (let k in this) yield [ k, this[k] ]; }
+    * [Symbol.iterator]() { for (let k in this) yield [ k, this[k] ]; },
+    * linearize(chain=[]) {
+      for (let k in this) {
+        let v = this[k];
+        chain = [ ...chain, ...k.split('.') ];
+        if (isForm(v, Object)) yield* v.linearize(chain);
+        else                   yield [ chain.join('.'), v ];
+      }
+    }
     
   });
   protoDefs(Array, {

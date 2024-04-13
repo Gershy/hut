@@ -1,3 +1,5 @@
+'use strict';
+
 require('../room/setup/clearing/clearing.js');
 
 let dim = text => `\x1b[37m${text}\x1b[0m`;
