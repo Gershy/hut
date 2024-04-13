@@ -328,9 +328,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     
     this.checkFp(fp);
     
-    gsc({ fp });
     let dbg = fp.fsp().has('swapswap') ? gsc : Function.stub;
-    
     dbg('DATA:', data?.length === 0 ? data : getFormName(data));
     
     if (data === null || data.length === 0) {
@@ -358,6 +356,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
       }});
       
     } else {
+      
       // Setting a non-zero amount of data requires ensuring that all
       // ancestor nodes exist and finally writing the data
       
@@ -367,6 +366,8 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
       return this.doLocked({ name: 'setData', locks: [ ...lineageLocks, nodeLock ], fn: async () => {
         
         let type = await this.xGetType(fp);
+        
+        dbg({ fp, type, data });
         
         if (type === null) {
           
