@@ -804,15 +804,18 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     
     // Run all Deploys, including the TherapyDeploy
     let therapyConf = conf('global.therapy');
-    let deployConfs = [];
-    if (therapyConf) deployConfs.push({
-      uid: 'therapy',
-      host: null,
-      loft: { prefix: 'th', name: 'therapy' },
-      keep: null,
-      ...therapyConf,
-    });
-    deployConfs.push(...(global.conf('deploy') ?? {}).toArr(v => v));
+    let deployConfs = [
+      
+      ...(!therapyConf ? [] : [{
+        uid: 'therapy',
+        host: null,
+        loft: { prefix: 'th', name: 'therapy' },
+        keep: null
+      }.merge(therapyConf)]),
+      
+      ...(global.conf('deploy') ?? {}).toArr(v => v)
+      
+    ];
     
     await Promise.all(deployConfs.map(runDeploy));
     
