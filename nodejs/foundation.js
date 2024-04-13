@@ -161,7 +161,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
   
   { // Set up any configured profiling
     
-    if (global.conf('global.profiling.memoryUsage')) {
+    if (global.conf('global.profiling.memUsage')) {
       
       let intervalMs = (process.cwd() === '/hut' ? 10 : 30) * 1000;
       let showThreshold = 1;
@@ -188,15 +188,11 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
             .valSort(([ k, v ]) => -Math.abs(v))
             .slice(0, maxMetrics);
           
-          if (relevantMetrics.empty()) {
-            
-            gsc(`Heap: ${consumed.toFixed(2)}mb\n  (No metrics)`);
-            
-          } else {
-            
-            gsc(`Heap: ${consumed.toFixed(2)}mb\n` + relevantMetrics.map(([ k, v ]) => `  METRIC - ${k.padTail(20)}${v}`).join('\n'));
-            
-          }
+          gsc(`Heap: ${consumed.toFixed(2)}mb\n` + (
+            relevantMetrics.count()
+            ? relevantMetrics.map(([ k, v ]) => `  METRIC - ${k.padTail(20)}${v}`).join('\n')
+            : '(No metrics)'
+          ).indent(2));
           
         }
         
