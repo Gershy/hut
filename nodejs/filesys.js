@@ -105,7 +105,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
   async xSafeStat(fp) {
     
     try         { return await fs.stat(fp.fsp()); }
-    catch (err) { if (err.code !== 'ENOENT') { gsc({ code: err.code, err }); throw err; } }
+    catch (err) { if (err.code !== 'ENOENT') { gsc({ fp, code: err.code, err }); throw err; } }
     return null;
     
   },
