@@ -131,16 +131,24 @@ Object.assign(global, {
       }
       return this;
     },
-    diveKeysResolved() {
+    hierchize() {
       let result = {};
       for (let [ k, v ] of this) {
         let dive = token.dive(k);
         let last = dive.pop();
         let ptr = result;
         for (let cmp of dive) ptr = (ptr.has(cmp) && ptr[cmp] != null) ? ptr[cmp] : (ptr[cmp] = {});
-        ptr[last] = isForm(v, Object) ? v.diveKeysResolved() : v;
+        ptr[last] = isForm(v, Object) ? v.hierchize() : v;
       }
       return result;
+    },
+    * linearize(chain=[]) {
+      for (let k in this) {
+        let v = this[k];
+        chain = [ ...chain, ...k.split('.') ];
+        if (isForm(v, Object)) yield* v.linearize(chain);
+        else                   yield [ chain.join('.'), v ];
+      }
     },
     count() { let c = 0; for (let k in this) c++; return c; },
     categorize(fn) { // Iterator: (val, key) => '<categoryTerm>'
@@ -161,15 +169,7 @@ Object.assign(global, {
       return ret;
       
     },
-    * [Symbol.iterator]() { for (let k in this) yield [ k, this[k] ]; },
-    * linearize(chain=[]) {
-      for (let k in this) {
-        let v = this[k];
-        chain = [ ...chain, ...k.split('.') ];
-        if (isForm(v, Object)) yield* v.linearize(chain);
-        else                   yield [ chain.join('.'), v ];
-      }
-    }
+    * [Symbol.iterator]() { for (let k in this) yield [ k, this[k] ]; }
     
   });
   protoDefs(Array, {
@@ -1307,7 +1307,7 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
   
   let Slots = form({ name: 'Slots', props: (forms, Form) => ({
     
-    // Defines heirarchical access via an arbitrary access mechanism.
+    // Defines hierarchical access via an arbitrary access mechanism.
     
     $tryAccess: (v, p) => {
       try         { return v.access(p); }

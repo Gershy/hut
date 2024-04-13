@@ -35,9 +35,9 @@ let Confy = form({ name: 'Confy', props: (forms, Form) => ({
     // against the whole `values` Object, for each key in the current
     // subset of `value` check if each key is a prefix of
     // `relOrAbsDive`, and for each which is, recurse on that key!
-    // BETTER TODO: simply always store `values` in "diveKeysResolved"
+    // BETTER TODO: simply always store `values` in "hierchize"
     // format????
-    values = values.diveKeysResolved(); // Creates new value (no in-place modification)
+    values = values.hierchize(); // Creates new value (no in-place modification)
     
     let { found, val } = token.diveOn(absCmps, values);
     if (found) return val;

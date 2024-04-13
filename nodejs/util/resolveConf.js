@@ -434,14 +434,14 @@ module.exports = async ({ rootKeep, rawConf, confUpdateCb=Function.stub }) => {
     
     try {
       
-      confUpdateCb(mutableConf.merge(cf.diveKeysResolved()));
+      confUpdateCb(mutableConf.merge(cf.hierchize()));
       let values = await churn({ root: confyRoot.getAction(mutableConf, [ 'root' ]) });
-      confUpdateCb(mutableConf = values.diveKeysResolved().root);
+      confUpdateCb(mutableConf = values.hierchize().root);
       
     } catch (err) {
       
       if (!err.partiallyChurnedValues) throw err.mod(msg => `Unexpected error while churning: ${msg}`);
-      confUpdateCb(mutableConf = err.partiallyChurnedValues.diveKeysResolved().root);
+      confUpdateCb(mutableConf = err.partiallyChurnedValues.hierchize().root);
       if (!tolerateErrors) throw err;
       
     }

@@ -91,7 +91,7 @@ global.rooms['Hinterland'] = async () => {
     $Potential: form({ name: 'Potential', props: (forms, Form) => ({
       
       // TODO: get rid of that nasty `makeUtils`; implement everything through `Potential` instead.
-      // Potential should be heirarchical, e.g. a ParPotential should be able to give rise to a
+      // Potential should be hierarchical, e.g. a ParPotential should be able to give rise to a
       // KidPotential which has a KidReal as its `real` reference. It may even make sense for
       // Potentials to be Tmps so that a KidPotential can end under some set of circumstances.
       // Ambitiously, Scopes could be replaced with Potentials (this way anything with access to a

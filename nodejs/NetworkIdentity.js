@@ -29,7 +29,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   $remFp: (fp) => require('fs').promises.unlink(fp),
   $defaultDetails: Object.plain({
     
-    // Geographic heirarchical identifiers (and shortforms)
+    // Geographic hierarchical identifiers (and shortforms)
     geo0: 'earth', // planet
     geo1: '',      // continent/tectonic plate/hemisphere
     geo2: '',      // country
@@ -43,7 +43,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     geoShort4: '',
     geoShort5: '',
     
-    // Organization heirarchical identifiers
+    // Organization hierarchical identifiers
     org0: '', // organization name
     org1: '', // subdivision
     org2: '', // subdivision

@@ -45,7 +45,7 @@ global.rooms['logic.Scope'] = foundation => form({ name: 'Scope', has: { Tmp }, 
     /// =DEBUG}
     
     let [ src, hooks, fn ] = (args.length === 3) ? args : [ args[0], {}, args[1] ];
-    // Note that `hooks` enables heirarchical modifications to Scope
+    // Note that `hooks` enables hierarchical modifications to Scope
     // behaviour - it contains Functions that extend typical Scope
     // behaviour, and `hooks` are propagated to all subscopes!
     // - hooks.processArgs: modifies arguments passed to `dep.scp`

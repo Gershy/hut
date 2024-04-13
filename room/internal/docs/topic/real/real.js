@@ -16,7 +16,7 @@ global.rooms['internal.docs.topic.real'] = foundation => decorator => {
     | - Sound: receiving input through a microphone
     | - Sight: monitoring where a user's eyes are focused
     | 
-    | Reals have a heirarchical layout. All Reals are, through some level of indirection, connected to the RootReal, which represents the full interfacing potential between technology and human user.
+    | Reals have a hierarchical layout. All Reals are, through some level of indirection, connected to the RootReal, which represents the full interfacing potential between technology and human user.
   `));
   decorator.gap(1);
   
@@ -61,7 +61,7 @@ global.rooms['internal.docs.topic.real'] = foundation => decorator => {
       | 
       | Reals have fluctuating state, while Layouts are entirely immutable. For a Layout to respond to changing data the Layout should be added to a Real, and the Real's state may be changed. The Layout will reflect the Real's updated state, but note that the Layout's state never changes.
       |
-      | Reals are heirarchical. A Real may have many ChildReals attached to it, but only ever a single ParentReal.
+      | Reals are hierarchical. A Real may have many ChildReals attached to it, but only ever a single ParentReal.
       | 
       | Reals exist across a wide variety of media. For example, Reals relaying graphical information are logically related to a computer monitor, whereas Reals relaying sound information are logically related to a computer's speakers. Refining the behaviour of a Real will involve some definition that is fundamentally aware of its related media, and some definition that is unrelated. For example, defining the "colour" of a Real would only have meaning when the Real exists in visual media. On the other hand, defining the "significance" of a Real is unrelated to its media; visually "significant" Reals can be shown with more contrasting colours and larger text sizes; audible "significant" Reals could be played at higher volumes, with generated speech sounding more stressed.
       | 
