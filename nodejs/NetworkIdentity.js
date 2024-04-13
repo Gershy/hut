@@ -603,10 +603,12 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
     let getSgn = async () => {
       
-      // A SGN (as opposed to PRV + CSR + CRT) is a combination of all the values needed to manage
-      // a server with  a certified identity, as well as some management functionality:
+      // A SGN includes everything needed to manage a server with  a certified identity; it's more
+      // than just PRV + CSR + CRT as it includes some management functionality:
       //    | {
-      //    |   prv, csr, crt, invalidate, validity: { msElapsed, msRemaining, expiryMs }
+      //    |   prv, csr, crt,
+      //    |   invalidate: () => { /* ... */ },
+      //    |   validity: { msElapsed, msRemaining, expiryMs }
       //    | }
       
       Form.subcon.sign('GET CERT', this.certificateType);

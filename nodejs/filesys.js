@@ -332,8 +332,6 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     
     this.checkFp(fp);
     
-    let dbg = fp.fsp().has('swapswap') ? gsc : Function.stub;
-    
     if (data === null || data.length === 0) {
       
       // Instead of writing a Buffer of 0 length we remove leafs set to
@@ -366,12 +364,9 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
       let lineageLocks = this.fp.getLineage(fp).toArr(fp => ({ type: 'nodeWrite', fp }));
       let nodeLock = { type: 'nodeWrite', fp };
       
-      let uid = Math.random().toString(36).slice(2);
-      dbg('QUEUE', { uid, fp, data });
       return this.doLocked({ name: 'setData', locks: [ ...lineageLocks, nodeLock ], fn: async () => {
         
         let type = await this.xGetType(fp);
-        dbg('RUN', { uid, fp, type, data });
         
         if (type === null) {
           
@@ -397,8 +392,6 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
           await fs.writeFile(fp.fsp(), data);
           
         }
-        
-        dbg('DONE', { uid });
         
       }});
       
