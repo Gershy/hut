@@ -104,8 +104,12 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
   // preceded by a check that `fp` is in our jurisdiction
   async xSafeStat(fp) {
     
+    // Note that on windows, `fs.stat` tends to only fail on missing entities with "ENOENT". On
+    // posix trying to `fs.stat` anything nested under a file fails with "ENOTDIR" instead! So
+    // both error codes basically indicate "entity non-existence".
+    
     try         { return await fs.stat(fp.fsp()); }
-    catch (err) { if (err.code !== 'ENOENT') { gsc({ fp, code: err.code, err }); throw err; } }
+    catch (err) { if (![ 'ENOENT', 'ENOTDIR' ].has(err.code)) throw err; }
     return null;
     
   },
