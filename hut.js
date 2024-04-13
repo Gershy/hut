@@ -4,21 +4,12 @@
 
 process.stdout.write('\u001b[0m'); // Clear any ansi set by previous output
 
-require('./nodejs/util/installV8ErrorStacktraceHandler.js');
+require('./nodejs/util/installV8PrepareStackTrace.js')();
 
 // Require clearing.js (it's under "rooms", but simply modifies global
 // state so it can be required directly)
 Object.assign(global, { rooms: Object.create(null) });
 require('./room/setup/clearing/clearing.js');
-
-(() => {
-  
-  let err = Error('hello hellooo');
-  console.log('DESC: ' + err.toString());
-  
-  if ((() => 1)()) process.exit(0);
-  
-})();
 
 // Do nothing more if this isn't the main file
 if (process.argv[1] !== __filename) return;

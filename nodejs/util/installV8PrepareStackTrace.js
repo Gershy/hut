@@ -1,14 +1,12 @@
 // Make Errors better! (https://v8.dev/docs/stack-trace-api)
 module.exports = () => Error.prepareStackTrace = (err, callSites) => {
   
-  console.log({ callSites });
-  
   let trace = callSites.map(cs => {
     
     let file = cs.getFileName();
     if (!file || file.hasHead('node:')) return undefined;
     
-    //Object.getOwnPropertyNames(Object.getPrototypeOf(cs)),
+    // Object.getOwnPropertyNames(Object.getPrototypeOf(cs)),
     
     return {
       type: 'line',
@@ -19,8 +17,6 @@ module.exports = () => Error.prepareStackTrace = (err, callSites) => {
     };
     
   });
-  
-  console.log({ trace });
   
   return `>>>HUTTRACE>>>${JSON.stringify(trace)}<<<HUTTRACE<<<`;
   
