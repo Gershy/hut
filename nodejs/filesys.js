@@ -329,7 +329,6 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     this.checkFp(fp);
     
     let dbg = fp.fsp().has('swapswap') ? gsc : Function.stub;
-    dbg('DATA:', data?.length === 0 ? data : getFormName(data));
     
     if (data === null || data.length === 0) {
       
@@ -393,6 +392,8 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
           await fs.writeFile(fp.fsp(), data);
           
         }
+        
+        dbg('Set data succcess!');
         
       }});
       
