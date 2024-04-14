@@ -728,7 +728,7 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
           }));
           contentReal.addReal('item', lay.text(String.baseline(`
             | You're about to match with an opponent!
-            | To play a friend, decide on a unique code-word together, and make sure you both enter that same code into the field!
+            | To play a friend decide on a unique code-word together and enter the exact same code into the field!
           `)));
           contentReal.addReal('gap', { Geom: { h: '3vmin' } });
           contentReal.addReal('termInput', lay.input('Code?', termSrc));

@@ -673,8 +673,6 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         
       }));
       
-      // TODO: Drift! loadtest's server must inherit from RoadAuthority. Basically need to test
-      // loadtesting; it's going to fail in a whole bunch of ways at first...
       let loadtest = null;
       if (loftConf.name === 'therapy') {
         
@@ -683,11 +681,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         // We know the uid of the root Therapy Record; this means if it
         // already exists we'll get a reference to it!
         let therapyPrefix = loftConf.prefix;
-        let therapyRec = recMan.addRecord({
-          uid: '!root',
-          type: `${therapyPrefix}.therapy`,
-          value: { ms: getMs() }
-        });
+        let therapyRec = recMan.addRecord({ uid: '!root', type: `${therapyPrefix}.therapy`, value: { ms: getMs() } });
         
         // Associate the Loft with the Therapy rec as soon as possible
         let loftRh = aboveHut.relHandler({ type: 'th.loft', term: 'hut', limit: 1 });
@@ -710,16 +704,14 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           let { therapy=false } = sc.params();
           if (therapy) (async () => {
             
-            // TODO: It's important that nothing occurring within this
-            // function performs any therapy subcon... otherwise LOOP!
-            // Best way is probably to pass stub functions in place of
-            // loggers for every utility used by Therapy!
+            // TODO: It's important that nothing occurring within this function writes via subconm,
+            // otherwise LOOP! Best way is probably to pass stub functions in place of loggers for
+            // every utility used by Therapy!
             
             try {
               
-              // TODO: What exactly are the pre-existing constraints on
-              // `uid` values? KeepBank will stick uids into filenames
-              // so it's important to be certain
+              // TODO: What exactly are our constraints on `uid` values? KeepBank will stick uids
+              // into filenames so it's important to be certain (see realessay solution)
               let ms = getMs();
               let streamUid = `!stream@${sc.term.replace(/[.]/g, '@')}`;
               let streamRec = await recMan.addRecord({
@@ -767,6 +759,9 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         subconWriteStdout.relevantTraceIndex += 1;
         
       } else if (conf('global.features.loadtest')) {
+        
+        // TODO: Drift! loadtest's server must inherit from RoadAuthority. Basically need to test
+        // loadtesting; it's going to fail in a whole bunch of ways at first...
         
         // Note loadtesting cannot apply to the "therapy" deployment!
         
