@@ -3,11 +3,12 @@
 // The "clearing" is javascript-level bootstrapping
 
 /// {ASSERT=
-let mustDefaultRooms = !global?.rooms;
 if (!global)          throw Error(`"global" must be available`);
+/// =ASSERT}
+
+let mustDefaultRooms = !global.hasOwnProperty('rooms');
 if (mustDefaultRooms) global.rooms = Object.create(null);
 if (!global.mmm)      global.mmm = () => {};
-/// =ASSERT}
 
 Object.assign(global, {
   Regex: RegExp,
