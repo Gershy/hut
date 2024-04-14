@@ -8,6 +8,7 @@ if (!global)          throw Error(`"global" must be available`);
 
 let mustDefaultRooms = !global.hasOwnProperty('rooms');
 if (mustDefaultRooms) global.rooms = Object.create(null);
+
 if (!global.mmm)      global.mmm = () => {};
 
 Object.assign(global, {
@@ -1017,10 +1018,8 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   
 });
 
-/// {ASSERT=
 if (!global.gsc)      global.gsc = subcon('gsc'); // "global subcon"
 if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
-/// =ASSERT}
 
 { // Define global Forms: Endable, Src, Tmp, etc.
   
