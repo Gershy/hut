@@ -114,8 +114,6 @@ global.rooms['setup.hut'] = async () => {
     
     init({ isHere=false, hid, uid, heartbeatMs, ...recordProps }) {
       
-      gsc({ hid, uid, heartbeatMs });
-      
       /// {DEBUG=
       if (!hid && !uid) throw Error(`Api: supply either "hid" or "uid" (they're synonyms)`);
       if (!isForm(heartbeatMs, Number)) throw Error('Api: "heartbeatMs" must be Number');
