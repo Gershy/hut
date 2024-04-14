@@ -17,13 +17,13 @@ global.rooms['therapy'] = async (roomName, therapyKeep) => {
     above: async (experience, dep) => {
       
       /// {ABOVE=
-      gsc('Therapy ABOVE');
+      sc('Therapy ABOVE');
       /// =ABOVE}
       
     },
     below: async (experience, dep) => {
       
-      gsc('Therapy BELOW', experience);
+      sc('Therapy BELOW', experience);
       
       dep(experience.real.addLayout('Axis1d', { axis: 'y', dir: '+', mode: 'stack' }));
       
