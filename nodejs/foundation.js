@@ -384,9 +384,9 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       
       // Returns a Keep representing the compiled code associated with some Room. Note an optimal
       // function signature here would simply be `bearing, srcKeep` - but it's easier to accept a
-      // PARTIAL DiveToken. A partial dive can be used to reference both the src and cmp Keeps.
-      // Accepting a full DiveToken or Keep would make it awkward to reference the corresponding
-      // compiled Keep! Should probably just write something like `async srcKeepToCmpKeep`...
+      // PARTIAL DiveToken, leading up to the parent of both src and cmp Keeps. Accepting a full
+      // DiveToken or Keep would make it awkward to reference the corresponding compiled Keep!
+      // TODO: Should probably just write something like `async srcKeepToCmpKeep`...
       
       roomDive = token.dive(roomDive);
       
