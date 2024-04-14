@@ -128,6 +128,9 @@ global.rooms['setup.hut'] = async () => {
         commandHandlers: Map(/* commandString -> Tmp({ desc, fn }) */),
         heartbeatMs
       });
+      
+      gsc('OK', { isHere, hid });
+      
       denumerate(this, 'commandHandlers');
       
       forms.Record.init.call(this, { uid, ...recordProps, volatile: true });
