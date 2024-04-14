@@ -118,10 +118,16 @@ global.rooms['setup.hut'] = async () => {
       
       /// {DEBUG=
       if (!hid && !uid) throw Error(`Api: supply either "hid" or "uid" (they're synonyms)`);
+      if (!isForm(heartbeatMs, Number)) throw Error('Api: "heartbeatMs" must be Number');
+      /// =DEBUG}
+      
       if (!hid) hid = uid;
       if (!uid) uid = hid;
+      
+      /// {DEBUG=
       if (uid !== hid) throw Error(`Api: "hid" and "uid" must have same value`);
-      if (!isForm(heartbeatMs, Number)) throw Error('Api: "heartbeatMs" must be Number');
+      if (!isForm(uid, String)) throw Error('Api: "uid" must be String').mod({ uid });
+      if (!isForm(hid, String)) throw Error('Api: "hid" must be String').mod({ hid });
       /// =DEBUG}
       
       Object.assign(this, {
