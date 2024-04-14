@@ -510,8 +510,8 @@ global.rooms['record'] = async () => {
     },
     desc() {
       return (this.term !== this.rec.type.name)
-        ? `${getFormName(this)}( ${this.rec.desc()} <--[${this.term}]--- ${this.type.name} )`
-        : `${getFormName(this)}( ${this.rec.desc()} <-- ${this.type.name} )`;
+        ? `${getFormName(this)}(r: ${this.rec.desc()} <--[${this.term}]--- ${this.type.name})`
+        : `${getFormName(this)}(r: ${this.rec.desc()} <-- ${this.type.name})`;
     },
     
     srcFlags: { memory: true, multi: false, tmpsOnly: true },
@@ -920,7 +920,7 @@ global.rooms['record'] = async () => {
       })();
       
     },
-    desc() { return `${getFormName(this)}${this.volatile ? '??' : ''}(${this.type.name}, ${this.uid})`; },
+    desc() { return `${getFormName(this)}${this.volatile ? '??' : ''}(n: ${this.type.name}, u: ${this.uid})`; },
     * iterateBreadthFirst() {
       
       let nextRecs = [ this ];

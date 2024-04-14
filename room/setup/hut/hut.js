@@ -989,7 +989,7 @@ global.rooms['setup.hut'] = async () => {
       forms.Hut.cleanup.call(this); // Applies Record.prototype.cleanup
       
       clearTimeout(this.heartbeatTimeout);
-      let roads = this.roads ? [ ...this.roads.values() ] : [];
+      let roads = this.roads ? [ ...this.roads.values() ] : []; // TODO: Checking that `this.roads` exists should *nottt* be necessary!!
       this.roads = Map.stub;
       for (let r of roads) r.end();
       

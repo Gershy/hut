@@ -125,7 +125,7 @@ let confyRoot = (() => {
         return email;
       }}),
       password: ConfyVal({ settle: 'str', def: null }),
-      certificateType: ConfyVal({ settle: 'str', def: null }),
+      certificateType: ConfyVal({ settle: 'str', def: 'selfSign' }),
       details: ConfySet({
         kids: {
           geo: ConfyVal({ settle: 'str', fn: geo => {
