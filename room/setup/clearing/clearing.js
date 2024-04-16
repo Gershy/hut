@@ -103,7 +103,6 @@ Object.assign(global, {
       return p.toObj(p => this.has(p) ? [ p, this[p] ] : skip);
       
     },
-    find(fn) { console.log('Deprecated "find" method'); return this.seek(fn); },
     seek(fn) { // Iterator: (val, key) => bool; returns { found, val=null, key=null }
       for (let k in this) if (fn(this[k], k)) return { found: true, val: this[k], key: k };
       return { found: false, val: null, k: null };
@@ -194,7 +193,6 @@ Object.assign(global, {
       for (let i = 0; i < len; i++) { let v = it(this[i], i); if (v !== skip) ret.push(v); }
       return Object.fromEntries(ret);
     },
-    find(fn) { console.log('Deprecated "find" method'); return this.seek(fn); }, // TODO: Remove!
     seek(fn) { // Iterator: (val, ind) => bool; returns { found=false, val=null, ind=null }
       let n = this.length;
       for (let i = 0; i < n; i++) if (fn(this[i], i)) return { found: true, val: this[i], ind: i };
@@ -251,6 +249,25 @@ Object.assign(global, {
       }).join('\n');
       
     },
+    $charset: str => {
+      let cache = Map();
+      return {
+        str,
+        size: BigInt(str.length),
+        charVal: c => {
+          if (!cache.has(c)) {
+            let ind = str.indexOf(c);
+            if (ind < 0) throw Error('Char outside charset');
+            cache.set(c, BigInt(ind));
+          }
+          return cache.get(c);
+        },
+        valChar: n => {
+          if (n < 0 || n >= str.length) throw Error('Val outside charset');
+          return str[n];
+        }
+      };
+    },
     $base32: '0123456789abcdefghijklmnopqrstuv',
     $base36: '0123456789abcdefghijklmnopqrstuvwxyz',
     $base62: '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ',
@@ -280,19 +297,28 @@ Object.assign(global, {
       return this.split('\n').map(ln => `${indentStr}${ln}`).join('\n');
       
     },
-    encodeInt(chrs=String.base62) {
-      if (!chrs) throw Error(`No characters provided`);
-      if (chrs.count() === 1) return this.count();
-      let cache = Object.create(null);
-      let base = chrs.count();
-      let sum = 0;
+    encodeInt(charset=String.base62, { big=false }={}) {
+      
+      if (isForm(charset, String)) charset = String.charset(charset);
+      
+      let base = charset.size;
+      if (base === 1n) return this.count();
+      
+      let sum = 0n;
       let n = this.length;
-      for (let i = 0; i < n; i++) {
-        let c = this[i];
-        if (cache[c] === skip) cache[c] = chrs.indexOf(c);
-        sum += Math.pow(base, n - i - 1) * cache[c];
+      for (let ind = 0; ind < n; ind++)
+        // Earlier values of `i` represent higher places same as with written numbers further left
+        // digits are more significant
+        // The value of the place `i` is `ind - 1`
+        sum += (base ** BigInt(n - ind - 1)) * charset.charVal(this[ind]);
+      
+      if (!big) {
+        sum = Number(sum);
+        if ([ Infinity, -Infinity ].has(sum)) throw Error('Precision loss converting BigInt -> Number');
       }
+      
       return sum;
+      
     }
     
   });
@@ -309,7 +335,7 @@ Object.assign(global, {
       for (let i = 0; i < this; i++) { let v = fn(i); if (v !== skip) ret.push(v); }
       return Object.fromEntries(ret);
     },
-    encodeStr(a1, a2 /* String, Number; String -> chrs=String.base62, Number -> padLen=0 */) {
+    encodeStr(a1, a2) {
       
       // Note that base-1 requires 0 to map to the empty string. This also
       // means that, for `n >= 1`:
@@ -317,34 +343,7 @@ Object.assign(global, {
       // is always equivalent to
       //      |       singleChr.repeat(n - 1)
       
-      let [ chrs=String.base62, padLen=0 ] = isForm(a1, String) ? [ a1, a2 ] : [ a2, a1 ];
-      if (!isForm(chrs, String)) throw Error('No encoding language provided');
-      if (!isForm(padLen, Number)) throw Error(`Pad length must be Number (got ${getFormName(padLen)})`);
-      
-      let base = chrs.count();
-      if (base === 1 && padLen) throw Error(`Can't pad when using base-1 encoding`);
-      
-      if (this !== this) return (base === 1) ? '' : chrs[0].repeat(Math.max(padLen, 1));
-      
-      let n = this.valueOf();
-      let amt = 1;
-      
-      // Figure out how many digits (chars) the resulting String will have
-      let digits = 1;
-      if (base === 1)   { digits = n; n = 0; }
-      else              { while (true) { let t = amt * base; if (t > n) break; digits++; amt = t; } }
-      
-      // Select the highest non-overflowing value for each digit in turn
-      // (starting from highest digit)
-      let seq = [];
-      for (let p = digits - 1; p >= 0; p--) {
-        let pow = Math.pow(base, p);
-        let div = Math.floor(n / pow);
-        seq.push(chrs[div]);
-        n -= pow * div;
-      }
-      
-      return seq.join('').padHead(padLen, chrs[0]);
+      return ((this !== this) ? 0n : BigInt(Math.floor(this))).encodeStr(a1, a2);
       
     },
     isInteger() { return this === Math.round(this); }, // No bitwise shortcut - it disrupts Infinity
@@ -352,6 +351,34 @@ Object.assign(global, {
     * bits() { let n = this >= 0 ? this : -this; while (n) { yield n & 1; n = n >> 1; } },
     
     map: undefined // Prevent `Number(...).map`
+    
+  });
+  protoDefs(BigInt, {
+    
+    encodeStr(a1, a2 /* `charset` and `padLen=0` in either order */) {
+      
+      // Note that base-1 requires 0 to map to the empty string. This also
+      // means that, for `n >= 1`:
+      //      |       (n).encodeStr(singleChr)
+      // is always equivalent to
+      //      |       singleChr.repeat(n - 1)
+      
+      let [ charset, padLen=0 ] = isForm(a1, Number) ? [ a2, a1 ] : [ a1, a2 ];
+      if (!charset)                charset = String.base62;
+      if (isForm(charset, String)) charset = String.charset(charset);
+      
+      let base = charset.size;
+      
+      /// {DEBUG=
+      if (base === 1n && padLen) throw Error(`Can't pad when using base-1 encoding`);
+      /// =DEBUG}
+      
+      let num = this; // this.constructor === BigInt ? this : BigInt(Math.floor(this));
+      let digits = [];
+      while (num) { digits.push(charset.valChar(num % base)); num /= base; }
+      return digits.reverse().join('').padHead(padLen, charset.str[0]);
+      
+    }
     
   });
   protoDefs(Function, {
@@ -363,7 +390,7 @@ Object.assign(global, {
   });
   protoDefs(Error, {
     
-    $stackTraceLimit: 150,
+    $stackTraceLimit: Infinity,
     
     mod(props={} /* { cause, msg, message, ...more } */) {
       
@@ -387,6 +414,7 @@ Object.assign(global, {
       if (!this.cause) return;
       let causes = (hasForm(this.cause, Error) ? [ this.cause ] : this.cause);
       causes.each(err => err.suppress());
+      return this;
     },
     
     getInfo() {
@@ -565,7 +593,6 @@ Object.assign(global, {
       for (let v of this) { v = fn(v, ind++); if (v !== skip) ret.push(v); }
       return ret;
     },
-    find(fn) { console.log('Deprecated "find" method'); return this.seek(fn); },
     seek(fn) { // Iterator: (val) => bool; returns { found, val }
       for (let val of this) if (fn(val)) return { found: true, val };
       return { found: false, val: null };
@@ -591,7 +618,6 @@ Object.assign(global, {
       for (let [ k, v ] of this) { v = fn(v, k); if (v !== skip) ret.push(v); }
       return Object.fromEntries(ret);
     },
-    find(fn) { console.log('Deprecated "find" method'); return this.seek(fn); },
     seek(fn) { // Iterator: (val, key) => bool; returns { found, val, key }
       for (let [ k, v ] of this) if (fn(v, k)) return { found: true, val: v, key: k };
       return { found: false, val: null, key: null };
@@ -893,11 +919,13 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   mapCmpToSrc: (file, row, col) => ({ file, row, col, context: null }),
   
   // Subcon debug
-  subcon: (diveToken) => {
-    let sc = (...args) => global.subconOutput(sc, ...args);
+  subcon: (diveToken, pfx=[]) => {
+    let sc = (...args) => void global.subconOutput(sc, ...sc.pfx, ...args); // Always returns `skip`!
     return Object.assign(sc, {
+      // The sc "pfx" includes props to always log with every call (e.g. correlation ids)
+      pfx,
       term: isForm(diveToken, String) ? diveToken : diveToken.join('.'),
-      kid: dt2 => global.subcon([ ...token.dive(diveToken), ...token.dive(dt2) ]),
+      kid: (dt2, ...pfx2) => global.subcon([ ...token.dive(diveToken), ...token.dive(dt2) ], [ ...pfx, ...pfx2 ]),
       cachedParams: null,
       params() {
         if (!sc.cachedParams) {
@@ -905,7 +933,8 @@ Object.assign(global, global.rooms['setup.clearing'] = {
           setTimeout(() => sc.cachedParams = null, 15000);
         }
         return sc.cachedParams;
-      }
+      },
+      desc: () => `Subcon(${sc.term})`
     });
   },
   subconParams: sc => {
@@ -1056,8 +1085,8 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
       
       if (this.off()) throw Error(`Can't hold ended ${getFormName(this)}`);
       
-      // I had to decide whether the initial call to `hold` initializes
-      // "~holdCnt" to 1 or 2. Imagine this scenario:
+      // I had to decide whether the initial call to `hold` initializes "~holdCnt" to 1 or 2 (when
+      // "~holdCnt" is decremented to 0, the Endable ends). Consider this scenario:
       // 
       //    | let initMyEndable = () => {
       //    |   let e = initEndableSomehow();
@@ -1065,21 +1094,20 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
       //    |   uponSomeCondition(() => e.end());
       //    | };
       // 
-      // If "~holdCnt" initialized to 1 it would be necessary for
-      // `initMyEndable` to be aware that the `e` it is initializing is
-      // destined to be held (by `doThingThatRefsEndable`). This is
-      // because `doThingThatRefsEndable` will call `e.hold)`, setting
-      // `e['~holdCnt'] === 1`, and then `e.end()`, decrementing
-      // `e['~holdCnt'] === 0` - the hold count would hit 0, and `e`
-      // would fully end, which is not good for `initMyEndable` which
-      // doesn't expect `e` to end from `doThingThatRefsEndable` - since
-      // `initMyEndable` is the "initializer" (or "owner") of `e`. This
-      // is why setting the initial "~holdCnt" to 2 improves behaviour;
-      // the "owner" of an Endable(...) never needs to know whether `e`
-      // will go on to be held later. Only non-owners will be holding
-      // Endables; this means the first call to `hold` increments 1 for
-      // the non-owner's context, plus an additional 1 (total 2)
-      // indicating that another context also owns the Endable!
+      // The difference lies in whether we want to force an Endable's creator to bear the cognitive
+      // overhead of understanding whether the `Endable(...)` is "holdy" or "basic". Most Endables
+      // are "basic" - they are not destined to ever be held/reference-counted.
+      // 
+      // If "~holdCnt" initialized to 1 it would be necessary for `initMyEndable` to be aware that
+      // the `e` it is initializing is destined to be held (by `doThingThatRefsEndable`). This is
+      // because `doThingThatRefsEndable` will call `e.hold`), setting `e['~holdCnt'] === 1`, and
+      // then `e.end()`, decrementing `e['~holdCnt'] === 0` - the hold count would hit 0, and `e`
+      // would fully end - not good for `initMyEndable` which doesn't expect `e` to end from
+      // `doThingThatRefsEndable` - since `initMyEndable` is the "initializer" ("owner") of `e`.
+      // Therefore setting the initial "~holdCnt" to 2 improves behaviour; the `Endable(...)` owner
+      // has no overhead related to whether `e` will go on to be held later. Only non-owners deal
+      // with holding Endables; this means call #1 to `hold` increments 1 for the creator's context
+      // plus an additional 1 (total 2) indicating an extra context also sustains the Endable!
       this['~holdCnt'] = (this['~holdCnt'] || 1) + 1;
       
       return this;
@@ -1087,6 +1115,8 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
     },
     end() {
       
+      // TODO: Needs to be able to return a value, potentially a Promise, indicating when the
+      // Endable is effectively ended
       // Only returns `false` if this is already ended.
       
       if (this.off()) return false;
@@ -1315,11 +1345,11 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
     },
     init() {},
     access: C.noFn('access', arg => {}),
-    seek(diveToken, noSecondArg) {
+    dive(diveToken, noSecondArg) { // TODO: Rename to "dive"!
       
-      /// {DEBUG=
+      /// {DEPRECATED=
       if (noSecondArg) throw Error(`Api: provide 1 arg to seek (use an array?)`);
-      /// =DEBUG}
+      /// =DEPRECATED}
       
       let val = this;
       for (let d of token.dive(diveToken)) {
@@ -1330,6 +1360,10 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
       }
       return val;
       
+    },
+    seek(...args) {
+      gsc(Error('Deprecated "seek" method (use "dive" instead)'));
+      return this.dive(...args);
     }
     
   })});

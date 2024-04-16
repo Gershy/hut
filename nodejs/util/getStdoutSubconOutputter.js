@@ -15,24 +15,26 @@ module.exports = (cfg={}) => {
   
   let outputter = (sc, ...args) => { // Stdout; check "chatter" then format and output
     
+    let now = getDate();
     let { debug, relevantTraceIndex, leftColW, rightColW } = outputter;
     
-    // TODO: Wrapping this in DEBUG does nothing; this file doesn't get compiled!
+    // TODO: Wrapping this in DEBUG does nothing; this file isn't compiled!
     let trace = (debug && sc.params().active) ? Error('trace').getInfo().trace : null;
-    let { chatter=true, chatterFormat } = sc.params();
+    let params = sc.params();
+    let { chatter=true, chatterFormat } = params;
     
-    thenAll(args.map(arg => isForm(arg, Function) ? arg(sc) : arg), args => {
+    return thenAll(args.map(arg => isForm(arg, Function) ? arg(sc) : arg), args => {
+      
+      // Note that setting { chatter: false } disables any subcon except "gsc" and "warn"
+      if (!chatter && ![ 'gsc', 'warn' ].has(sc.term)) return { params, args };
       
       if (chatterFormat) {
         // The subcon's "chatterFormat" param takes the argument arr and returns a new arr, or
         // `null` to silence this item
         args = eval(chatterFormat)(...args);
-        if (args === null) return;
+        if (args === null) return null;
         if (!isForm(args, Array)) args = [ args ];
       }
-      
-      // Forced output for select subcons
-      if (!chatter && ![ 'gsc', 'warning' ].has(sc.term)) return;
       
       let depth = 7;
       if (isForm(args[0], String) && /^[!][!][0-9]+$/.test(args[0])) {
@@ -40,7 +42,14 @@ module.exports = (cfg={}) => {
         args = args.slice(1);
       }
       
-      let now = getDate();
+      // Merge leading sequence of Strings, then leading sequence of Objects
+      let rawArgs = args;
+      let strs = [];
+      let obj = {};
+      let ind = 0;
+      while (isForm(rawArgs[ind], String)) strs.push(rawArgs[ind++]);
+      while (isForm(rawArgs[ind], String)) obj.merge(rawArgs[ind++]);
+      args = [ ...(strs.empty() ? [] : [ strs.join(' ') ]), ...(obj.empty() ? [] : [ obj ]), ...rawArgs.slice(ind) ];
       
       let leftLns = [ `[${sc.term.slice(-leftColW)}]`, now ];
       let rightLns = args.map(v => {
@@ -66,6 +75,8 @@ module.exports = (cfg={}) => {
       
       let topLine = leftColW.toArr(horzDash).join('') + junction() + (1 + rightColW).toArr(horzDash).join('');
       console.log(topLine + '\n' + logStr);
+      
+      return { params, args };
       
     });
     

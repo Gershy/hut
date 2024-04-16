@@ -65,4 +65,9 @@ let conf = (() => { // Parse command-line conf
   
 })();
 
-require('./nodejs/foundation.js')({ hutFp: __dirname, conf }).fail(gsc);
+Promise.resolve()
+  .then(() => require('./nodejs/foundation.js')({ hutFp: __dirname, conf }))
+  .fail(err => {
+    gsc(err.feedback ?? err); // Errors with "feedback" properties are user-friendly
+    process.exitNow(1);
+  });

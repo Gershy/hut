@@ -2,16 +2,14 @@ let roomName = 'habitat.HtmlBrowserHabitat.hutify.protocol.sokt';
 global.rooms[roomName] = () => then(getRoom('setup.hut.hinterland.RoadAuthority'), RoadAuth =>
   form({ name: 'SoktRoadAuthority', has: { RoadAuth }, props: (forms, Form) => ({
     
-    init({ secure, ...args }) {
-      forms.RoadAuth.init.call(this, { secure, protocol: 'sokt', ...args });
+    init({ ...args }) {
+      forms.RoadAuth.init.call(this, { protocol: 'sokt', ...args });
       Object.assign(this, { active: false });
     },
-    activate() {
+    async doActivate({ tmp }) {
       
-      let tmp = Tmp();
       this.active = true;
       tmp.endWith(() => this.active = false);
-      return tmp;
       
     },
     makeRoad(belowHut, params) {

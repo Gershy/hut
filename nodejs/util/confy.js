@@ -3,6 +3,7 @@
 // !<ref> !<lnk>
 // !<rem>
 // !<def>
+// !<auto>
 
 let Confy = form({ name: 'Confy', props: (forms, Form) => ({
   

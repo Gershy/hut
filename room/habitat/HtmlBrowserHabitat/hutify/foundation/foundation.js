@@ -373,7 +373,7 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
     let RoadAuthForm = pclServers[name];
     return RoadAuthForm({ aboveHut, secure, netProc: `${netAddr}:${port}`, ...opts });
   });
-  let activePrms = roadAuths.map(ra => ra.activate());
+  let activePrms = roadAuths.map(ra => ra.activate({ security: ra.secure ? {} : null }));
   foundationTmp.endWith(() => activePrms.each(p => p.end()));
   
   // Providing the same `belowHid` initiates only one BelowHut

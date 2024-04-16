@@ -12,88 +12,80 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
     init({ ...args }) {
       
       forms.RoadAuthority.init.call(this, { protocol: 'sokt', ...args });
-      Object.assign(this, {});
+      Object.assign(this, { httpRoadAuthority: null });
       
     },
     
-    activate({ security=null, adjacentServerPrms={} }={}) {
+    async doActivate({ tmp, security=null, adjacentServerPrms={} }={}) {
       
-      // Note that "adjacent" implies any such servers are on the same port
+      // Note that "adjacent" implies all servers running on the same port
       
-      let tmp = Tmp();
-      
-      tmp.prm = (async () => {
+      let existingHttpRoadAuthority = await adjacentServerPrms.at('http', null);
+      let httpRoadAuthority = existingHttpRoadAuthority ?? await (async () => {
         
-        let existingHttpRoadAuthority = adjacentServerPrms.has('http') && await adjacentServerPrms.http;
-        let httpRoadAuthority = existingHttpRoadAuthority ||  await (async () => {
-          
-          this.sc('No adjacent http server - creating a sokt-specific http server');
-          
-          let HttpRoadAuthority = await require('./http.js');
-          let httpRoadAuthority = HttpRoadAuthority({
-            aboveHut: this.aboveHut, // The AboveHut won't be used
-            netProc: this.netProc,
-            sc: subconStub // Prevent http subcon - we'll do all necessary sc for websocket
-          });
-          httpRoadAuthority.intercepts = [
-            (req, res) => {
-              gsc('SOKT INTERCEPT HTTP', req.url);
-              res.socket.destroy();
-              return true;
-            }
-          ];
-          
-          let activateTmp = httpRoadAuthority.activate({ security });
-          tmp.endWith(activateTmp);
-          await activateTmp.prm;
-          
-          return httpRoadAuthority;
-          
-        })();
+        this.sc('No adjacent http server - creating a sokt-specific http server');
         
-        httpRoadAuthority.server.on('upgrade', (req, socket, initialBuff) => {
-          
-          let initialMs = getMs();
-          
-          if (req.headers['upgrade'] !== 'websocket') return socket.end('Api: upgrade header must be "websocket"');
-          if (!req.headers['sec-websocket-key'])      return socket.end('Api: missing "sec-websocket-key" header');
-          
-          let belowNetAddr = req.connection.remoteAddress;
-          let query = (req.url.cut('?')[1] ?? '').split('&').toObj(v => v.cut('='));
-          let { hid='' } = query;
-          
-          let { belowHut, road } = safe(
-            () => this.aboveHut.getBelowHutAndRoad({
-              roadAuth: this, trn: 'async', hid,
-              params: { socket, initialMs, initialBuff, belowNetAddr }
-            }),
-            err => {
-              socket.end('Api: sorry - experiencing issues');
-              throw err.mod(msg => `Failed to get BelowHut and Road: ${msg}`);
-            }
-          );
-          
-          let hash = crypto
-            .createHash('sha1')
-            .end(`${req.headers['sec-websocket-key']}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
-            .digest('base64');
-          
-          socket.write([
-            'HTTP/1.1 101 Switching Protocols',
-            'Upgrade: websocket',
-            'Connection: Upgrade',
-            `Sec-WebSocket-Accept: ${hash}`,
-            '\r\n'
-          ].join('\r\n'));
-          
+        let HttpRoadAuthority = await require('./http.js');
+        let httpRoadAuthority = HttpRoadAuthority({
+          secure: this.secure,     // Forward this to the http server
+          aboveHut: this.aboveHut, // Forward this - it won't be used (http server only processes upgrades)
+          netProc: this.netProc,   // Forward this to the http server
+          sc: subconStub           // Prevent http sc - we'll provide sc content at sokt-level
         });
+        
+        // This http server only processes upgrades and refuses to do anything else!
+        httpRoadAuthority.intercepts = [ (req, res) => { gsc('SOKT INTERCEPT HTTP', req.url); res.socket.destroy(); return true; } ];
+        
+        let activateTmp = httpRoadAuthority.activate({ security, adjacentServerPrms });
+        tmp.endWith(activateTmp);
+        
+        await activateTmp.prm;
+        return httpRoadAuthority;
         
       })();
       
-      return tmp;
+      let upgradeFn = (req, socket, initialBuff) => {
+        
+        let initialMs = getMs();
+        
+        if (req.headers['upgrade'] !== 'websocket') return socket.end('Api: upgrade header must be "websocket"');
+        if (!req.headers['sec-websocket-key'])      return socket.end('Api: missing "sec-websocket-key" header');
+        
+        let belowNetAddr = req.connection.remoteAddress;
+        let query = (req.url.cut('?')[1] ?? '').split('&').toObj(v => v.cut('='));
+        let { hid='' } = query;
+        
+        let { belowHut, road } = safe(
+          () => this.aboveHut.getBelowHutAndRoad({
+            roadAuth: this, trn: 'async', hid,
+            params: { socket, initialMs, initialBuff, belowNetAddr }
+          }),
+          err => {
+            socket.end('Api: sorry - experiencing issues');
+            throw err.mod(msg => `Failed to get BelowHut and Road: ${msg}`);
+          }
+        );
+        
+        let hash = crypto
+          .createHash('sha1')
+          .end(`${req.headers['sec-websocket-key']}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+          .digest('base64');
+        
+        socket.write([
+          'HTTP/1.1 101 Switching Protocols',
+          'Upgrade: websocket',
+          'Connection: Upgrade',
+          `Sec-WebSocket-Accept: ${hash}`,
+          '\r\n'
+        ].join('\r\n'));
+        
+      };
+      httpRoadAuthority.server.on('upgrade', upgradeFn);
+      tmp.endWith(() => httpRoadAuthority.server.off('upgrade', upgradeFn));
       
     },
     makeRoad(belowHut, params /* { socket } */) { return (0, Form.SoktRoad)({ roadAuth: this, belowHut, ...params }); },
+    getProtocol() { return this.secure ? 'sokts' : 'sokt'; },
     
     $SoktRoad: form({ name: 'SoktRoad', has: { Road: RoadAuthority.Road }, props: (forms, Form) => ({
       
@@ -130,7 +122,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
           // TODO: Large size could use more testing
           meta = Buffer.alloc(2 + 8);
           meta.writeUInt8(127, 1); // 127 means "large size"
-          meta.writeBigUInt64(len, 2);
+          meta.writeBigUInt64BE(len, 2);
           // meta.writeUInt32BE(len / Number.int32, 2);
           // meta.writeUInt32BE(len % Number.int32, 6);
           
@@ -278,9 +270,8 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
           
           this.socket.write(Form.wsEncode(opts), cause => {
             if (cause) {
-              cause.suppress();
+              gsc.kid('error')(err.mod( msg => ({ cause, msg: `Error writing to websocket: ${msg}` }) ).suppress());
               this.end();
-              gsc.kid('error')(err.mod( msg => ({ cause, msg: `Error writing to websocket: ${msg}` }) ));
             }
             rsv();
           });

@@ -39,9 +39,23 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
   if (val === undefined) return ansi('undefined', 'green');
   if (val === null) return ansi('null', 'green');
   
-  if (isForm(val, String)) return ansi(`'${val.replaceAll('\n', '\\n')}'`, 'green');
   if (isForm(val, Number)) return ansi(`${val}`, 'green');
   if (isForm(val, Boolean)) return ansi(val ? 'T' : 'F', 'green');
+  if (isForm(val, Buffer)) return ansi(`Buffer { length: ${val.length} }`, 'green');
+  
+  if (isForm(val, String)) {
+    
+    // TODO: Copy-pasted from function formatted lower down
+    let maxW = Math.max(8, opts.w - pfxLen - d * 4 - 1); // Subtract 1 for the trailing ","
+    
+    // The ascii range 0x0007 - 0x000f are nasty control characters which don't appear in most
+    // terminals as exactly 1 character
+    let formatted = val.replaceAll(/[\u0007-\u000f]/g, '').replaceAll('\n', '\\n');
+    if (formatted.length > maxW) formatted = formatted.slice(0, maxW - 1) + '\u2026';
+    
+    return ansi(`'${formatted}'`, 'green');
+    
+  }
   
   if (d > opts.d) return ansi('<limit>', 'red');
   
@@ -56,9 +70,21 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
     
   }
   
+  if (isForm(val?.desc, Function)) {
+    
+    try {
+      let str = ansi(val.desc(), 'blue');
+      seen.set(val, str);
+      return str;
+    } catch (err) {
+      // Ignore any errors from calling `val.desc`
+    }
+    
+  }
+  
   if (hasForm(val, Function)) {
     
-    let str = 'Fn: ' + val.toString().split('\n').map(ln => ln.trim() ?? skip).join(' ');
+    let str = 'Fn: ' + val.toString().split('\n').map(ln => ln.trim() ?? skip).join(' ').replace(/[ ]+/g, ' ');
     
     let maxW = Math.max(8, opts.w - pfxLen - d * 4 - 1); // Subtract 1 for the trailing ","
     if (str.length > maxW) str = str.slice(0, maxW - 1) + '\u2026';
@@ -85,18 +111,6 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
     let str = `Map ${format(Object.fromEntries(val), opts, d, 'Map ', seen)}`;
     seen.set(val, str);
     return str;
-    
-  }
-  
-  if (isForm(val?.desc, Function)) {
-    
-    try {
-      let str = ansi(val.desc(), 'blue');
-      seen.set(val, str);
-      return str;
-    } catch (err) {
-      // Ignore any errors from calling `val.desc`
-    }
     
   }
   

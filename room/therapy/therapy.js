@@ -22,6 +22,8 @@ global.rooms['therapy'] = async (roomName, therapyKeep) => {
     },
     below: async (experience, dep) => {
       
+      let err = Error('lol');
+      
       dep(experience.real.addLayout('Axis1d', { axis: 'y', dir: '+', mode: 'stack' }));
       
       let lofterChooser = dep(Chooser.noneOrSome(experience.lofterRh));

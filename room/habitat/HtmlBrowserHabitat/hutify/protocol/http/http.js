@@ -2,16 +2,11 @@ let roomName = 'habitat.HtmlBrowserHabitat.hutify.protocol.http';
 global.rooms[roomName] = () => then(getRoom('setup.hut.hinterland.RoadAuthority'), RoadAuth =>
   form({ name: 'HttpRoadAuthority', has: { RoadAuth }, props: (forms, Form) => ({
     
-    init({ secure, ...args }) {
-      forms.RoadAuth.init.call(this, { secure, protocol: 'http', ...args });
-      Object.assign(this, {
-        abortController: null,
-        active: false
-      });
+    init({ ...args }) {
+      forms.RoadAuth.init.call(this, { protocol: 'http', ...args });
+      Object.assign(this, { abortController: null, active: false });
     },
-    activate() {
-      
-      let tmp = Tmp();
+    async doActivate({ tmp }) {
       
       this.active = true;
       this.abortController = new AbortController();
@@ -20,8 +15,6 @@ global.rooms[roomName] = () => then(getRoom('setup.hut.hinterland.RoadAuthority'
         this.abortController.abort();
         this.abortController = null;
       });
-      
-      return tmp;
       
     },
     makeRoad(belowHut, params) {

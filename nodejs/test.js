@@ -162,6 +162,7 @@ module.exports = async () => {
         // Test being able to provide chrs, padLen to
         // Number.prototype.encodeStr in any order, and omitting
         // padLen entirely, and providing a non-0 padLen
+        
         if (i !== i.encodeStr(chrs, 0   ).encodeInt(chrs)) throw Error(`Value ${i} not preserved (case 1)`);
         if (i !== i.encodeStr(0,    chrs).encodeInt(chrs)) throw Error(`Value ${i} not preserved (case 2)`);
         if (i !== i.encodeStr(chrs      ).encodeInt(chrs)) throw Error(`Value ${i} not preserved (case 3)`);
@@ -169,6 +170,19 @@ module.exports = async () => {
         if (i !== i.encodeStr(5,    chrs).encodeInt(chrs)) throw Error(`Value ${i} not preserved (case 5)`);
         
       }
+      
+    },
+    
+    async m => { // encodeInt with oversized String
+      
+      let bigStr = 'abc'.repeat(300); // This is just about big enough to be outside Number
+      
+      let oversizedErr = safe(() => bigStr.encodeInt('012abc') && null, v => v);
+      if (!oversizedErr)                                   throw Error('Should have encountered oversized error');
+      if (!/[pP]recision loss/.test(oversizedErr.message)) throw Error('Unexpected error');
+      
+      let bigInt = bigStr.encodeInt('012abc', { big: true });
+      if (bigStr !== bigInt.encodeStr('012abc')) throw Error('Unexpected result');
       
     },
     

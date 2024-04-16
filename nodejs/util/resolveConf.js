@@ -29,11 +29,11 @@ let confyRoot = (() => {
     all: ConfyVal({ settle: 'str' })
   });
   
-  let confyEnv = confyRoot.kids.environment = ConfySet();
-  let confyGlb = confyRoot.kids.global = ConfySet();
-  let confyDep = confyRoot.kids.deploy = ConfyNullable(ConfySet({ all: ConfySet() }));
+  let confyEnviro = confyRoot.kids.environment = ConfySet();
+  let confyGlobal = confyRoot.kids.global = ConfySet();
+  let confyDeploy = confyRoot.kids.deploy = ConfyNullable(ConfySet({ all: ConfySet() }));
   
-  confyGlb.kids.subcon = onto(ConfySet({
+  confyGlobal.kids.subcon = onto(ConfySet({
     headOp: ({ chain, conf, getValue }) => {
       let isRootSc = /^root[.]global[.]subcon$/.test(chain.join('.'));
       let params = isRootSc ? { chatter: 1, therapy: 0 } : getValue('[rel].[par].params');
@@ -49,15 +49,15 @@ let confyRoot = (() => {
       })
     }
   }), confy => confy.all = confy);
-  confyGlb.kids.bearing = ConfyVal({ settle: 'str', def: 'above', fn: bearing => {
+  confyGlobal.kids.bearing = ConfyVal({ settle: 'str', def: 'above', fn: bearing => {
     if (![ 'above', 'below', 'between' ].has(bearing)) throw Error('requires value from enum: [ "above", "below", "between" ]');
     return bearing;
   }});
-  confyGlb.kids.maturity = ConfyVal({ settle: 'str', def: 'alpha', fn: maturity => {
+  confyGlobal.kids.maturity = ConfyVal({ settle: 'str', def: 'alpha', fn: maturity => {
     if (![ 'dev', 'beta', 'alpha' ].has(maturity)) throw Error('requires value from enum: [ "dev", "beta", "alpha" ]');
     return maturity;
   }});
-  confyGlb.kids.features = ConfySet({
+  confyGlobal.kids.features = ConfySet({
     kids: {
       wrapBelowCode: ConfyVal({ settle: 'bln', def: false }),
       loadtest: ConfyVal({ settle: 'bln', def: false }),
@@ -68,13 +68,13 @@ let confyRoot = (() => {
       return feature;
     }})
   });
-  confyGlb.kids.therapy = ConfyNullable(ConfySet());
-  confyGlb.kids.profiling = ConfySet({ kids: {
+  confyGlobal.kids.therapy = ConfyNullable(ConfySet());
+  confyGlobal.kids.profiling = ConfySet({ kids: {
     memUsage: ConfyVal({ settle: 'bln', def: false }),
     netUsage: ConfyVal({ settle: 'bln', def: false }) // TODO: Not yet consumed anywhere!
   }});
   
-  confyGlb.kids.terminal = ConfySet({ kids: {
+  confyGlobal.kids.terminal = ConfySet({ kids: {
     width: ConfyVal({ settle: 'num', def: () => 140 })
   }});
   
@@ -82,15 +82,15 @@ let confyRoot = (() => {
   // - "device": metadata about this device running Hut
   // - "shell": info related to executing shell utilities
   // - "dnsNetAddrs": hosts to use for resolving dns queries
-  confyEnv.kids.device = ConfySet({ kids: {
+  confyEnviro.kids.device = ConfySet({ kids: {
     platform: ConfyVal({ settle: 'str', def: () => require('os').platform() }),
     operatingSystem: ConfyVal({ settle: 'str', def: () => require('os').version() }),
     numCpus: ConfyVal({ settle: 'num', def: () => require('os').cpus().length })
   }});
-  confyEnv.kids.shell = ConfySet({ kids: {
+  confyEnviro.kids.shell = ConfySet({ kids: {
     openssl: ConfyVal({ settle: 'str', def: 'openssl' })
   }});
-  confyEnv.kids.dnsNetAddrs = ConfyVal({ settle: 'arr', def: '1.1.1.1+1.0.0.1', fn: dnsNetAddrs => {
+  confyEnviro.kids.dnsNetAddrs = ConfyVal({ settle: 'arr', def: '1.1.1.1+1.0.0.1', fn: dnsNetAddrs => {
     
     if (dnsNetAddrs.length < 2) throw Error('requires minimum 2 dns values');
     for (let na of dnsNetAddrs)
@@ -102,12 +102,12 @@ let confyRoot = (() => {
   
   // Deploy values include:
   // - "host": hosting info for this deployment
-  let confyDepKids = confyDep.confy.all.kids;
-  confyDepKids.uid = ConfyVal({ settle: 'str', def: () => Math.random().toString(36).slice(2, 8), fn: uid => {
+  let confyDeployKids = confyDeploy.confy.all.kids;
+  confyDeployKids.uid = ConfyVal({ settle: 'str', def: () => Math.random().toString(36).slice(2, 8), fn: uid => {
     if (!/^[a-zA-Z0-9]+$/.test(uid)) throw Error('requires alphanumeric string').mod({ value: uid });
     return uid;
   }});
-  confyDepKids.host = ConfySet({ kids: {
+  confyDeployKids.host = ConfySet({ kids: {
     netIden: ConfySet({ kids: {
       name: ConfyVal({ settle: 'str', fn: (name, chain) => {
         if (!/^[a-z][a-zA-Z]*$/.test(name)) throw Error(`requires a String of alphabetic characters beginning with a lowercase character`);
@@ -119,12 +119,6 @@ let confyRoot = (() => {
         if (bits < 0) throw Error('requires a value >= 0');
         return bits;
       }}),
-      email: ConfyVal({ settle: 'str', fn: email => {
-        email = email.trim();
-        if (!/^[^@]+[@][^.]+[.][^.]/.test(email)) throw Error('must be a valid email');
-        return email;
-      }}),
-      password: ConfyVal({ settle: 'str', def: null }),
       certificateType: ConfyVal({ settle: 'str', def: 'selfSign' }),
       details: ConfySet({
         kids: {
@@ -138,6 +132,12 @@ let confyRoot = (() => {
             while (pcs.length < 6) pcs.push('?');
             return pcs.slice(0, 6).join('.');
           }}),
+          email: ConfyVal({ settle: 'str', fn: email => {
+            email = email.trim();
+            if (!/^[^@]+[@][^.]+[.][^.]/.test(email)) throw Error('must be a valid email');
+            return email;
+          }}),
+          password: ConfyVal({ settle: 'str', def: null }),
         },
         all: ConfyVal({ settle: 'str' }) // Arbitrary String values
       })
@@ -385,10 +385,11 @@ let confyRoot = (() => {
       })
     }),
   }});
-  confyDepKids.loft = ConfySet({
+  confyDeployKids.loft = ConfySet({
     headOp: ({ conf }) => {
+      // String like "<prefix>.<name>" resolves to `{ prefix, name }`
       if (isForm(conf, String)) {
-        let [ prefix, name ] = conf.cut('.');
+        let [ prefix, name ] = conf.cut('.', 1);
         conf = { prefix, name };
       }
       return conf;
@@ -407,7 +408,7 @@ let confyRoot = (() => {
       }})
     }
   });
-  confyDepKids.keep = ConfyVal({ settle: 'str', def: null, fn: (keep, { getValue }) => {
+  confyDeployKids.keep = ConfyVal({ settle: 'str', def: null, fn: (keep, { getValue }) => {
     if (keep === '!<auto>') {
       let uid = getValue('[rel].[par].uid');
       let loft = getValue('[rel].[par].loft');
@@ -416,8 +417,23 @@ let confyRoot = (() => {
     return keep;
   }});
   
-  // Apply the "uid", "host", and "keep" Deploy kids for Therapy
-  Object.assign(confyGlb.kids.therapy.confy.kids, { ...confyDepKids }.slice([ 'uid', 'host', 'keep' ]));
+  // Apply the "uid" "host" Deploy kids for Therapy
+  Object.assign(confyGlobal.kids.therapy.confy.kids, {
+    
+    // The "uid" and "host" kids resolve the same as `confyDeployKids.keep`
+    ...{ ...confyDeployKids }.slice([ 'uid', 'host' ]),
+    
+    // Unlike `confyDeployKids.keep`, "therapy" by default uses a KeepBank; the purpose of Therapy
+    // is to allow log analysis, so logs get persisted by default
+    keep: ConfyVal({ settle: 'str', def: '!<auto>', fn: (keep, { getValue }) => {
+      if (keep === '!<auto>') {
+        let uid = getValue('[rel].[par].uid');
+        keep = `/[file:mill]/bank/therapy/${uid}`;
+      }
+      return keep;
+    }})
+    
+  });
   
   return confyRoot;
   
@@ -458,7 +474,7 @@ module.exports = async ({ rootKeep, rawConf, confUpdateCb=Function.stub }) => {
     
     let confKeeps = await Promise.all(rawConfKeeps.map(async (confKeepDiveToken, term) => {
       
-      let confKeep = rootKeep.seek(token.dive(confKeepDiveToken));
+      let confKeep = rootKeep.dive(confKeepDiveToken);
       
       let content = null;
       try {

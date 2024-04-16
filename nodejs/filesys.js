@@ -732,7 +732,7 @@ let FsKeep = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => ({
   iterateChildren(dbg=Function.stub) {
     
     // Returns { [Symbol.asyncIterator]: fn, close: fn }
-    return this.trn.iterateNode(this.fp, { map: n => this.blacklist.has(n) ? skip : [ n, this.access(n) ] });
+    return this.trn.iterateNode(this.fp, { map: n => this.forbid.has(n) ? skip : [ n, this.access(n) ] });
     
   }
   

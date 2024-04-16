@@ -10,7 +10,6 @@ global.rooms['setup.hut'] = async () => {
     // Huts connect by Roads to other Huts, have the ability to Tell and Hear to/from other Huts,
     // and can react to what they Hear
     
-    $hutCommSc: subcon('hut.comm'),
     $sendComm: ({ src, trg, road, reply, ms=getMs(), msg }) => {
       
       // Causes `src` to tell `trg` a Message
@@ -30,17 +29,8 @@ global.rooms['setup.hut'] = async () => {
       // | None    | Afar    | N/A - Error!
       // | Any     | None    | N/A - Error!
       
-      // Note that "unrelated" Huts are two Huts such that neither is
-      // the other's descendant
-      // Note that "disjoint" Huts are non-neighbours (they require a
-      // Road to communicate)
-      
-      if (hasForm(msg, Error)) {
-        // TODO: I think this isn't in use any more; pls delete?
-        gsc('LMAOOOO this is still happening')
-        subcon('warning')(`Error reply`, msg);
-        msg = { command: 'error', type: 'application', msg: msg.message };
-      }
+      // Note that "unrelated" Huts are two Huts such that neither is the other's descendant
+      // Note that "disjoint" Huts are non-neighbours (and require a Road to communicate)
       
       if (!msg) return;
       
@@ -56,8 +46,8 @@ global.rooms['setup.hut'] = async () => {
       /// =DEBUG}
       
       let { command } = msg;
-      if (!command) Form.hutCommSc({ src, trg, note: 'missing "command"', msg });
-      else          Form.hutCommSc({ src, trg, command, msg });
+      if (!command) src.sc.kid('comm')({ src, trg, note: 'missing "command"', msg });
+      else          src.sc.kid('comm')({ src, trg, command, msg });
       
       if (!src && trg.isAfar) throw Error(`Can't tell TrgAfarHut when SrcHut is null`);
       if (!src) return trg.processCommand({ src: null, road: null, reply: null, ms, msg });
@@ -112,7 +102,7 @@ global.rooms['setup.hut'] = async () => {
       
     },
     
-    init({ isHere=false, hid, uid, heartbeatMs, ...recordProps }) {
+    init({ isHere=false, hid, uid, heartbeatMs, sc=subcon('hut'), ...recordProps }) {
       
       /// {DEBUG=
       if (!hid && !uid) throw Error(`Api: supply either "hid" or "uid" (they're synonyms)`);
@@ -132,7 +122,8 @@ global.rooms['setup.hut'] = async () => {
         hid,
         isHere, isAfar: !isHere,
         commandHandlers: Map(/* commandString -> Tmp({ desc, fn }) */),
-        heartbeatMs
+        heartbeatMs,
+        sc
       });
       
       denumerate(this, 'commandHandlers');
@@ -394,6 +385,7 @@ global.rooms['setup.hut'] = async () => {
           desc: () => `AnonHut(${belowNetAddr})`, // TODO: Include NetworkAddress in desc (from roadAuth)
           roads: Map([ [ roadAuth,  anonRoad ] ]),
           consumePendingSync: () => Error('Api: invalid anon operation').propagate(),
+          sc: this.sc.kid('anonBelow'),
           
           // AnonBelowHuts can only trigger AboveHut handlers
           runCommandHandler: comm => this.runCommandHandler(comm),
@@ -438,7 +430,12 @@ global.rooms['setup.hut'] = async () => {
         let { manager } = this.type;
         let type = manager.getType('hut.below');
         let group = manager.getGroup([]);
-        let bh = BelowHut({ aboveHut: this, isHere: !this.isHere, type, group, hid, heartbeatMs: this.heartbeatMs });
+        let bh = BelowHut({
+          aboveHut: this, isHere: !this.isHere,
+          type, group, hid,
+          heartbeatMs: this.heartbeatMs,
+          sc: this.sc.kid('below')
+        });
         manager.addRecord('hut.owned', { above: this, below: bh }, { ms: getMs() });
         
         this.belowHuts.add(hid, bh);

@@ -2,6 +2,8 @@
 
 require('../room/setup/clearing/clearing.js');
 
+let nodejs = [ 'fs', 'path' ].toObj(v => [ v, require(`node:${v}`) ]);
+
 module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   
   $crtProviders: Object.plain({
@@ -21,12 +23,12 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     acme: subcon('netIden.acme')
   }),
   
-  $tmpFp: () => require('path').join(require('os').tmpdir(), Math.random().toString('16').slice(2)),
+  $tmpFp: () => nodejs.path.join(require('os').tmpdir(), Math.random().toString('16').slice(2)),
   $setFp: (...args /* fp, data */) => {
     let [ fp, data=null ] = (args.length === 2) ? args : [ Form.tmpFp(), args[0] ];
-    return require('fs').promises.writeFile(fp, data).then(() => fp);
+    return nodejs.fs.promises.writeFile(fp, data).then(() => fp);
   },
-  $remFp: (fp) => require('fs').promises.unlink(fp),
+  $remFp: (fp) => nodejs.fs.promises.unlink(fp),
   $defaultDetails: Object.plain({
     
     // Geographic hierarchical identifiers (and shortforms)
@@ -163,14 +165,18 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   // Note that for sensitive keys the given Keep should be removable
   // media (like a USB key) for physical isolation
   
-  init({ name, details={}, keep=null, secureBits=2048, certificateType='selfSign', servers=[], getSessionKey, ...more }={}) {
+  init({ name, details={}, keep=null, secureBits=2048, certificateType='selfSign', getSessionKey, sc, ...more }={}) {
     
     // TODO: For the same Keep, certain details are expected to remain
     // consistent across runs; it's probably worth storing the initial
     // details used in a Keep, and then checking those details on every
     // other run to make sure they're the same!
     
-    if ([ String, Array ].any(C => isForm(keep, C))) keep = global.keep(keep);
+    /// {DEPRECATED=
+    if (more.has('servers')) throw Error('Do not provide "servers"');
+    /// =DEPRECATED}
+    
+    if ([ String, Array ].any(F => isForm(keep, F))) keep = global.keep(keep);
     
     if (secureBits && secureBits < 512) throw Error('Use at least 512 secure bits');
     if (!isForm(name, String) || !name) throw Error('Must provide "name"');
@@ -199,12 +205,14 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       redirectHttp80,
       
       // Misc
-      subcon: Function.stub,
+      sc,
       
       // Servers managed under this NetworkIdentity
-      servers
+      servers: []
       
     });
+    
+    this.sc('Initializing with details...', { details });
     
     this.readyPrm = Promise.all([
       
@@ -242,17 +250,20 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       
     ]);
     
+    this.readyPrm.then(() => this.sc.kid('conf')({
+      msg: 'Resolved details',
+      ...{ ...this }.slice([ 'name', 'details', 'certificateType', 'secureBits' ])
+    }));
+    
   },
   desc() {
     
     let networkAddresses = this.getNetworkAddresses();
-    
     let pcs = [];
     pcs.push(`"${this.name}"`);
-    pcs.push(this.secureBits ? `secure(${this.secureBits})` : 'UNSAFE');
+    pcs.push(this.secureBits ? `secure/${this.secureBits}` : 'UNSAFE');
     if (this.keep) pcs.push(this.keep.desc());
-    if (networkAddresses.length) pcs.push(`[ ${networkAddresses.join(', ')} ]`);
-    
+    if (networkAddresses.length) pcs.push(`[ ${networkAddresses.map(v => `"${v}"`).join(', ')} ]`);
     return `${getFormName(this)}(${pcs.join('; ')})`;
     
   },
@@ -261,6 +272,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   runInShell(args, opts={}) {
     
     if (hasForm(opts, Function)) opts = { onInput: opts };
+    let { sc=this.sc.kid('openssl') } = opts;
     
     // Note that `timeoutMs` counts since the most recent chunk
     let { onInput=null, timeoutMs=2000 } = opts;
@@ -284,7 +296,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     }
     
     let rawShellStr = `${shellName} ${shellArgs.join(' ')}`;
-    this.subcon(rawShellStr);
+    sc(`> ${rawShellStr}`, ...(opts.scParams ? [ opts.scParams ] : []));
     
     let proc = require('child_process').spawn(shellName, shellArgs, {
       cwd: '/',
@@ -392,8 +404,6 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     let [ commonName, ...altNames ] = networkAddresses;
     if (!commonName) throw Error('Supply at least 1 NetworkAddress')
     
-    gsc('DETAILS', this.details);
-    
     return String.baseline(`
       | #.pragma [=] abspath:true
       | #.pragma [=] dollarid:false
@@ -459,7 +469,9 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
     try {
       
-      return await this.runInShell(`${this.osslShellName} rsa -in ${prvFp} -pubout`);
+      return await this.runInShell(`${this.osslShellName} rsa -in ${prvFp} -pubout`, { scParams: {
+        [prvFp]: prv
+      }});
       
     } finally {
       
@@ -468,7 +480,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     }
     
   },
-  async getOsslCsr({ prv }={}) {
+  async getOsslCsr({ prv, cfg=this.getOsslConfigFileContent() }={}) {
     
     // "csr" = "certificate signing request" (".csr" = ".req" = ".p10")
     // Represents a request to associate a public key with a "certified
@@ -480,15 +492,14 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     if (!prv)                                     throw Error('Must supply "prv" to get csr!');
     if (![ String, Buffer ].has(prv.constructor)) throw Error(`"prv" must be String or Buffer (got ${getFormName(prv)})`);
     
-    let config = this.getOsslConfigFileContent();
-    let [ prvFp, cfgFp ] = await Promise.all([
-      Form.setFp(prv),
-      Form.setFp(config)
-    ]);
+    let [ prvFp, cfgFp ] = await Promise.all([ prv, cfg ].map(v => Form.setFp(v)));
     
     try {
       
-      return await this.runInShell(`${this.osslShellName} req -new -key ${prvFp} -config ${cfgFp}`);
+      return await this.runInShell(`${this.osslShellName} req -new -key ${prvFp} -config ${cfgFp}`, { scParams: {
+        [prvFp]: prv,
+        [cfgFp]: cfg
+      }});
       
     } finally {
       
@@ -506,14 +517,14 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     if (!prv) throw Error('Must supply prv to get a crt!');
     if (!csr) throw Error('Must supply csr to get a crt!');
     
-    let [ prvFp, csrFp ] = await Promise.all([
-      Form.setFp(prv),
-      Form.setFp(csr)
-    ]);
+    let [ prvFp, csrFp ] = await Promise.all([ prv, csr ].map(v => Form.setFp(v)));
     
     try {
       
-      return await this.runInShell(`${this.osslShellName} x509 -req -days 90 -in ${csrFp} -signkey ${prvFp}`);
+      return await this.runInShell(`${this.osslShellName} x509 -req -days 90 -in ${csrFp} -signkey ${prvFp}`, { scParams: {
+        [prvFp]: prv,
+        [csrFp]: csr
+      }});
       
     } finally {
       
@@ -532,8 +543,8 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     try {
       
       let info = csr
-        ? await this.runInShell(`${this.osslShellName} req -text -in ${pemFp} -noout`)
-        : await this.runInShell(`${this.osslShellName} x509 -text -in ${pemFp} -noout`);
+        ? await this.runInShell(`${this.osslShellName} req -text -in ${pemFp} -noout`, { scParams: { [pemFp]: csr || crt } })
+        : await this.runInShell(`${this.osslShellName} x509 -text -in ${pemFp} -noout`, { scParams: { [pemFp]: csr || crt } });
       
       let parsed = Form.parseIndented(info)[csr ? 'certificateRequest' : 'certificate'];
       
@@ -593,9 +604,9 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     return this.retrieveOrCompute('prv', 'utf8', () => this.getOsslPrv({ alg: 'rsa', bits: this.secureBits }));
     
   },
-  // async getCsr() {
-  //  return this.getOsslCsr({ prv: await this.getPrv() });
-  //},
+  async getCsr() {
+    return this.getOsslCsr({ prv: await this.getPrv() });
+  },
   
   async getSgnInfo() {
     
@@ -611,20 +622,24 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       //    |   validity: { msElapsed, msRemaining, expiryMs }
       //    | }
       
-      Form.subcon.sign('GET CERT', this.certificateType);
+      let sc = this.sc.kid('sgn', { scid: Math.random().toString(36).slice(2, 6) });
+      
+      sc({ msg: 'init acquiring sgn', name: this.name });
       
       let sgn = null; // Will look like `{ prv, csr, crt, invalidate }`
-      if      (this.certificateType === 'selfSign')   sgn = await this.getSgnSelfSigned();
-      else if (this.certificateType.hasHead('acme/')) sgn = await this.getSgnAcme();
+      if      (this.certificateType === 'selfSign')   sgn = await this.getSgnSelfSigned({ sc });
+      else if (this.certificateType.hasHead('acme/')) sgn = await this.getSgnAcme({ sc: sc.kid('acme') });
       else                                            throw Error(`Unknown crt acquisition method: "${this.certificateType}"`);
       
-      let deets = await this.getOsslDetails({ crt: sgn.crt });
-      Form.subcon.sign('DEETS', deets);
+      sc({ msg: 'acquired sgn crt', crt: sgn.crt });
+      
+      let crtDetails = await this.getOsslDetails({ crt: sgn.crt });
+      sc({ msg: 'acquired sgn crt details', crtDetails });
       
       let validity = null
-        ?? deets.data?.validity
-        ?? deets.signatureAlgorithmShaWithrsaencryption?.validity;
-      if (!validity) throw Error(`Couldn't resolve "validity" from SGN`).mod({ deets });
+        ?? crtDetails.data?.validity
+        ?? crtDetails.signatureAlgorithmShaWithrsaencryption?.validity;
+      if (!validity) throw Error(`Couldn't resolve "validity" from SGN`).mod({ crtDetails });
       
       let { notBefore, notAfter } = validity;
       
@@ -657,19 +672,30 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     return { sgn, refresh };
     
   },
-  async getSgnSelfSigned() {
+  async getSgnSelfSigned({ sc=this.sc.kid('getSgn') }={}) {
     
+    sc({ msg: 'acquiring selfSign prv' });
     let prv = await this.retrieveOrCompute('selfSign.prv', 'utf8', () => {
       return this.getOsslPrv({ alg: 'rsa', bits: this.secureBits });
     });
+    sc({ msg: 'acquired selfSign prv', prv });
     
+    sc({ msg: 'acquiring selfSign csr cfg' });
+    let cfg = this.getOsslConfigFileContent()
+    sc({ msg: 'acquired selfSign csr cfg', cfg });
+    
+    
+    sc({ msg: 'acquiring selfSign csr' });
     let csr = await this.retrieveOrCompute('selfSign.csr', 'utf8', () => {
       return this.getOsslCsr({ prv });
     });
+    sc({ msg: 'acquired selfSign csr', csr });
     
+    sc({ msg: 'acquiring selfSign crt' });
     let crt = await this.retrieveOrCompute('selfSign.crt', 'utf8', () => {
       return this.getOsslCrt({ prv, csr });
     });
+    sc({ msg: 'acquired selfSign crt', crt });
     
     return { prv, csr, crt, invalidate: async () => {
       
@@ -690,13 +716,11 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     }};
     
   },
-  async getSgnAcme() {
+  async getSgnAcme({ sc=this.sc.kid('acme') }={}) {
     
     // Returns a certificate certifying this NetworkIdentity's ownership
     // of the NetworkAddresses listed in its details, potentially using
     // acme protocol to obtain such a certificate
-    
-    let sc = Form.subcon.acme;
     
     let [ acquireMethod, type ] = this.certificateType.split('/');
     if (acquireMethod !== 'acme') throw Error(`Not an acme method: "${this.certificateType}"`);
@@ -1046,7 +1070,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     let tmp = Tmp();
     
     let serverPrms = servers.map(server => Promise.later());
-    let activeTmps = servers.map(server => server.activate({ security: sgn, adjacentServerPrms: serverPrms }));
+    let activeTmps = servers.map(server => server.activate({ security: server.secure ? sgn : null, adjacentServerPrms: serverPrms }));
     
     // Resolve the manually handled Promise for each Server when the Server goes active
     for (let [ term, activeTmp ] of activeTmps)
@@ -1070,40 +1094,50 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
     // TODO: (?) Certify every NetworkAddress in `this.servers`
     
-    let sc = gsc; //Form.subcon.server;
-    let tmp = Tmp();
+    let sc = this.sc.kid('server');
+    let tmp = Tmp({ portServers: null });
     
-    // Maybe spin up a server to redirect http->https if port 80 is free?
+    let effectiveServers = [ ...this.servers ];
+    
+    // Add a server to redirect http->https if port 80 is free?
     if (this.redirectHttp80 && this.secureBits > 0) await (async () => {
       
-      let httpsServer = this.servers.seek(server => server.protocol === 'http').val;
+      let httpsServer = effectiveServers.find(server => server.protocol === 'http');
       if (!httpsServer) return; // No point redirecting if there's no secure server
       
-      // TODO: Don't know if another process is using a port (detect "EPORTUNAVAILABLE"?)
-      if (this.servers.some(server => server.port === 80)) return; // Port 80 is unavailable
+      // TODO: What if another process is using the port?? (detect "EPORTUNAVAILABLE"?)
+      // Note all we now know is *this* NetworkIdentity is not hogging http://localhost:80, as this
+      // NetworkIdentity is secure (it wouldn't be using http)
       
-      sc(`Will redirect http port 80 to -> ${httpsServer.desc()}`);
       let { netAddr, port: httpsPort } = httpsServer;
       
-      let HttpRoadAuth = await require('./server/http.js');
-      let redirectServer = HttpRoadAuth({ secure: false, netProc: `${netAddr}:80`, doCaching: false });
-      
+      let HttpRoadAuth = await require('./server/http.js'); // http.js -> `module.exports` is a Promise!!
+      let redirectServer = HttpRoadAuth({
+        secure: false, netProc: `${netAddr}:80`, doCaching: false,
+        // This server does nothing but redirect; spoof the AboveHut
+        aboveHut: {
+          desc: () => 'FakeAboveHut',
+          getDefaultLoftPrefix: () => { throw Error('Fake AboveHut'); },
+          getBelowHutAndRoad: () => { throw Error('Fake AboveHut'); }
+        }
+      });
       redirectServer.intercepts.push((req, res) => {
         res.writeHead(302, { 'Location': `https://${netAddr}:${httpsPort}${req.url}` }).end();
         return true;
       });
       
-      this.servers.add(redirectServer);
-      tmp.endWith(() => this.servers.rem(redirectServer));
+      effectiveServers.add(redirectServer);
+      
+      sc(`Will redirect ${redirectServer.desc()} to -> ${httpsServer.desc()}`);
       
     })();
     
     // Group Servers by port, ensure all Servers on the same port share
     // the same NetworkAddress, ensure no two Servers on the same port
     // have the same protocol
-    let portServers = this.servers
+    let portServers = tmp.portServers = effectiveServers
       .categorize(server => server.port.toString(10))
-      .map((serverArr) => serverArr.toObj(server => [ server.protocol, server ]));
+      .map((serverArr) => serverArr.toObj(server => [ server.getBaseProtocol(), server ]));
     
     /// {DEBUG=
     if (portServers.empty()) throw Error('No servers available');
@@ -1119,20 +1153,6 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       if (protocols.size !== servers.count()) throw Error(`Multiple Servers on port ${port} have the same Protocol`);
     }
     /// =DEBUG}
-    
-    sc(''
-      + `Opening "${term}" using hosts (${this.secureBits ? 'secure' : 'unsafe'}):\n`
-      + portServers.toArr((servers, port) => {
-          return `Port ${port}:\n` + servers.toArr(s => `  - ${s.protocol}://${s.netAddr}:${port}`).join('\n')
-        }).join('\n')
-    );
-    
-    tmp.endWith(() => sc(''
-      + `Shutting "${term}" using hosts (${this.secureBits ? 'secure' : 'unsafe'}):\n`
-      + portServers.toArr((servers, port) => {
-          return `Port ${port}:\n` + servers.toArr(s => `  - ${s.protocol}://${s.netAddr}:${port}`).join('\n')
-        }).join('\n')
-    ));
     
     if (!this.secureBits) {
       
@@ -1150,14 +1170,14 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
         // `cycleTmp` represents the lifespan of servers running over
         // multiple signing cycles; a signing cycle ends when the
         // relevant signing info becomes outdated
-        let cycleTmp = Tmp.stub;
-        tmp.endWith(() => cycleTmp.end()); // Avoid `cycleTmp` reference - it gets reassigned!!
+        let cycleTmp = Tmp.stub; // Initially `cycleTmp.off() === true`
+        tmp.endWith(() => cycleTmp.end()); // Careful with `cycleTmp` reference - it gets reassigned!
         
+        // Each iteration of this loop represents a period with unique signing information
         while (tmp.onn()) {
           
-          // `refresh` indicates whether the signing info needed to be
-          // refreshed, because it was outdated - if `refresh === true`
-          // need to make sure that any services running with the
+          // `refresh` indicates whether the signing info needed to be refreshed because it was
+          // outdated - if `refresh === true` need to make sure that any services running with the
           // previous `sgn` are restarted using the new `sgn`
           let { sgn, refresh } = await this.getSgnInfo();
           
@@ -1165,33 +1185,39 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
           // using outdated `sgn` info; need to shut all such servers!
           if (refresh) cycleTmp.end();
           
-          // If no cycle is active, begin a new one!
+          // If no cycle is active begin a new one! (Always initially true)
           if (cycleTmp.off()) {
             
             cycleTmp = Tmp();
             
-            // Need to reactivate all ports if `cycleTmp` is Ended!
-            let activePortTmps = portServers.map((servers, port) => {
-              return this.activatePort(port, servers, sgn);
-            });
-            for (let activePortTmp of activePortTmps) cycleTmp.endWith(activePortTmp);
-            await Promise.all(activePortTmp.map(tmp => tmp.prm));
+            // A new cycle has begun with new signing info! The previous one was ended somehow, so
+            // we're assured the ports activated as part of that cycle are being closed (TODO: but
+            // not necessarily done being closed?? Addressing this is pending behind the refactor
+            // of `Endable.prototype.end` to make the return value consumer-controlled)
+            
+            let activePortTmps = portServers.map((servers, port) => this.activatePort(port, servers, sgn));
+            cycleTmp.endWith(() => activePortTmps.each(apt => apt.end()));
+            let portsReactivatedPrm = Promise.all(activePortTmps.map(apt => apt.prm));
+            
+            // The first time ports are reactivated (technically "activated"), the `tmp.prm` value
+            // returned by `runOnNetwork` is resolved, to indicate to the consumer that the task of
+            // "running on the network" is complete
+            portsReactivatedPrm.then(() => tmp.prm.resolve());
+            
+            await portsReactivatedPrm;
             
           }
           
-          // Wait for the crt to expire; this is non-trivial because we
-          // need to consider:
-          // - that waiting gets interrupted if `tmp` Ends
-          // - that `setTimeout` only supports a max delay of 2^31-1 ms,
-          //   which is just less than 25 days; if we need to wait more
-          //   than 25 days we'll call do multiple `setTimeout` calls in
-          //   series until we've waited long enough
+          // Block async flow until crt expires; this is non-trivial as we need to consider:
+          // - we need to stop running if `tmp` is externally ended (this fired-and-forgotten loop
+          //   should cease if the `runOnNetwork` Tmp is every ended!)
+          // - `setTimeout` natively supports a max ms 2^31-1 (slightly less than 25 days)
           while (tmp.onn()) {
             
             let msRemaining = sgn.validity.expiryMs - Date.now();
             if (msRemaining < 0) break;
             
-            sc(`NetworkIdentity current signing info remains valid for ${(msRemaining / (1000 * 60 * 60 * 24)).toFixed(2)} days`);
+            sc(`${this.desc()} cert remains valid for ${(msRemaining / (1000 * 60 * 60 * 24)).toFixed(2)} days`);
             
             // Wait until either the timeout elapses or `tmp` ends
             let [ route, timeout ] = [ null, null ];
@@ -1213,11 +1239,24 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
           
         }
         
-        tmp.end();
-        
       })();
       
     }
+    
+    tmp.prm.then(() => sc(''
+      + `${this.desc()} opening "${term}":\n`
+      + portServers.toArr((servers, port) => {
+          return `Port ${port}:\n` + servers.toArr(s => s.desc()).join('\n').indent('- ');
+        }).join('\n')
+    ));
+    
+    // TODO: shows "http" instead of "https"
+    tmp.endWith(() => sc(''
+      + `${this.desc()} shutting "${term}":\n`
+      + portServers.toArr((servers, port) => {
+          return `Port ${port}:\n` + servers.toArr(s => s.desc()).join('\n').indent('- ');
+        }).join('\n')
+    ));
     
     return tmp;
     

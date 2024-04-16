@@ -65,10 +65,10 @@ global.rooms['record.bank.KeepBank'] = async () => {
       // equivalent of a process like redis(??) is needed here
       this.readyPrm = (async () => {
         
-        let infoKeep = await this.keep.seek([ 'meta', 'info' ]);
-        let lockKeep = await this.keep.seek([ 'meta', 'lock' ]);
-        let accessKeep = await this.keep.seek([ 'meta', 'access' ]);
-        let nextKeep = await this.keep.seek([ 'meta', 'next' ]);
+        let infoKeep = await this.keep.dive([ 'meta', 'info' ]);
+        let lockKeep = await this.keep.dive([ 'meta', 'lock' ]);
+        let accessKeep = await this.keep.dive([ 'meta', 'access' ]);
+        let nextKeep = await this.keep.dive([ 'meta', 'next' ]);
         
         if (!(await infoKeep.getContent(this.encoding)))  await infoKeep.setContent({ v: '0.0.1', created: Date.now() }, this.encoding);
         if (!(await lockKeep.getContent()))               await lockKeep.setContent(this.lock, 'utf8');
@@ -214,7 +214,7 @@ global.rooms['record.bank.KeepBank'] = async () => {
       
       if (activeSignal.onn()) {
         
-        let keeps = await this.keep.seek('rec').iterateChildren();
+        let keeps = await this.keep.dive('rec').iterateChildren();
         try { for await (let [ casedCmp, childKeep ] of keeps) {
           
           if (activeSignal.off()) break;

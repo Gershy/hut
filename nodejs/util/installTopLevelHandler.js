@@ -38,7 +38,7 @@ module.exports = () => {
 
   let onErr = err => {
     if (err['~suppressed']) return; // Ignore suppressed errors
-    gsc(`Uncaught ${getFormName(err)}:`, err.desc());
+    gsc(`Uncaught ${getFormName(err)}: ${err.desc()}`);
     process.exitNow(1);
   };
   process.on('uncaughtException', onErr);

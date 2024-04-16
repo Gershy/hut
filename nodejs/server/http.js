@@ -18,55 +18,61 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       
     },
     
-    activate({ security=null }={}) {
+    async doActivate({ tmp, security=null }={}) {
       
       // Run the server, make it call `hearComm` as necessary. Note that the https cert data will
       // need to be passed to `activate`, not the constructor, as the cert data can become
       // invalidated with time
       
-      let tmp = Tmp();
-      
-      tmp.prm = (async () => {
-        let server = require(security ? 'https' : 'http').createServer({ /* TODO - use `security` */ });
+      let server = require(`node:${this.getProtocol()}`).createServer({
         
-        let sockets = Set();
-        let reqFn = this.processReq.bind(this);
-        let conFn = socket => {
-          sockets.add(socket);
-          socket.once('close', () => sockets.rem(socket));
-        };
-        
-        server.on('connection', conFn);
-        server.on('request', reqFn);
-        tmp.endWith(() => {
-          // Fail requests after the server is ended
-          server.off('request', reqFn);
-          server.on('request', res => res.socket.destroy());
+        ...(security ? {
           
-          // Immediately destroy connecting sockets after server ends
-          server.off('connection', conFn);
-          server.on('connection', socket => socket.destroy());
+          requestCert: false,       // Don't verify client identities (allow public access)
+          rejectUnauthorized: true, // If "requestCert" is enabled, reject clients if their cert is invalid
           
-          // End all connected sockets
-          for (let socket of sockets) socket.destroy();
-        });
+          // These values securely identify our server ownership
+          key: security.prv,
+          cert: security.crt
+          
+        } : {})
         
-        let err = Error('');
-        await Promise((rsv, rjc) => {
-          server.once('listening', rsv);
-          server.once('error', cause => {
-            cause.suppress();
-            rjc(err.mod({ msg: 'Failed to open server', cause }));
-          });
-          server.listen(this.port, this.netAddr);
-        });
-        
-        this.server = server;
-        denumerate(this, 'server');
-        
-      })();
+      });
       
-      return tmp;
+      let sockets = Set();
+      let reqFn = this.processReq.bind(this);
+      let conFn = socket => {
+        sockets.add(socket);
+        socket.once('close', () => sockets.rem(socket));
+      };
+      
+      server.on('connection', conFn);
+      server.on('request', reqFn);
+      tmp.endWith(() => {
+        
+        // Fail requests after the server is ended
+        server.off('request', reqFn);
+        server.on('request', res => res.socket.destroy());
+        
+        // Immediately destroy connecting sockets after server ends
+        server.off('connection', conFn);
+        server.on('connection', socket => socket.destroy());
+        
+        // End all connected sockets
+        for (let socket of sockets) socket.destroy();
+        
+      });
+      
+      let err = Error('');
+      await Promise((rsv, rjc) => {
+        server.once('listening', rsv);
+        server.once('error', cause => rjc(err.mod({ msg: 'Failed to open server', cause }).suppress()));
+        
+        server.listen(this.port, this.netAddr);
+      });
+      
+      this.server = server;
+      denumerate(this, 'server');
       
     },
     async processReq(req, res) {
@@ -140,10 +146,17 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         // This response must correspond to the request; request hangs until `reply` is called!
         
         /// {DEBUG= (TODO: I think you could argue this belongs under DEBUG??)
+        // Note: slow internet can make it look like the server is failing to fulfill requests
+        // sufficiently quickly. How? First the client's socket disconnects, then the server tries
+        // to send some reply which errors, as it's unable to stream to the socket, and then the
+        // `reply` callback passed to `Form.sendComm` never gets called, allowing this timeout to
+        // complete and suggest the server is at fault.
+        // TODO: Errors due to client socket disconnection should not block the `reply` callback
+        // from being called
         let syncTimeout = setTimeout(() => {
           gsc.kid('error')(`Reply timed out... that's not good!`, { msg, roadAuth: this });
           comm.kill({ code: 500, msg: 'Api: sorry - experiencing issues' });
-        }, 5 * 1000);
+        }, 15 * 1000);
         /// =DEBUG}
         
         return this.aboveHut.Form.sendComm({
