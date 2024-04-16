@@ -316,7 +316,7 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
       ]);
       
       // Enable access to all piece images via term "pieces"
-      dep(enableKeep('pieces', chess2Keep.seek(`img.${pieceStyle}`)));
+      dep(enableKeep('pieces', chess2Keep.dive(`img.${pieceStyle}`)));
       
       let { random: { FastRandom } } = rooms;
       let random = FastRandom();

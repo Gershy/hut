@@ -3,8 +3,10 @@ global.rooms[roomName] = () => then(getRoom('setup.hut.hinterland.RoadAuthority'
   form({ name: 'SoktRoadAuthority', has: { RoadAuth }, props: (forms, Form) => ({
     
     init({ ...args }) {
+      
       forms.RoadAuth.init.call(this, { protocol: 'sokt', ...args });
       Object.assign(this, { active: false });
+      
     },
     async doActivate({ tmp }) {
       
@@ -13,9 +15,11 @@ global.rooms[roomName] = () => then(getRoom('setup.hut.hinterland.RoadAuthority'
       
     },
     makeRoad(belowHut, params) {
+      
       if (!this.active) throw Error('Api: inactive; unable to create road');
       let road = (0, Form.SoktRoad)({ roadAuth: this, belowHut, ...params });
       return road;
+      
     },
     
     $SoktRoad: form({ name: 'SoktRoad', has: { Road: RoadAuth.Road }, props: (forms, Form) => ({

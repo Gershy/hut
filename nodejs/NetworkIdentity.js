@@ -878,6 +878,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
             // Is there an active, insecure http server, for the given
             // NetworkAddress, on port 80? If so we'll use it for the
             // challenge, otherwise we'll just spin up a one-off server!
+            gsc({ servers: this.servers });
             let activeInsecureHttpPort80Server = this.servers.seek(server => true
               && server.onn()
               && server.secure === false
