@@ -53,6 +53,10 @@ global.rooms['setup.hut.hinterland.RoadAuthority'] = async () => form({ name: 'R
     
     let tmp = Tmp();
     tmp.prm = this.doActivate({ tmp, security, ...args });
+    tmp.prm.then(() => {
+      this.state = 'open';
+      tmp.endWith(() => this.state = 'shut');
+    });
     return tmp;
     
   },

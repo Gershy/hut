@@ -880,7 +880,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
             // challenge, otherwise we'll just spin up a one-off server!
             gsc({ servers: this.servers });
             let activeInsecureHttpPort80Server = this.servers.seek(server => true
-              && server.onn()
+              && server.state === 'open'
               && server.secure === false
               && server.protocol === 'http'
               && server.netAddr === addr
@@ -1128,6 +1128,11 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       });
       
       effectiveServers.add(redirectServer);
+      
+      // TODO: Don't love adding the temporary server, but we need to in case an acme process runs
+      // and wants to find a pre-existing server
+      this.servers.add(redirectServer);
+      tmp.endWith(() => this.servers.rem(redirectServer)); // TODO: `this.servers` should be Set, not Arr?
       
       sc(`Will redirect ${redirectServer.desc()} to -> ${httpsServer.desc()}`);
       
