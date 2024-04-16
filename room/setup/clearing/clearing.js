@@ -878,7 +878,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     // Cls which has been hut-modified will have a "Native" property
     // pointing to the original class, which serves as a good value to
     // compare against "constructor" properties
-    return Object.getPrototypeOf(fact).constructor === (Form.Native ?? Form);
+    return Object.getPrototypeOf(fact)?.constructor === (Form.Native ?? Form);
     
   },
   hasForm: (fact, FormOrCls) => {
