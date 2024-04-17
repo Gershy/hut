@@ -891,7 +891,7 @@ let lib = (() => {
     },
     simplify(seen=Set()) {
       
-      // TODO: HEEERE look at that output :( this is tricky!
+      // TODO: look at that output :( this is tricky!
       
       console.log('SIMPLIFY', seen.has(this), this.desc());
       

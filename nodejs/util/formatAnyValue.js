@@ -199,3 +199,4 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
   return str;
   
 };
+Object.assign(module.exports, { remAnsi });

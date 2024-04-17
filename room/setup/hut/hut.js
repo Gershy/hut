@@ -198,7 +198,7 @@ global.rooms['setup.hut'] = async () => {
         // Errors can occur when processing Comms from other Huts; when this happens we ideally
         // inform the other Hut of the Error, and if this isn't possible we send the Error to subcon
         
-        gsc.kid('error')('Failed handling Comm', err);
+        gsc.kid('error')('Failed handling Comm', { err });
         
         /// {ABOVE=
         // Above should inform Below of the Error
@@ -606,8 +606,8 @@ global.rooms['setup.hut'] = async () => {
           
           // A duplicated sync occurs if Above restarts - the new instance won't remember that it
           // already synced us - this is a good when to detect when a reload is needed!
-          if (cause.message.startsWith('Api: Duplicated sync'))
-            window.location.reload();
+          // TODO: HEEERE looks like Therapy rapidly reloads and then fails in a loop here:
+          if (cause.message.startsWith('Api: Duplicated sync')) window.location.reload();
           
           throw err.mod({ msg: 'Error syncing - did the AboveHut stop unexpectedly?', cause });
           

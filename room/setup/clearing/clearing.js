@@ -146,9 +146,9 @@ Object.assign(global, {
     * linearize(chain=[]) {
       for (let k in this) {
         let v = this[k];
-        chain = [ ...chain, ...k.split('.') ];
-        if (isForm(v, Object)) yield* v.linearize(chain);
-        else                   yield [ chain.join('.'), v ];
+        let nextChain = [ ...chain, ...k.split('.') ];
+        if (isForm(v, Object)) yield* v.linearize(nextChain);
+        else                   yield [ nextChain.join('.'), v ];
       }
     },
     count() { let c = 0; for (let k in this) c++; return c; },
@@ -180,17 +180,17 @@ Object.assign(global, {
     
     $$: 'each:forEach,has:includes',
     
-    map(it) { // Iterator: (val, ind) => val
+    map(fn) { // Iterator: (val, ind) => val
       let ret = [];
       let len = this.length;
-      for (let i = 0; i < len; i++) { let v = it(this[i], i); if (v !== skip) ret.push(v); }
+      for (let i = 0; i < len; i++) { let v = fn(this[i], i); if (v !== skip) ret.push(v); }
       return ret;
     },
-    toArr(it) { return this.map(it); }, // Can't inherit Object.prototype.toArr - it passes keys as Strings!
-    toObj(it) { // Iterator: (val, ind) => [ key0, val0 ]
+    toArr(fn) { return this.map(fn); }, // Can't inherit Object.prototype.toArr - it passes keys as Strings!
+    toObj(fn) { // Iterator: (val, ind) => [ key0, val0 ]
       let ret = [];
       let len = this.length;
-      for (let i = 0; i < len; i++) { let v = it(this[i], i); if (v !== skip) ret.push(v); }
+      for (let i = 0; i < len; i++) { let v = fn(this[i], i); if (v !== skip) ret.push(v); }
       return Object.fromEntries(ret);
     },
     seek(fn) { // Iterator: (val, ind) => bool; returns { found=false, val=null, ind=null }
@@ -637,7 +637,7 @@ Object.assign(global, {
     toArr(fn) { return [ ...this ].map(fn); },
     toObj(fn) {
       let ret = {};
-      for (let v of this) { v = it(v); if (v !== skip) ret[v[0]] = v[1]; }
+      for (let v of this) { v = fn(v); if (v !== skip) ret[v[0]] = v[1]; }
       return ret;
     }
   });
@@ -1345,7 +1345,7 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
     },
     init() {},
     access: C.noFn('access', arg => {}),
-    dive(diveToken, noSecondArg) { // TODO: Rename to "dive"!
+    dive(diveToken, noSecondArg) {
       
       /// {DEPRECATED=
       if (noSecondArg) throw Error(`Api: provide 1 arg to seek (use an array?)`);

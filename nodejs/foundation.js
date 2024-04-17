@@ -8,6 +8,7 @@
 require('../room/setup/clearing/clearing.js');
 let { rootTransaction: rootTrn, Filepath, FsKeep } = require('./filesys.js');
 let NetworkIdentity = require('./NetworkIdentity.js');
+let getStdoutSubcon = require('./util/getStdoutSubconOutputter.js');
 
 // Set up basic monitoring
 let { processExitSrc } = require('./util/installTopLevelHandler.js')();
@@ -132,7 +133,6 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       // The index in the stack trace which is the callsite that invoked the subcon call (gets
       // overwritten later when therapy requires calling subcons from deeper stack depths)
       let leftColW = 28;
-      let getStdoutSubcon = require('./util/getStdoutSubconOutputter.js');
       unsilenceSubcon(getStdoutSubcon({
         debug: true,           // Results in expensive stack traces - could be based on conf??
         relevantTraceIndex: 2, // Hardcoded value; determined simply by testing
@@ -739,7 +739,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
               let { params, args } = scVal;
               
               let { therapy=false } = params;
-              if (therapy) (async () => {
+              if (therapy && args?.count()) (async () => {
                 
                 // TODO: It's important that nothing occurring within this function writes via sc,
                 // otherwise LOOP! Best way is probably to pass stub functions in place of loggers
@@ -863,14 +863,30 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     
     // Make sure a visible subcon is applied before `err` propagates! If no subcon is already
     // applied, the subcon used is considered the "panic" subcon
-    if (subconSilenced) unsilenceSubcon((sc, ...args) => console.log('\n' + [ // Panic output
-      `SUBCON: "${sc.term}"`,
-      ...args.map(a => {
-        if (isForm(a, Function)) try { a = a(); } catch (err) { a = 'Failed to execute: ' + a.toString(); }
-        if (!isForm(a, String)) try { a = global.formatAnyValue(a); } catch (err) { a = 'Failed to format: ' + getFormName(a); }
-        return a;
-      })
-    ].join('\n').indent('[panic] ')));
+    if (subconSilenced) {
+      
+      // unsilenceSubcon((sc, ...args) => console.log('\n' + [ // Panic output
+      //   `SUBCON: "${sc.term}"`,
+      //   ...args.map(a => {
+      //     if (isForm(a, Function)) try { a = a(); } catch (err) { a = 'Failed to execute: ' + a.toString(); }
+      //     if (!isForm(a, String)) try { a = global.formatAnyValue(a); } catch (err) { a = 'Failed to format: ' + getFormName(a); }
+      //     return a;
+      //   })
+      // ].join('\n').indent('[panic] ')));
+      
+      unsilenceSubcon((sc, ...args) => {
+        
+        // `formatArgs` won't return a Promise if we ensure non of the args are Promises, or
+        // Functions returning Promises
+        let pargs = args.map(a => [ Promise, Function ].some(F => hasForm(a, F)) ? `<${getFormName(a)}>` : a);
+        let fargs = getStdoutSubcon.formatArgs(sc, pargs).user;
+        console.log(`SUBCON: ${sc.term}\n${fargs.join('\n')}`.indent('[panic] ') + '\n');
+        
+      });
+      
+    }
+    
+    
     
     throw err;
     

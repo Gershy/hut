@@ -182,6 +182,8 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     if (!isForm(name, String) || !name) throw Error('Must provide "name"');
     if (keep && !keep.Form) throw Error(`"keep" must be a Keep (got ${getFormName(keep)})`);
     
+    details = Form.validateDetails(details);
+    
     let { osslShellName='openssl', requirePhysicalSafety=false } = more;
     let { redirectHttp80=true } = more;
     
@@ -245,8 +247,42 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
         `))),
       
       // Resolve details
-      this.retrieveOrCompute('details', 'ser', () => Form.validateDetails(details))
-        .then(details => Object.assign(this, { details }))
+      this.retrieveOrCompute('details', 'json', () => details)
+        .then(storedDetails => {
+          
+          let flatten = obj => obj.linearize().toObj(entry => entry);
+          let detailsErr = err => err.mod(msg => String.baseline(`
+            | NetworkIdentity details mismatch!
+            | ${msg}
+            | 
+            | The details you provided don't match the details stored in the Keep:
+            | ${this.keep.desc()}
+            | 
+            | Consider some options:
+            | 1. Make sure you configure your NetworkIdentity using the same details as before
+            | 2. Initialize your NetworkIdentity with a different Keep
+            | 3. Delete the stored Keep (be careful not to lose any important stored info)
+          `));
+          
+          let flatGiven = flatten(details);
+          let flatStored = flatten(storedDetails);
+          
+          for (let [ chain ] of flatGiven)
+            if (!flatStored.has(chain))
+              throw detailsErr(Error(`Value "${chain}" was given, but isn't stored`)).mod({ chain });
+          
+          for (let [ chain ] of flatStored)
+            if (!flatGiven.has(chain))
+              throw detailsErr(Error(`Value "${chain}" is stored, but wasn't given`)).mod({ chain });
+          
+          for (let [ chain, stored ] of flatStored) {
+            let given = flatGiven[chain];
+            if (stored !== given) throw detailsErr(Error(`Value "${chain}" stored and given values mismatch`)).mod({ chain, stored, given });
+          }
+          
+          Object.assign(this, { details: storedDetails });
+          
+        })
       
     ]);
     
@@ -586,14 +622,14 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
     if (!this.keep) return fn();
     
-    let keep = this.keep.seek(token.dive(diveToken));
+    let keep = this.keep.dive(diveToken);
     
-    let ser = encoding === 'ser';
-    let val = await keep.getContent(ser ? null : encoding);
-    if (val) return ser ? serToVal(val) : val;
+    let json = encoding === 'json';
+    let val = await keep.getContent(json ? null : encoding);
+    if (val) return json ? jsonToVal(val) : val;
     
     val = await fn();
-    await keep.setContent(ser ? valToSer(val) : val);
+    await keep.setContent(json ? valToSer(val) : val);
     
     return val;
     
@@ -700,17 +736,17 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     return { prv, csr, crt, invalidate: async () => {
       
       let now = Date.now();
-      let bakKeep = this.keep.seek('selfSign', 'bak', now.toString(10));
+      let bakKeep = this.keep.dive([ 'selfSign', 'bak', now.toString(10) ]);
       await Promise.all([
-        bakKeep.seek('prv').setContent(prv),
-        bakKeep.seek('csr').setContent(csr),
-        bakKeep.seek('crt').setContent(crt)
+        bakKeep.dive('prv').setContent(prv),
+        bakKeep.dive('csr').setContent(csr),
+        bakKeep.dive('crt').setContent(crt)
       ]);
       
       // Note this doesn't invalidate `prv`, which can safely be reused!
       await Promise.all([
-        this.keep.seek('selfSign', 'csr').rem(),
-        this.keep.seek('selfSign', 'crt').rem()
+        this.keep.dive([ 'selfSign', 'csr' ]).rem(),
+        this.keep.dive([ 'selfSign', 'crt' ]).rem()
       ]);
       
     }};
@@ -731,7 +767,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     if (!provider) throw Error(`Unfamiliar acme provider: "${type}"`);
     
     // Note that `await this.getPrv()` gets the private key of the acme
-    // Account, while `this.keep.seek('acme', type, 'prv')` contains the
+    // Account, while `this.keep.dive([ 'acme', type, 'prv' ])` contains the
     // private key certified by the resulting trusted certificate - acme
     // explicitly forbids using the same private key for both!
     let prv = await this.retrieveOrCompute(`acme.${type}.prv`, 'utf8', () => {
@@ -752,7 +788,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       let networkAddresses = this.getNetworkAddresses();
       
       sc('Retrieving account...');
-      let accountRes = await this.retrieveOrCompute(`acme.${type}.account`, 'ser', async () => {
+      let accountRes = await this.retrieveOrCompute(`acme.${type}.account`, 'json', async () => {
         
         sc('Creating account...');
         let res = await client.makeAccount({ email: this.details.email });

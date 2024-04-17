@@ -109,11 +109,20 @@ let confyRoot = (() => {
   }});
   confyDeployKids.host = ConfySet({ kids: {
     netIden: ConfySet({ kids: {
-      name: ConfyVal({ settle: 'str', fn: (name, chain) => {
+      name: ConfyVal({ settle: 'str', fn: (name, { chain }) => {
+        if (!isForm(name, String))          throw Error('requires String');
         if (!/^[a-z][a-zA-Z]*$/.test(name)) throw Error(`requires a String of alphabetic characters beginning with a lowercase character`);
         return name;
       }}),
-      keep: ConfyVal({ settle: 'str', def: null }),
+      
+      // NetIdens have a Keep by default (we want to store any generated certs by default)
+      keep: ConfyVal({ settle: 'str', def: '!<auto>', fn: (keep, { getValue }) => {
+        if (keep === '!<auto>') {
+          let name = getValue('[rel].[par].name');
+          keep = `/[file:mill]/netIden/${name}`;
+        }
+        return keep;
+      }}),
       secureBits: ConfyVal({ settle: 'num', fn: (bits, chain) => {
         if (!bits.isInteger()) throw Error('requires an integer');
         if (bits < 0) throw Error('requires a value >= 0');
@@ -497,6 +506,8 @@ module.exports = async ({ rootKeep, rawConf, confUpdateCb=Function.stub }) => {
   // data is now available to the churning logic
   try { await extendConf(rawConf, { tolerateErrors: false }); } catch (err) {
     if (!err.partiallyChurnedValues) throw err.mod(msg => `Unexpected error while churning: ${msg}`);
+    
+    console.log(err.cause);
     throw Error('Api: foundation rejection').mod({
       cause: err,
       feedback: [ 'Invalid configuration:', ...err.cause.map(err => `- ${err.message}`) ].join('\n')

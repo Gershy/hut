@@ -120,7 +120,10 @@ let ConfySet = form({ name: 'ConfySet', has: { Confy }, props: (forms, Form) => 
       let kidChain = [ ...chain, k ];
       actions[kidChain.join('.')] = kid
         ? kid.getAction(v, kidChain)
-        : () => Error(`Api: "${chain.join('.')}" has no Kid to handle "${k}"`).propagate({ conf });
+        : () => Error(String.baseline(`
+            | Api: "${chain.join('.')}" has no Kid to handle "${k}"
+            | These Kids are available: ${valToJson({ ...this.kids }.toArr((v, k) => k))}
+          `)).propagate({ conf })
     }
     
     // Processing afterwards looks a bit tricky - we add another
@@ -191,13 +194,13 @@ let ConfyVal = form({ name: 'ConfyVal', has: { Confy }, props: (forms, Form) => 
     if (this.settle) {
       let orig = conf;
       let { target, tries } = this.settle;
-      for (let [ Form, fn ] of tries) if (isForm(conf, Form)) conf = fn(conf);
+      for (let [ Form, fn ] of tries) if (isForm(conf, Form)) conf = fn(conf, { chain, getValue });
       
       let valid = (conf === null && this.nullable) || isForm(conf, target);
       if (!valid) throw Error(`couldn't resolve value to ${target.name}`);
     }
     
-    if (this.fn) conf = await this.fn(conf, { getValue });
+    if (this.fn) conf = await this.fn(conf, { chain, getValue });
     
     return { result: conf };
   }

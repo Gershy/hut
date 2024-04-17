@@ -33,7 +33,6 @@ global.rooms['literature'] = async () => {
     init({ real, mode='root', depth=0 }) { Object.assign(this, { real, mode, depth, orderCount: 0 }); },
     scope(params) { return (0, this.Form)({ ...this, depth: this.depth + 1, ...params }); },
     
-    // TODO: HEEERE!!! Port all items in trello to Scribe!
     section(term, fn) {
       
       let section = this.real.addReal('section', {
