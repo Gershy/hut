@@ -224,16 +224,19 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
           // if it has already been removed; this boolean tracks the removal
           queued: false
         });
+        denumerate(this, 'req');
+        denumerate(this, 'res');
         
-        this.resultPrm = this.processAndPopulate();
-        this.resultPrm.finally(() => this.sc({ event: 'hear', ...this.context }));
+        // Note that the `return` value from `Promise(...).finally` is ignored; the return value
+        // can't be intercepted using `finally` - that's what we desire here!
+        this.resultPrm = this.processAndPopulate().finally(() => this.sc({ event: 'hear', ...this.context }));
         
       },
       
       kill({ code=null, headers=null, msg=null, err=null }) {
         
         if (code === null) code = err?.http?.code ?? 500;
-        if (msg === null) msg = err?.http?.msg ?? (err.message.hasHead('Api: ') ? err.message : 'Api: sorry - experiencing issues');
+        if (msg === null)  msg = err?.http?.msg ?? (err.message.hasHead('Api: ') ? err.message : 'Api: sorry - experiencing issues');
         headers = { ...headers, ...err?.http?.headers };
         
         let errs = [];
@@ -350,10 +353,13 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         // data to this point in the code; overall we want to be able to
         // apply "public" caching!
         // Cache revalidation: https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching#validation
+        
         let resHeaders = {
           ...(encode ? { 'Content-Encoding': encode } : {}),
           'Content-Type': mime,
-          'Cache-Control': (this.roadAuth.doCaching && cache) ? `${cache}, max-age=${this.roadAuth.getCacheSecs(msg)}` : 'max-age=0'
+          'Cache-Control': (this.roadAuth.doCaching && cache)
+            ? `${cache}, max-age=${this.roadAuth.getCacheSecs(msg)}`
+            : 'max-age=0'
         };
         
         let timeout = setTimeout(() => {
@@ -445,7 +451,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         
         // Resolve `body` to json
         try         { body = body ? jsonToVal(body) : null; }
-        catch (err) { throw err.mod({ msg: 'Api: malformed json', http: { code: 400 } }); }
+        catch (err) { throw err.mod({ msg: 'Api: malformed json', body, http: { code: 400 } }); }
         
         this.context.body = body;
         

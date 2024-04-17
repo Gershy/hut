@@ -64,8 +64,8 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
   if (Object.getPrototypeOf(val) === null) {
     
     seen.set(val, '<cyc> PlainObject(...)');
-    seen.set(val, str);
     let str = `PlainObject ${format({ ...val }, opts, d, 'PlainObject ', seen)}`;
+    seen.set(val, str);
     return str;
     
   }

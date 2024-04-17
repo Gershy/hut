@@ -345,7 +345,7 @@ global.rooms['setup.hut'] = async () => {
         // Handle namespaced assets by treating the first component as the prefix
         let [ pfx, term, ...innerDive ] = dive;
         
-        let keep = this.enabledKeeps.get(`${pfx}:${term}`)?.seek(innerDive) ?? null;
+        let keep = this.enabledKeeps.get(`${pfx}:${term}`)?.dive(innerDive) ?? null;
         if (!await keep?.exists()) throw Error(`Api: invalid asset chain`).mod({ dive: diveToken });
         
         reply(keep);
@@ -938,7 +938,7 @@ global.rooms['setup.hut'] = async () => {
       /// {BELOW=
       return global.keep([ prefix, ...dive ]);
       /// =BELOW} {ABOVE=
-      return this.aboveHut.enabledKeeps.get(dive[0]).seek(dive.slice(1));
+      return this.aboveHut.enabledKeeps.get(dive[0]).dive(dive.slice(1));
       /// =ABOVE}
       
     },

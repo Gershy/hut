@@ -12,7 +12,7 @@ module.exports = {
     if (addr) {
       
       [ addr, proto, host, port=null, path=null ] = addr
-        .match(/^([a-zA-Z0-9-]+)[:][/][/]([a-zA-Z0-9.-]+)([:][0-9]+)?([/].*$)/);
+        .match(/^([a-zA-Z0-9-]+)[:][/][/]([a-zA-Z0-9.-]+)([:][0-9]+)?([/].*)?$/);
       
       if (port) port = parseInt(port.slice(1), 10);
       
@@ -24,6 +24,7 @@ module.exports = {
     }
     
     if (port === null) port = module.exports.defaultPorts[proto];
+    
     if (path === null) path = '';
     if (!path.hasHead('/')) path = `/${path}`;
     
