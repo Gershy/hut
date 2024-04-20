@@ -879,11 +879,8 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         // `formatArgs` won't return a Promise if we ensure non of the args are Promises, or
         // Functions returning Promises
         let pargs = args.map(a => [ Promise, Function ].some(F => hasForm(a, F)) ? `<${getFormName(a)}>` : a);
-        then(getStdoutSubcon.formatArgs(sc, pargs), ({ user: fargs }) => {
-          console.log({ fargs });
-          console.log(`SUBCON: ${sc.term}\n${fargs.join('\n')}`.indent('[panic] ') + '\n');
-        });
-        //let fargs = getStdoutSubcon.formatArgs(sc, pargs).user;
+        let fargs = getStdoutSubcon.formatArgs(sc, pargs);
+        console.log(`SUBCON: ${sc.term}\n${fargs.join('\n')}`.indent('[panic] ') + '\n');
         
       });
       
