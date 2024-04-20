@@ -117,9 +117,10 @@ let confyRoot = (() => {
       
       // NetIdens have a Keep by default (we want to store any generated certs by default)
       keep: ConfyVal({ settle: 'str', def: '!<auto>', fn: (keep, { getValue }) => {
+        console.log({ keep });
         if (keep === '!<auto>') {
-          let name = getValue('[rel].[par].name');
-          keep = `/[file:mill]/netIden/${name}`;
+          let netIdenName = getValue('[rel].[par].name');
+          keep = `/[file:mill]/netIden/${netIdenName}`;
         }
         return keep;
       }}),
