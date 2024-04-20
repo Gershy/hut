@@ -880,6 +880,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         // Functions returning Promises
         let pargs = args.map(a => [ Promise, Function ].some(F => hasForm(a, F)) ? `<${getFormName(a)}>` : a);
         let fargs = getStdoutSubcon.formatArgs(sc, pargs).user;
+        console.log({ fargs });
         console.log(`SUBCON: ${sc.term}\n${fargs.join('\n')}`.indent('[panic] ') + '\n');
         
       });
