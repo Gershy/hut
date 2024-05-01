@@ -108,36 +108,34 @@ global.rooms['record.bank.KeepBank'] = async () => {
     },
     makeHot(rec) {
       
-      let type = rec.type.name;
-      let uid = rec.uid;
+      let { uid, type: { name: type } } = rec;
       if (this.hotRecs[type]?.[uid]) throw Error(`${rec.desc()} is already hot`);
       if (!this.hotRecs[type]) this.hotRecs[type] = Object.plain();
       this.hotRecs[type][uid] = rec;
       
-      return () => {
+      return Endable(() => {
         delete this.hotRecs[type][uid];
         if ({}.empty.call(this.hotRecs[type])) delete this.hotRecs[type];
-      };
+      });
       
     },
     async syncRec(rec) {
       
       this.sc(`Holding ${rec.desc()}...`);
       
-      // Immediately hold this `rec` reference. If `rec` is truly
-      // volatile we'll only drop this reference when `rec` ends, but if
-      // it's non-volatile we'll wait for it to be stored in the Bank
-      // before dropping the reference
-      let endAvailFn = this.makeHot(rec);
+      // Immediately hold this `rec` reference. If `rec` is truly volatile we'll only drop this
+      // reference when `rec` ends, but if it's non-volatile we'll wait for it to be stored in the
+      // Bank before dropping the reference
+      
+      let hotTmp = this.makeHot(rec);
       
       // Always hold volatile Record in memory
-      if (rec.volatile) return rec.endWith(endAvailFn);
+      if (rec.volatile) return rec.endWith(hotTmp);
       
       let casedUid = Form.casedCmp(rec.uid);
       
-      // Make `rec` retrievable by RelHandlers; need to hold `rec` in
-      // `this.volatileRecs` until it has been persisted, at which point
-      // it should be immediately removed from `this.volatileRecs`
+      // Make `rec` retrievable by RelHandlers; need to hold `rec` in `this.volatileRecs` until it
+      // gets persisted, at which point it should be immediately removed from `this.volatileRecs`
       try {
         
         // Load initially store `rec` depending on if it was seen before
@@ -161,7 +159,7 @@ global.rooms['record.bank.KeepBank'] = async () => {
           
         }
         
-      } finally { endAvailFn(); }
+      } finally { hotTmp.end(); }
       
       // Reflect any changes to `rec`'s value in the Keep
       rec.valueSrc.route(delta => {

@@ -1,5 +1,10 @@
 global.rooms['Hinterland'] = async () => {
   
+  // TODO: Deploy Rooms (e.g. chess2) should not have to import `Hinterland`; Hinterland contains
+  // functionality that should live in Foundation (nodejs, and htmlBrowserHabitat, and all others)
+  // Habitat support should be defined in Conf, not Deploy Room code (`{ habitats: [ ... ] }`)
+  // The "Hinterland" concept can essentially vanish!
+  
   let { record: { Record }, Scope, Chooser } = await getRooms([ 'record', 'logic.Scope', 'logic.Chooser' ]);
   
   /// {LOADTEST=
@@ -8,8 +13,19 @@ global.rooms['Hinterland'] = async () => {
   
   return form({ name: 'Hinterland', props: (forms, Form) => ({
     
-    // Hinterland is the space in which multiple Huts interact according
-    // to the rules of the AboveHut
+    // Hinterland is the space where BelowHuts come into being, and interact, under certain rules
+    // Use Hinterland to describe what rules an AboveHut will impose on its BelowHuts
+    // 
+    // The AboveHut provided to `Hinterland(...).open({ aboveHut })` must already be appropriately
+    // exposed on the network; Hinterland is unaware of any networking, it's only used to define
+    // rules for Above/BelowHuts!
+    // 
+    // Initialize `Hinterland` with `above` and `below` logic such that:
+    // - `above` describes behaviour to be executed purely Above
+    // - `below` describes behaviour to apply to every BelowHut (this behaviour is tracked Above so
+    //   that Above is aware of the state of each BelowHut)
+    
+    // Call `Hinterland(...).open({ aboveHut })` to apply the defined rules
     
     $prefixer: (pfx, term, delim='.') => term.hasHead(`${pfx}${delim}`) ? term : `${pfx}${delim}${term}`, // Note that (only) CommandHandlers use ":" as `delim` instead of "."
     $makeUtils: (prefix, hut, recMan, pfx=Form.prefixer.bound(prefix)) => ({
@@ -74,15 +90,8 @@ global.rooms['Hinterland'] = async () => {
         
         // Not applying any Follows here; Below must Follow with `resolveHrecsAndFollowRecs`!!!!
         
-        // args ~= [ 'eg.type', [ memRec1, memRec2 ], 'val', ... ]
-        if (isForm(args[0], String))
-          return recMan.addRecord(pfx(args[0]), ...args.slice(1));
-        
-        // args ~= [{ type: 'eg.type', group: [ memRec1, memRec2 ], value: 'val', ... }, ...]
-        if (isForm(args[0], Object) && args[0].has('type') && isForm(args[0].type, String))
-          return recMan.addRecord({ ...args[0], type: pfx(args[0].type) }, ...args.slice(1));
-        
-        return recMan.addRecord(...args);
+        let params = recMan.processRecordParams(...args);
+        return recMan.addRecord({ ...params, ...(isForm(params.type, String) && { type: pfx(params.type) }) });
         
       }
       
@@ -144,7 +153,7 @@ global.rooms['Hinterland'] = async () => {
     },
     /// =LOADTEST}
     
-    async open({ sc, prefix=this.prefix, hereHut, rec=hereHut }) {
+    open({ sc, prefix=this.prefix, hereHut, rec=hereHut }) {
       
       // Hinterland basically sets up the Experience ("utils"), and wires things up so that the
       // "above" and "below" functions of the consumer get called appropriately
@@ -154,12 +163,12 @@ global.rooms['Hinterland'] = async () => {
       let recMan = rec.type.manager;
       let pfx = Form.prefixer.bound(prefix);
       
-      // This "utils" will get used both ABOVE and BELOW (note ABOVE needs to instantiate a 2nd
-      // "utils" for each AfarBelowHut)
-      let utils = Form.makeUtils(prefix, hereHut, recMan, pfx);
+      // This `utils` will get used both ABOVE and BELOW (note ABOVE needs to instantiate a 2nd
+      // `utils` for each AfarBelowHut)
+      let utils = Form.makeUtils(prefix, hereHut, recMan, pfx); // Can we assert `hereHut.type.manager === rec.type.manager`???
       
       // Prepare all habitats
-      await Promise.all(this.habitats.map( async hab => tmp.endWith(await hab.prepare(hereHut)) ));
+      for (let hab of this.habitats) tmp.endWith(hab.prepare(hereHut));
       
       // Add all type -> Form mappings
       // Note values in `this.recordForms` are either functions giving
@@ -180,20 +189,29 @@ global.rooms['Hinterland'] = async () => {
         let rankType = (a, b) => a.type.name.localeCompare(b.type.name);
         let rankUid = (a, b) => a.uid.localeCompare(b.uid);
         
-        let TimerSrc = await getRoom('logic.TimerSrc');
-        TimerSrc({ num: Infinity, ms: sampleSc.params().ms }).route(() => {
+        then(
           
-          let ts = getMs();
-          let results = [ ...rec.iterateAll() ]
-            .sort((a, b) => (rank(a) - rank(b)) || rankType(a, b) || rankUid(a, b))
-            .map(rec => `- ${rec.uid.padTail(24, ' ')} -> ${rec.type.name.padTail(24, ' ')} ${JSON.stringify(rec.getValue())}`);
+          getRoom('logic.TimerSrc'),
           
-          sampleSc([
-            `Sampled ${results.count()} Record(s) (took ${((getMs() - ts) / 1000).toFixed(2)}ms)`,
-            ...results
-          ].join('\n'));
+          TimerSrc => TimerSrc({ num: Infinity, ms: sampleSc.params().ms }).route(() => {
+            
+            let ts = getMs();
+            let results = [ ...rec.iterateAll() ]
+              .sort((a, b) => (rank(a) - rank(b)) || rankType(a, b) || rankUid(a, b))
+              .map(rec => `- ${rec.uid.padTail(24, ' ')} -> ${rec.type.name.padTail(24, ' ')} ${JSON.stringify(rec.getValue())}`);
+            
+            sampleSc([
+              `Sampled ${results.count()} Record(s) (took ${((getMs() - ts) / 1000).toFixed(2)}ms)`,
+              ...results
+            ].join('\n'));
+            
+          }),
           
-        });
+          // TODO: Warning vs fatal err should depend on stability config?
+          err => subcon('warning')(err.mod(msg => `Failed to setup record sampling: ${msg}`))
+          
+        );
+          
         
       })();
       /// =DEBUG}
@@ -341,15 +359,24 @@ global.rooms['Hinterland'] = async () => {
       /// {LOADTEST=
       
       let isBelow = isForm(hereHut, hut.BelowHut);
-      if (isBelow && hereHut.isLoadtestBot) tmp.endWith(await this.setupBelowLoadtesting({
-        prefix,
-        belowHut: hereHut,
-        loftRh,
-        belowHooks: {
-          processArgs: convertRecWithRhArgsToRh,
-          frameFn: resolveHrecs
-        }
-      }));
+      if (isBelow && hereHut.isLoadtestBot) then(
+        
+        this.setupBelowLoadtesting({
+          prefix,
+          belowHut: hereHut,
+          loftRh,
+          belowHooks: {
+            processArgs: convertRecWithRhArgsToRh,
+            frameFn: resolveHrecs
+          }
+        }),
+        
+        belowLoadTestingTmp => tmp.endWith(belowLoadTestingTmp),
+        
+        err => err.propagate(msg => `Failed to setup load testing: ${msg}`)
+        
+      );
+      
       
       /// =LOADTEST}
       

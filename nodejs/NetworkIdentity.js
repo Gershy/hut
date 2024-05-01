@@ -85,6 +85,16 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     return details.map((v, k) => (k in Form.defaultDetails) ? v : skip);
     
   },
+  $simplifyDetails: details => {
+    let { geo0, geo1, geo2, geo3, geo4, geo5 } = details;
+    let { org0, org1, org2, org3, org4, org5 } = details;
+    let { email, password } = details;
+    return {
+      geo: [ geo0, geo1, geo2, geo3, geo4, geo5 ].map(v => v ?? skip).join('.'),
+      org: [ org0, org1, org2, org3, org4, org5 ].map(v => v ?? skip).join('.'),
+      email, password
+    };
+  },
   $parseIndented: str => {
     
     let parse = (container, lns) => {
@@ -207,14 +217,12 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       redirectHttp80,
       
       // Misc
-      sc,
+      sc: sc.kid([], { $: { netIden: name } }),
       
       // Servers managed under this NetworkIdentity
       servers: []
       
     });
-    
-    this.sc('Initializing with details...', { details });
     
     this.readyPrm = Promise.all([
       
@@ -281,14 +289,15 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
           }
           
           Object.assign(this, { details: storedDetails });
+          Object.assign(this, { simpleDetails: Form.simplifyDetails(this.details) });
           
         })
       
     ]);
     
-    this.readyPrm.then(() => this.sc.kid('conf')({
-      msg: 'Resolved details',
-      ...{ ...this }.slice([ 'name', 'details', 'certificateType', 'secureBits' ])
+    this.readyPrm.then(() => this.sc.kid('init')({
+      msg: 'resolved details',
+      ...{ ...this }.slice([ 'simpleDetails', 'keep', 'certificateType', 'secureBits' ])
     }));
     
   },
@@ -298,8 +307,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     let pcs = [];
     pcs.push(`"${this.name}"`);
     pcs.push(this.secureBits ? `secure/${this.secureBits}` : 'UNSAFE');
-    if (this.keep) pcs.push(this.keep.desc());
-    if (networkAddresses.length) pcs.push(`[ ${networkAddresses.map(v => `"${v}"`).join(', ')} ]`);
+    pcs.push(networkAddresses.length ? `[ ${networkAddresses.map(v => `"${v}"`).join(', ')} ]` : '[]');
     return `${getFormName(this)}(${pcs.join('; ')})`;
     
   },
@@ -308,7 +316,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   runInShell(args, opts={}) {
     
     if (hasForm(opts, Function)) opts = { onInput: opts };
-    let { sc=this.sc.kid('openssl') } = opts;
+    let { sc=this.sc.kid('shell') } = opts;
     
     // Note that `timeoutMs` counts since the most recent chunk
     let { onInput=null, timeoutMs=2000 } = opts;
@@ -332,7 +340,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     }
     
     let rawShellStr = `${shellName} ${shellArgs.join(' ')}`;
-    sc(`> ${rawShellStr}`, ...(opts.scParams ? [ opts.scParams ] : []));
+    sc({ shellCmd: rawShellStr }, ...(opts.scParams ? [ opts.scParams ] : []));
     
     let proc = require('child_process').spawn(shellName, shellArgs, {
       cwd: '/',
@@ -506,7 +514,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     try {
       
       return await this.runInShell(`${this.osslShellName} rsa -in ${prvFp} -pubout`, { scParams: {
-        [prvFp]: prv
+        keeps: { [prvFp]: prv }
       }});
       
     } finally {
@@ -533,8 +541,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     try {
       
       return await this.runInShell(`${this.osslShellName} req -new -key ${prvFp} -config ${cfgFp}`, { scParams: {
-        [prvFp]: prv,
-        [cfgFp]: cfg
+        keeps: { [prvFp]: prv, [cfgFp]: cfg }
       }});
       
     } finally {
@@ -558,8 +565,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     try {
       
       return await this.runInShell(`${this.osslShellName} x509 -req -days 90 -in ${csrFp} -signkey ${prvFp}`, { scParams: {
-        [prvFp]: prv,
-        [csrFp]: csr
+        keeps: { [prvFp]: prv, [csrFp]: csr }
       }});
       
     } finally {
@@ -579,8 +585,8 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     try {
       
       let info = csr
-        ? await this.runInShell(`${this.osslShellName} req -text -in ${pemFp} -noout`, { scParams: { [pemFp]: csr || crt } })
-        : await this.runInShell(`${this.osslShellName} x509 -text -in ${pemFp} -noout`, { scParams: { [pemFp]: csr || crt } });
+        ? await this.runInShell(`${this.osslShellName} req -text -in ${pemFp} -noout`, { scParams: { keeps: { [pemFp]: csr || crt } } })
+        : await this.runInShell(`${this.osslShellName} x509 -text -in ${pemFp} -noout`, { scParams: { keeps: { [pemFp]: csr || crt } } });
       
       let parsed = Form.parseIndented(info)[csr ? 'certificateRequest' : 'certificate'];
       
@@ -658,9 +664,9 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       //    |   validity: { msElapsed, msRemaining, expiryMs }
       //    | }
       
-      let sc = this.sc.kid('sgn', { scid: Math.random().toString(36).slice(2, 6) });
+      let sc = this.sc.kid('sgn', { $: { netIdenSgn: Math.random().toString(36).slice(2, 6) } });
       
-      sc({ msg: 'init acquiring sgn', name: this.name });
+      sc({ msg: 'init acquiring sgn' });
       
       let sgn = null; // Will look like `{ prv, csr, crt, invalidate }`
       if      (this.certificateType === 'selfSign')   sgn = await this.getSgnSelfSigned({ sc });
@@ -1169,7 +1175,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       this.servers.add(redirectServer);
       tmp.endWith(() => this.servers.rem(redirectServer)); // TODO: `this.servers` should be Set, not Arr?
       
-      sc(`Will redirect ${redirectServer.desc()} to -> ${httpsServer.desc()}`);
+      sc({ msg: 'redirecting unsafe http port 80', head: redirectServer.desc(), tail: httpsServer.desc() });
       
     })();
     
@@ -1258,7 +1264,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
             let msRemaining = sgn.validity.expiryMs - Date.now();
             if (msRemaining < 0) break;
             
-            sc(`${this.desc()} cert remains valid for ${(msRemaining / (1000 * 60 * 60 * 24)).toFixed(2)} days`);
+            sc({ msg: 'cert is valid', daysRemaining: (msRemaining / (1000 * 60 * 60 * 24)) });
             
             // Wait until either the timeout elapses or `tmp` ends
             let [ route, timeout ] = [ null, null ];
@@ -1284,20 +1290,9 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       
     }
     
-    tmp.prm.then(() => sc(''
-      + `${this.desc()} opening "${term}":\n`
-      + portServers.toArr((servers, port) => {
-          return `Port ${port}:\n` + servers.toArr(s => s.desc()).join('\n').indent('- ');
-        }).join('\n')
-    ));
+    tmp.prm.then(() => sc({ msg: 'exposed on network', portServers }));
     
-    // TODO: shows "http" instead of "https"
-    tmp.endWith(() => sc(''
-      + `${this.desc()} shutting "${term}":\n`
-      + portServers.toArr((servers, port) => {
-          return `Port ${port}:\n` + servers.toArr(s => s.desc()).join('\n').indent('- ');
-        }).join('\n')
-    ));
+    tmp.endWith(() => sc({ msg: 'removed from network' }));
     
     return tmp;
     

@@ -6,11 +6,11 @@ let confyRoot = (() => {
   
   // TODO: This misses semantics; e.g. "999.999.000.900"
   let ipRegex = Regex.readable(String.baseline(`
-    | ^
-    |  [0-9]{1,3}
-    |            (?:             ){3}
-    |               [.][0-9]{1,3}
-    |                                $
+    | ^                              $
+    | ^[0-9]{1,3}                    $
+    | ^          (?:             ){3}$
+    | ^             [.][0-9]{1,3}    $
+    | ^                              $
   `));
   let protocolRegex = Regex.readable(String.baseline(`
     | ^                                             $
@@ -75,7 +75,7 @@ let confyRoot = (() => {
   }});
   
   confyGlobal.kids.terminal = ConfySet({ kids: {
-    width: ConfyVal({ settle: 'num', def: () => 140 })
+    width: ConfyVal({ settle: 'num', def: () => 100 })
   }});
   
   // Environment values include:
@@ -103,6 +103,7 @@ let confyRoot = (() => {
   // Deploy values include:
   // - "host": hosting info for this deployment
   let confyDeployKids = confyDeploy.confy.all.kids;
+  confyDeployKids.enabled = ConfyVal({ settle: 'bln', def: true });
   confyDeployKids.uid = ConfyVal({ settle: 'str', def: () => Math.random().toString(36).slice(2, 8), fn: uid => {
     if (!/^[a-zA-Z0-9]+$/.test(uid)) throw Error('requires alphanumeric string').mod({ value: uid });
     return uid;
@@ -117,7 +118,6 @@ let confyRoot = (() => {
       
       // NetIdens have a Keep by default (we want to store any generated certs by default)
       keep: ConfyVal({ settle: 'str', def: '!<auto>', nullable: true, fn: (keep, { getValue }) => {
-        console.log({ keep });
         if (keep === '!<auto>') {
           let netIdenName = getValue('[rel].[par].name');
           keep = `/[file:mill]/netIden/${netIdenName}`;
@@ -431,7 +431,7 @@ let confyRoot = (() => {
   Object.assign(confyGlobal.kids.therapy.confy.kids, {
     
     // The "uid" and "host" kids resolve the same as `confyDeployKids.keep`
-    ...{ ...confyDeployKids }.slice([ 'uid', 'host' ]),
+    ...{ ...confyDeployKids }.slice([ 'enabled', 'uid', 'host' ]),
     
     // Unlike `confyDeployKids.keep`, "therapy" by default uses a KeepBank; the purpose of Therapy
     // is to allow log analysis, so logs get persisted by default
@@ -492,7 +492,18 @@ module.exports = async ({ rootKeep, rawConf, confUpdateCb=Function.stub }) => {
         content = content.replace(/[;\s]+$/, ''); // Remove tailing whitespace and semicolons
         return await eval(`(${content})`);
       } catch (err) {
-        err.propagate(msg => ({ msg: `Failed reading config from Keep: ${msg}`, term, confKeep: confKeep.desc(), content }));
+        err.propagate(msg => ({
+          msg: String.baseline(`
+            | Failed reading config from Keep
+            | Error: "${msg}"
+            | 
+            | Is the syntax valid in your configuration Keep?
+            | Verify the contents of: ${confKeep.desc()}
+          `),
+          term,
+          confKeep: confKeep.desc(),
+          content
+        }));
       }
       
     }));

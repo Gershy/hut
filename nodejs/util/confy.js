@@ -206,6 +206,23 @@ let ConfyVal = form({ name: 'ConfyVal', has: { Confy }, props: (forms, Form) => 
   }
   
 })});
+let ConfyEnum = form({ name: 'ConfyEnum', has: { Confy }, props: (forms, Form) => ({
+  
+  init({ vals }) {
+    
+    if (isForm(vals, String)) vals = vals.split(',').map(v => v.trim() ?? skip);
+    if (!isForm(vals, Array)) throw Error(`Api: "vals" should be Array; got ${getFormName(vals)}`).mod({ vals });
+    Object.assign(this, { vals });
+    
+  },
+  async resolve({ conf, chain, getValue }) {
+    
+    if (!this.vals.has(conf)) throw Error(`requires one of the following: [ ${this.vals.map(v => `"${v}"`).join(', ')} ]`).mod({ given: conf, enum: this.vals });
+    return { result: conf };
+    
+  }
+  
+})});
 let ConfyNullable = form({ name: 'ConfyNullable', has: { Confy }, props: (forms, Form) => ({
   init(confy) { Object.assign(this, { confy }); },
   resolve({ conf, chain, getValue }) {
@@ -216,4 +233,4 @@ let ConfyNullable = form({ name: 'ConfyNullable', has: { Confy }, props: (forms,
   }
 })});
 
-module.exports = { ConfySet, ConfyVal, ConfyNullable };
+module.exports = { ConfySet, ConfyVal, ConfyEnum, ConfyNullable };

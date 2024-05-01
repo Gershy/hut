@@ -98,7 +98,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       });
       global.keep = Object.assign(dt => rootKeep.dive(dt), { rootKeep });
       
-    }
+    };
     
     { // Resolve configuration and get subcon output working
       
@@ -670,10 +670,15 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         // The same NetIden can be used across multiple deployments
         // TODO: Is checking the json-stringified conf viable??
         let key = valToJson(netIdenConf);
-        let netIden = netIdenMap.get(key);
-        if (!netIden) netIdenMap.set(key, netIden = NetworkIdentity({ ...netIdenConf, sc: subcon('netIden') })); // This non-stub subcon won't cause therapy loops!
+        let netIdenDeployConf = netIdenMap.get(key);
+        if (!netIdenDeployConf) netIdenMap.set(key, netIdenDeployConf = {
+          // This non-stub subcon won't cause therapy loops!
+          netIden: NetworkIdentity({ ...netIdenConf, sc: subcon('netIden') }),
+          deployConfs: []
+        });
+        netIdenDeployConf.deployConfs.push(deployConf);
         
-        let secure = netIden.secureBits > 0;
+        let secure = netIdenDeployConf.netIden.secureBits > 0;
         
         // Initialize a Bank based on `keep`
         let bank = keep
@@ -795,17 +800,19 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           // Now stack depth for stdout subcon invocations has gotten deeper!
           subconWriteStdout.relevantTraceIndex += 1;
           
-        } else if (conf('global.features.loadtest')) {
+        }
+        
+        if (conf('global.features.loadtest') && loftConf.name !== 'therapy') {
           
           // TODO: Drift! loadtest's server must inherit from RoadAuthority. Basically need to test
           // loadtesting; it's going to fail in a whole bunch of ways at first...
           
-          // Note loadtesting cannot apply to the "therapy" deployment!
+          // Note loadtesting cannot apply to the "therapy" deployment! (TODO: ...... why??)
           
           loadtest = await require('./loadtest/loadtest.js')({
             aboveHut,
-            netIden,
-            instancesKeep: global.keep('[file:mill].loadtest'),
+            netIden: netIdenDeployConf.netIden,
+            instancesKeep: global.keep('/[file:mill]/loadtest'),
             getServerSessionKey: getSessionKey,
             sc: global.subcon('loadtest')
           });
@@ -814,14 +821,15 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         }
         
         // RoadAuths are managed by the NetIden (RoadAuths connect remote sessions to the AboveHut)
-        for (let server of roadAuths) netIden.addServer(server);
+        for (let server of roadAuths) netIdenDeployConf.netIden.addServer(server);
         
         let loft = await getRoom(loftConf.name);
         let loftTmp = await loft.open({
-          sc: deploySc.kid(`loft.${loftConf.prefix}`),
-          prefix: loftConf.prefix,
+          sc:      deploySc.kid(`loft.${loftConf.prefix}`),
+          prefix:  loftConf.prefix,
           hereHut: aboveHut,
-          netIden
+          rec:     aboveHut,
+          netIden: netIdenDeployConf.netIden
         });
         activateTmp.endWith(loftTmp);
         
@@ -845,14 +853,37 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           keep: null
         }.merge(therapyConf)])
         
-      ];
+      ].filter(deploy => deploy.enabled);
       
+      // Prepare all Deploys to run with the appropriate AboveHut
       await Promise.all(deployConfs.map(runDeploy));
       
-      for (let netIden of netIdenMap.values()) {
+      for (let { netIden, deployConfs } of netIdenMap.values()) {
+        
         let runOnNetworkTmp = await netIden.runOnNetwork(deployConfs.map(dpc => dpc.loft.name.split('.').at(-1)).join('+'));
         activateTmp.endWith(runOnNetworkTmp);
         await runOnNetworkTmp.prm;
+        
+        setupSc.kid('deploy')(String.baseline(`
+          | Hut deployed to network!
+          | 
+          | Network config:
+          | \u2022 Identity: "${netIden.name}"
+          | \u2022 Security: ${netIden.secureBits ? `${netIden.secureBits}bit` : 'UNSAFE'}
+          | \u2022 Certificate type: ${netIden.certificateType ? `"${netIden.certificateType}"` : '<none>'}
+          | Deployed rooms:
+          | ${deployConfs.map(dc => `${dc.loft.prefix}.${dc.loft.name}`).join('\n').indent('\u2022 ')}
+          | Deployed servers:
+          | ${netIden.servers.map(sv => sv.desc()).join('\n').indent('\u2022 ')}
+        `));
+        
+        runOnNetworkTmp.endWith(() => setupSc.kid('deploy')(`Hut with removed from network (identity: "${netIden.name}")`));
+        
+        // setupSc.kid('ready')([
+        //   `${this.desc()} running "${term}" is open:`,
+        //   ...portServers.toArr((servers, port) => `Port ${port}:\n` + servers.toArr(s => s.desc()).join('\n').indent('- '))
+        // ].join('\n'));
+        
       }
       
     };
@@ -863,35 +894,19 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     
     // Make sure a visible subcon is applied before `err` propagates! If no subcon is already
     // applied, the subcon used is considered the "panic" subcon
-    if (subconSilenced) {
+    if (subconSilenced) unsilenceSubcon((sc, ...args) => {
       
-      // unsilenceSubcon((sc, ...args) => console.log('\n' + [ // Panic output
-      //   `SUBCON: "${sc.term}"`,
-      //   ...args.map(a => {
-      //     if (isForm(a, Function)) try { a = a(); } catch (err) { a = 'Failed to execute: ' + a.toString(); }
-      //     if (!isForm(a, String)) try { a = global.formatAnyValue(a); } catch (err) { a = 'Failed to format: ' + getFormName(a); }
-      //     return a;
-      //   })
-      // ].join('\n').indent('[panic] ')));
+      // `formatArgs` won't return a Promise if we ensure non of the args are Promises, or
+      // Functions returning Promises
+      let pargs = args.map(a => [ Promise, Function ].some(F => hasForm(a, F)) ? `<${getFormName(a)}>` : a);
+      let fargs = getStdoutSubcon.formatArgs(sc, pargs);
+      console.log(`SUBCON: ${sc.term}\n${fargs.join('\n')}`.indent('[panic] ') + '\n');
       
-      unsilenceSubcon((sc, ...args) => {
-        
-        // `formatArgs` won't return a Promise if we ensure non of the args are Promises, or
-        // Functions returning Promises
-        let pargs = args.map(a => [ Promise, Function ].some(F => hasForm(a, F)) ? `<${getFormName(a)}>` : a);
-        let fargs = getStdoutSubcon.formatArgs(sc, pargs);
-        console.log(`SUBCON: ${sc.term}\n${fargs.join('\n')}`.indent('[panic] ') + '\n');
-        
-      });
-      
-    }
-    
-    
+    });
     
     throw err;
     
   }
-  
   
 };
 

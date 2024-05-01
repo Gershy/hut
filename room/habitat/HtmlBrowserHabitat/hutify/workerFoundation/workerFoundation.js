@@ -356,8 +356,8 @@ global.rooms[`${hutifyPath}.workerFoundation`] = () => ({ init: async evt => {
   // - SharedWorker uses a BelowHut (which should already fully work); tab uses *another* BelowHut
   //   (this is probably stupid - it's using a BelowHut exactly where a BetweenHut is intended)
   let locus = recMan.addRecord({ type: 'hut.locus', uid: '!locus', group: [ belowHut ], value: conf('locus') });
-  locus.valueSrc.route(({ term='Hut!', diveToken=[] }={}) => {
-    window.document.title = term;
+  locus.valueSrc.route(({ term=null, diveToken=[] }={}) => {
+    if (term) window.document.title = term;
     window.history.pushState(null, term, `/${diveToken.join('/')}`);
   });
   

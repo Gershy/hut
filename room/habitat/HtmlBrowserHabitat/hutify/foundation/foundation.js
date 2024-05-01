@@ -392,8 +392,8 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   //   (this is probably stupid - it's using a BelowHut exactly where a BetweenHut is intended)
   
   let locus = recMan.addRecord({ type: 'hut.locus', uid: '!locus', group: [ belowHut ], value: conf('locus') });
-  locus.valueSrc.route(({ term='Hut!', diveToken=[] }={}) => {
-    window.document.title = term;
+  locus.valueSrc.route(({ term=null, diveToken=[] }={}) => {
+    if (term) window.document.title = term;
     window.history.pushState(null, term, `/${diveToken.join('/')}`);
   });
   
@@ -406,7 +406,12 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   let initComm = conf('initComm');
   if (initComm) belowHut.processCommand({ src: aboveHut, msg: initComm });
   
-  await loft.open({ sc: global.subcon('loft'), prefix: conf('deploy.loft.prefix'), hereHut: belowHut, rec: aboveHut });
+  await loft.open({
+    sc: global.subcon('loft'),
+    prefix: conf('deploy.loft.prefix'),
+    hereHut: belowHut,
+    rec: aboveHut
+  });
   
   gsc(`Loft opened after ${(getMs() - performance.timeOrigin).toFixed(2)}ms`);
   

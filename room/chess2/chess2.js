@@ -22,11 +22,10 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
   ]);
   let { AnyTmp, Chooser, SetSrc, MemSrc, TimerSrc, ToggleSrc, Hinterland, HtmlBrowserHabitat, MapSrc } = rooms;
   
-  let isDev = conf('global.maturity') === 'dev';
   let pieceStyle = 'classic';
   let layoutStyle = 'classic';
-  let moveMs = (isDev ? 13 : 60) * 1000;
-  let matchmakeMs = (isDev ? 1 : 5) * 1000;
+  let moveMs =      (conf('global.maturity') === 'dev') ? (13 * 1000) : (60 * 1000);
+  let matchmakeMs = (conf('global.maturity') === 'dev') ? ( 1 * 1000) : ( 5 * 1000);
   let tsM1 = 'calc(70% + 0.78vmin)';
   let ts00 = 'calc(80% + 0.85vmin)';
   let tsP1 = 'calc(90% + 1.00vmin)';
@@ -286,7 +285,7 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
   
   return Hinterland({
     prefix: 'c2',
-    habitats: [ HtmlBrowserHabitat() ],
+    habitats: [ HtmlBrowserHabitat({ name: 'chess2' }) ],
     above: async (experience, dep) => {
       
       /// {ABOVE=

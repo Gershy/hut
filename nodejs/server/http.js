@@ -107,7 +107,9 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         
       } else if (!hasCmd) {
         
-        let { term='HUT' } = msg;
+        let { term=null } = msg;
+        if (term !== null && !isForm(term, String)) term = null;
+        
         Object.assign(msg, {
           command: 'hut:hutify',
           trn: 'sync',
@@ -119,15 +121,18 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       // "trn" defaults to "sync"; clients can save server effort by specifying "anon"
       if (!msg.has('trn')) msg.trn = 'sync';
       
-      // `{ trn: 'anon' }` is always accompanied by `{ hid: null }`
+      // If `{ trn: 'anon' }`, we always resolve to `{ hid: null }`
       if (msg.trn === 'anon') msg.hid = null;
       
       // Unprefixed commands are interpreted towards the default Loft, according to the AboveHut
       if (!msg.command.has(':')) msg.command = `${this.aboveHut.getDefaultLoftPrefix()}:${msg.command}`;
       
+      // STRIKE: `msg.command` doesn't look like `/^[a-z]+[:][a-zA-Z0-9]+$/`
+      
       subcon('roadAuth.http')(() => ({
-        incomingCtx: { path, msg: { hutCookie, query, body } },
-        resolvedCtx: msg
+        belowNetAddr,
+        incoming: { path, hutCookie, query, body },
+        resolved: msg
       }));
       
       // These can't be confined to DEBUG blocks - must always detect malformatted remote queries!

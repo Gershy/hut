@@ -17,7 +17,7 @@ let formatArgs = (sc, args, { formatFn=null }={}) => {
   // overall return a Promise)
   return thenAll(args.map(arg => isForm(arg, Function) ? arg(sc) : arg), args => {
     
-    if (formatFn) args = formatFn(...args) ?? [];
+    if (formatFn) try { args = formatFn(...args) ?? []; } catch(err) { err.propagate({ formatFn }); }
     if (args.empty()) return [];
     if (!isForm(args, Array)) args = [ args ];
     
@@ -27,13 +27,11 @@ let formatArgs = (sc, args, { formatFn=null }={}) => {
     let obj = {};
     let ind = 0;
     while (isForm(rawArgs[ind], String)) strs.push(rawArgs[ind++]);
-    while (isForm(rawArgs[ind], String)) obj.merge(rawArgs[ind++]);
+    while (isForm(rawArgs[ind], Object)) obj.merge(rawArgs[ind++]);
     
     // Accumulate all leading Strings, then all leading Objects
     args = [ ...(strs.empty() ? [] : [ strs.join(' ') ]), ...(obj.empty() ? [] : [ obj ]), ...rawArgs.slice(ind) ];
     
-    // Process any non-String values using `formatAnyValue`; remove any String chars in the range
-    // of 0x0007-0x000f (these appear as either multiple, zero, or deleted characters in terminal)
     return args;
     
   });

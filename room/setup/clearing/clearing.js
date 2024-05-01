@@ -538,6 +538,9 @@ Object.assign(global, {
     }
     
   });
+  protoDefs(Date, {
+    desc() { return `${getFormName(this)}(${getDate(+this)})`; }
+  });
   
   let newlessProtoDefs = (Cls, vals) => {
     

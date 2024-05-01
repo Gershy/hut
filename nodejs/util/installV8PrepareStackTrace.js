@@ -6,7 +6,31 @@ module.exports = () => Error.prepareStackTrace = (err, callSites) => {
     let file = cs.getFileName();
     if (!file || file.hasHead('node:')) return undefined;
     
-    // Object.getOwnPropertyNames(Object.getPrototypeOf(cs)),
+    // Object.getOwnPropertyNames(Object.getPrototypeOf(cs)) ->
+    //  | [
+    //  |   'constructor',
+    //  |   'getColumnNumber',
+    //  |   'getEnclosingColumnNumber',
+    //  |   'getEnclosingLineNumber',
+    //  |   'getEvalOrigin',
+    //  |   'getFileName',
+    //  |   'getFunction',
+    //  |   'getFunctionName',
+    //  |   'getLineNumber',
+    //  |   'getMethodName',
+    //  |   'getPosition',
+    //  |   'getPromiseIndex',
+    //  |   'getScriptNameOrSourceURL',
+    //  |   'getThis',
+    //  |   'getTypeName',
+    //  |   'isAsync',
+    //  |   'isConstructor',
+    //  |   'isEval',
+    //  |   'isNative',
+    //  |   'isPromiseAll',
+    //  |   'isToplevel',
+    //  |   'toString'
+    //  | ]
     
     return {
       type: 'line',

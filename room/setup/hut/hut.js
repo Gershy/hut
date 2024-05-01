@@ -604,8 +604,8 @@ global.rooms['setup.hut'] = async () => {
           
         } catch (cause) {
           
-          // A duplicated sync occurs if Above restarts - the new instance won't remember that it
-          // already synced us - this is a good when to detect when a reload is needed!
+          // Duplicated syncs occurs when Above restarts - the new Above doesn't remember it synced
+          // us - this is a good way to detect when a reload is needed!
           // TODO: HEEERE looks like Therapy rapidly reloads and then fails in a loop here:
           if (cause.message.startsWith('Api: Duplicated sync')) window.location.reload();
           
@@ -935,11 +935,17 @@ global.rooms['setup.hut'] = async () => {
       
       let dive = token.dive(diveToken);
       
+      let bearing = null;
       /// {BELOW=
-      return global.keep([ prefix, ...dive ]);
+      bearing = 'below';
       /// =BELOW} {ABOVE=
-      return this.aboveHut.enabledKeeps.get(dive[0]).dive(dive.slice(1));
+      bearing = 'above';
       /// =ABOVE}
+      
+      return {
+        below: () => global.keep([ prefix, ...dive ]),
+        above: () => this.aboveHut.enabledKeeps.get(dive[0]).dive(dive.slice(1))
+      }[bearing]();
       
     },
     

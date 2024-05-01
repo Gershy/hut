@@ -49,7 +49,7 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
     let maxW = Math.max(8, opts.w - pfxLen - d * 4 - 1); // Subtract 1 for the trailing ","
     
     // The ascii range 0x0007 - 0x000f are nasty control characters which don't appear in most
-    // terminals as exactly 1 character
+    // terminals as exactly 1 inline character
     let formatted = val.replaceAll(/[\u0007-\u000f]/g, '').replaceAll('\n', '\\n');
     if (formatted.length > maxW) formatted = formatted.slice(0, maxW - 1) + '\u2026';
     
@@ -120,15 +120,17 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
     
     seen.set(val, '<cyc> { ... }');
     let keyLen = Math.max(...val.toArr((v, k) => k.length));
+    let maxOneLineValueLen = opts.w - (d * 4) - (keyLen + 2); // Remove space from indentation and key; `+ 2` is for ": "
     
     let str = (() => {
       
       let formatted = val.map((v, k) => format(v, opts, d + 1, `${k.padTail(keyLen, ' ')}: `, seen));
       
       let oneLine = `${bold('{')} ${formatted.toArr((v, k) => `${k}${bold(':')} ${v}`).join(bold(',') + ' ')} ${bold('}')}`;
+      
       let canOneLine = true
         && !oneLine.has('\n')
-        && remAnsi(oneLine).length < (opts.w - d * 4);
+        && remAnsi(oneLine).length < maxOneLineValueLen;
       if (canOneLine) return oneLine;
       
       let multiLineItems = formatted.toArr((v, k) => {

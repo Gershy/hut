@@ -58,6 +58,10 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
   
   prepare(hut) {
     
+    // Note that this method must return a `Tmp` synchronously! TODO: Could consider supporting
+    // `async` with a `Habitat(...).prepare(...).prm` property; this may require support in
+    // foundation.js to `await` this `Promise`
+    
     /// {ABOVE=
     
     let tmp = Tmp();

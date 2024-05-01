@@ -65,10 +65,20 @@ global.rooms['record'] = async () => {
       this.formFns[typeName] = fn;
       return Tmp(() => delete this.formFns[typeName]);
     },
+    processRecordParams(...args /* type, group, value, uid, volatile | { type, group, value, uid, volatile } */) {
+      
+      let { type=null, group=Group(this, {}), value=null, uid=null, volatile=false } =
+        (args.length === 1 && isForm(args[0], Object))
+          ? args[0]
+          : [ 'type', 'group', 'value', 'uid', 'volatile' ].toObj((key, n) => [ key, args[n] ]);
+      
+      return { type, group, value, uid, volatile };
+      
+    },
     addRecord(...args /* type, group, value, uid, volatile | { type, group, value, uid, volatile } */) {
       
-      // `Manager(...).addRecord` is basically `Manager.getRecord(...)`
-      // but you need to supply `group`+`value`, and `uid` is optional
+      // Note: `Manager(...).addRecord` is basically `Manager.getRecord(...)` but with mandatory
+      // `group` and `value`, and optional `uid`
       
       // TODO: If caller supplied `group` and `value` but the `uid` is
       // hot and a pre-existing Record is returned, should *validate*
@@ -76,12 +86,10 @@ global.rooms['record'] = async () => {
       // comparing the pre-existing value and value supplied to this
       // `addRecord` call!
       
-      let { type=null, group=Group(this, {}), value=null, uid: specifiedUid=null, volatile=false } =
-        (args.length === 1 && isForm(args[0], Object))
-          ? args[0]
-          : [ 'type', 'group', 'value', 'uid', 'volatile' ].toObj((key, n) => [ key, args[n] ]);
+      let { type, group, value, uid } = this.processRecordParams(...args);
+      let didSpecifyUid = !!uid;
       
-      return this.getRecordFromCacheOrPlan(specifiedUid ?? this.getNextUid(), uid => {
+      return this.getRecordFromCacheOrPlan(didSpecifyUid ? uid : this.getNextUid(), uid => {
         
         if (!type) throw Error(`No Type provided`);
         
@@ -113,7 +121,7 @@ global.rooms['record'] = async () => {
         // result of `this.getNextUid` (which certainly will not exist
         // in the cache!)
         
-        if (specifiedUid) {
+        if (didSpecifyUid) {
           let inMemoryRec = this.findRecordInMemory(uid);
           if (inMemoryRec) return inMemoryRec;
         }
