@@ -318,8 +318,19 @@ global.rooms['record'] = async () => {
       if (!Form.nameRegex.test(name)) throw Error(`Invalid Type name: "${name}"`);
       if (manager.types[name]) throw Error(`Instantiated Type with duplicate name: "${name}"`);
       
-      // Doen't hurt to have the Type mapped immediately!
-      manager.types[name] = Object.assign(this, { name, manager, termTypes: {} });
+      // Doesn't hurt to have the Type mapped immediately!
+      Object.assign(this, {
+        name,
+        manager,
+        termTypes: {},
+        schema: {
+          mod: true, // Can Records of this Type be modified? (Will "value changed" events occur?)
+          rem: true  // Can Records of this Type be deleted? (Will, e.g., `endWith` handlers ever be called?)
+        }
+      });
+      
+      manager.types[name] = this;
+      
       denumerate(this, 'manager');
       denumerate(this, 'termTypes');
       
@@ -929,7 +940,7 @@ global.rooms['record'] = async () => {
       
     },
     desc() { return `${getFormName(this)}${this.volatile ? '??' : ''}(n: ${this.type.name}, u: ${this.uid})`; },
-    * iterateBreadthFirst() {
+    * iterateByBreadth() {
       
       let nextRecs = [ this ];
       let recs = [];
@@ -945,9 +956,9 @@ global.rooms['record'] = async () => {
       }
       
     },
-    * iterateDepthFirst() {
+    * iterateByDepth() {
       yield this;
-      for (let [ , mem ] of this.group.mems) yield* mem.iterateDepthFirst();
+      for (let [ , mem ] of this.group.mems) yield* mem.iterateByDepth();
     },
     * iterateAll(seen=Set()) {
       
@@ -1184,7 +1195,7 @@ global.rooms['record'] = async () => {
       // much more intuitive (for a complex GroupRec, it is much easier
       // to understand how "far away" some indirect value is, than the
       // depth-wise iteration order that would occur otherwise).
-      for (let mem of this.iterateBreadthFirst()) {
+      for (let mem of this.iterateByBreadth()) {
         let val = mem.valueSrc.val;
         if (isForm(val, Object) && val.has(key)) return val[key];
       }

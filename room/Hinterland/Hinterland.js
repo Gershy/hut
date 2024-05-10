@@ -28,19 +28,16 @@ global.rooms['Hinterland'] = async () => {
     // Call `Hinterland(...).open({ aboveHut })` to apply the defined rules
     
     $prefixer: (pfx, term, delim='.') => term.hasHead(`${pfx}${delim}`) ? term : `${pfx}${delim}${term}`, // Note that (only) CommandHandlers use ":" as `delim` instead of "."
-    $makeUtils: (prefix, hut, recMan, pfx=Form.prefixer.bound(prefix)) => ({
+    $makeExperience: (prefix, hut, recMan, pfx=Form.prefixer.bound(prefix)) => ({
       
-      // The Loft defined by `this.above` and `this.below` should be
-      // able to omit prefixes for almost all operations. For many
-      // operations this is handled be the "root" Record and Real which
-      // get initiated by Hinterland with the Loft-specific prefix; then
-      // operations can be performed using this Record and Real. The
-      // tricky part is Hut-initiated actions (actions where the Object
-      // providing the method is a Hut); this is because Huts have no
-      // natural default-prefix; a single Hut is designed to facilitate
-      // multiple Lofts at once - such actions need to be implemented
-      // differently. Here is an exhaustive list of actions that can be
-      // performed without specifying a prefix, and implementation:
+      // The Loft defined by `this.above` and `this.below` should be able to omit prefixes for most
+      // operations. For many operations this is handled be the "root" Record and Real which get
+      // initiated by Hinterland with the Loft-specific prefix; then operations can be performed
+      // using this Record and Real. The tricky part is Hut-initiated actions (actions where the
+      // Object providing the method is a Hut), as Huts have no natural default-prefix - a single
+      // Hut is designed to facilitate multiple Lofts at once - such actions need to be implemented
+      // differently. Here is an exhaustive list of actions that can be performed without
+      // specifying a prefix, and implementation:
       // +----------------------------+------------------------------------------------------------------
       // |                            | 
       // | ACTION                     | IMPLEMENTATION
@@ -99,7 +96,7 @@ global.rooms['Hinterland'] = async () => {
     
     $Potential: form({ name: 'Potential', props: (forms, Form) => ({
       
-      // TODO: get rid of that nasty `makeUtils`; implement everything through `Potential` instead.
+      // TODO: get rid of that nasty `makeExperience`; implement everything through `Potential` instead.
       // Potential should be hierarchical, e.g. a ParPotential should be able to give rise to a
       // KidPotential which has a KidReal as its `real` reference. It may even make sense for
       // Potentials to be Tmps so that a KidPotential can end under some set of circumstances.
@@ -155,7 +152,7 @@ global.rooms['Hinterland'] = async () => {
     
     open({ sc, prefix=this.prefix, hereHut, rec=hereHut }) {
       
-      // Hinterland basically sets up the Experience ("utils"), and wires things up so that the
+      // Hinterland basically sets up the Experience, and wires things up so that the
       // "above" and "below" functions of the consumer get called appropriately
       
       let tmp = Tmp();
@@ -163,9 +160,8 @@ global.rooms['Hinterland'] = async () => {
       let recMan = rec.type.manager;
       let pfx = Form.prefixer.bound(prefix);
       
-      // This `utils` will get used both ABOVE and BELOW (note ABOVE needs to instantiate a 2nd
-      // `utils` for each AfarBelowHut)
-      let utils = Form.makeUtils(prefix, hereHut, recMan, pfx); // Can we assert `hereHut.type.manager === rec.type.manager`???
+      // This `exp` is used ABOVE and BELOW (ABOVE instantiates a 2nd `exp` for each AfarBelowHut)
+      let exp = Form.makeExperience(prefix, hereHut, recMan, pfx); // Can we assert `hereHut.type.manager === rec.type.manager`???
       
       // Prepare all habitats
       for (let hab of this.habitats) tmp.endWith(hab.prepare(hereHut));
@@ -173,7 +169,7 @@ global.rooms['Hinterland'] = async () => {
       // Add all type -> Form mappings
       // Note values in `this.recordForms` are either functions giving
       // RecordForms, or RecordForms themselves
-      for (let [ k, v ] of this.recordForms) tmp.endWith(utils.addFormFn(pfx(k), v['~Forms'] ? () => v : v));
+      for (let [ k, v ] of this.recordForms) tmp.endWith(exp.addFormFn(pfx(k), v['~Forms'] ? () => v : v));
       
       let hinterlandReal = global.real.addReal(pfx('loft'));
       tmp.endWith(hinterlandReal);
@@ -295,7 +291,7 @@ global.rooms['Hinterland'] = async () => {
           real: hinterlandReal,
           addPreloadRooms: hereHut.addPreloadRooms.bind(hereHut),
           addCommandHandler: (command, fn) => hereHut.makeCommandHandler(pfx(command, ':'), fn),
-          ...utils
+          ...exp
         }, dep);
       });
       aboveScp.makeFrame(tmp); // Kick off single frame linked to `tmp`
@@ -325,7 +321,7 @@ global.rooms['Hinterland'] = async () => {
             lofterRh: lofterRh,
             lofterRelHandler: lofterRh,
             enableAction: (term, ...args) => belowHut.enableAction(pfx(term, ':'), ...args),
-            ...Form.makeUtils(prefix, belowHut, recMan, pfx) // Can't use the `utils` instance - it used `hereHut`; this case needs `belowHut`
+            ...Form.makeExperience(prefix, belowHut, recMan, pfx) // Can't use the `exp` instance - it used `hereHut`; this case needs `belowHut`
           }, dep);
         });
         
@@ -350,7 +346,7 @@ global.rooms['Hinterland'] = async () => {
           lofterRh: lofterRh,
           lofterRelHandler: lofterRh,
           enableAction: (term, ...args) => hereHut.enableAction(pfx(term, ':'), ...args),
-          ...utils
+          ...exp
         }, dep);
       }));
       

@@ -98,7 +98,7 @@ global.rooms['logic.Scope'] = foundation => form({ name: 'Scope', has: { Tmp }, 
       if (hasForm(args[0], Tmp)) throw Error(`Invalid Src; it can't be ${getFormName(args[0])}`);
       /// =DEBUG}
       
-      if (![ 2, 3 ].has(args.length)) throw Error(`Won't accept ${args.length} arguments`);
+      if (![ 2, 3 ].has(args.length)) throw Error(`Api: requires 2 or 3 args; given ${args.length}`);
       
       let [ src, hooks, fn ] = (args.length === 3) ? args : [ args[0], {}, ...args.slice(1) ];
       

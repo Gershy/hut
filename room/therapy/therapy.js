@@ -22,8 +22,6 @@ global.rooms['therapy'] = async (roomName, therapyKeep) => {
     },
     below: async (experience, dep) => {
       
-      let err = Error('lol');
-      
       dep(experience.real.addLayout('Axis1d', { axis: 'y', dir: '+', mode: 'stack' }));
       
       let lofterChooser = dep(Chooser.noneOrSome(experience.lofterRh));
@@ -36,9 +34,9 @@ global.rooms['therapy'] = async (roomName, therapyKeep) => {
         
         let loft = lofter.m('loft');
         
-        dep.scp(loft, 'loftTherapy', (loftTherapy, dep) => {
+        dep.scp(loft, 'therapyLoft', (therapyLoft, dep) => {
           
-          let therapy = loftTherapy.m('therapy');
+          let therapy = therapyLoft.m('therapy');
           dep.scp(therapy, 'stream', (stream, dep) => {
             
             let streamReal = experience.real.addReal('stream', {

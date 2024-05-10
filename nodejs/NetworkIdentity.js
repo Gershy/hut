@@ -1132,6 +1132,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   },
   
   addServer(server) { this.servers.add(server); },
+  getServer(protocol, port) { return this.servers.find(sv => sv.protocol === protocol && sv.port === port); },
   async runOnNetwork(term = '<unknown>') {
     
     // TODO: (?) Certify every NetworkAddress in `this.servers`

@@ -715,21 +715,33 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         let loadtest = null;
         if (loftConf.name === 'therapy') {
           
+          let pfx = loftConf.prefix;
+          
+          // Mark Therapy-related Record Types as very static:
+          recMan.getType(`${pfx}.therapy`)    .schema.merge({ mod: false, rem: false });
+          recMan.getType(`${pfx}.therapyLoft`).schema.merge({ mod: false, rem: false });
+          recMan.getType(`${pfx}.stream`)     .schema.merge({ mod: false, rem: false });
+          recMan.getType(`${pfx}.notion`)     .schema.merge({ mod: false, rem: false });
+          
           let subconWriteStdout = global.subconOutput;
           
           // We know the uid of the root Therapy Record; this means if it
           // already exists we'll get a reference to it!
-          let therapyPrefix = loftConf.prefix;
-          let therapyRec = recMan.addRecord({ uid: '!root', type: `${therapyPrefix}.therapy`, value: { ms: getMs() } });
+          let therapyRec = recMan.addRecord({ uid: '!therapyRoot', type: `${pfx}.therapy`, value: { ms: getMs() } });
           
           // Associate the Loft with the Therapy rec as soon as possible
-          let loftRh = aboveHut.relHandler({ type: 'th.loft', term: 'hut', limit: 1 });
+          let loftRh = aboveHut.relHandler({ type: `${pfx}.loft`, term: 'hut', limit: 1 });
           activateTmp.endWith(loftRh);
           loftRh.route(loftHrec => {
             
+            // Once this Record is added, Therapy data can be accessed from the loftRec with:
+            //    | loftRec.rh('therapyLoft').route(hrec => {
+            //    |   let { rec } = hrec;
+            //    | });
+            // (Assuming the prefix ("namespace") will be resolved by default)
             recMan.addRecord({
-              uid: '!loftTherapy',
-              type: `${therapyPrefix}.loftTherapy`,
+              uid: '!therapyLoft',
+              type: `${pfx}.therapyLoft`,
               group: [ loftHrec.rec, therapyRec ],
               value: { ms: getMs() }
             });
@@ -744,6 +756,8 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
               let { params, args } = scVal;
               
               let { therapy=false } = params;
+              if (sc === gsc) therapy = false; // Never send `gsc` to Therapy
+              
               if (therapy && args?.count()) (async () => {
                 
                 // TODO: It's important that nothing occurring within this function writes via sc,
@@ -753,22 +767,23 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
                 try {
                   
                   // TODO: What exactly are our constraints on `uid` values? KeepBank will stick uids
-                  // into filenames so it's important to be certain (see realessay solution)
+                  // into filenames so it's important to be certain (see realessay encoding solution)
+                  // Consumers NEED to be agnostic of filename encoding requirements!!!!!! BAD!!
                   let ms = getMs();
-                  let streamUid = `!stream@${sc.term.replace(/[.]/g, '@')}`;
+                  let streamUid = `!stream@${sc.term.replaceAll('.', '@')}`;
                   
                   (async () => {
                     
                     let streamRec = await recMan.addRecord({
                       uid: streamUid,
-                      type: `${therapyPrefix}.stream`,
+                      type: `${pfx}.stream`,
                       group: [ therapyRec ],
                       value: { ms, term: sc.term }
                     });
                     let notionRec = await recMan.addRecord({
-                      type: `${therapyPrefix}.notion`,
+                      type: `${pfx}.notion`,
                       group: [ streamRec ],
-                      value: { ms, args }
+                      value: { ms, args: args[0] }
                     });
                     
                   })();
@@ -848,6 +863,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         // Include the therapy deployment
         ...(!therapyConf ? [] : [{
           uid: 'therapy',
+          enabled: 1,
           host: null,
           loft: { prefix: 'th', name: 'therapy' },
           keep: null
@@ -864,25 +880,31 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         activateTmp.endWith(runOnNetworkTmp);
         await runOnNetworkTmp.prm;
         
-        setupSc.kid('deploy')(String.baseline(`
-          | Hut deployed to network!
-          | 
-          | Network config:
-          | \u2022 Identity: "${netIden.name}"
-          | \u2022 Security: ${netIden.secureBits ? `${netIden.secureBits}bit` : 'UNSAFE'}
-          | \u2022 Certificate type: ${netIden.certificateType ? `"${netIden.certificateType}"` : '<none>'}
-          | Deployed rooms:
-          | ${deployConfs.map(dc => `${dc.loft.prefix}.${dc.loft.name}`).join('\n').indent('\u2022 ')}
-          | Deployed servers:
-          | ${netIden.servers.map(sv => sv.desc()).join('\n').indent('\u2022 ')}
-        `));
+        setupSc.kid('deploy')(() => {
+          
+          let str = String.baseline(`
+            | Hut deployed to network!
+            | 
+            | Network config:
+            | ${'\u2022'} Identity: "${netIden.name}"
+            | ${'\u2022'} Security: ${netIden.secureBits ? `${netIden.secureBits}-bit` : 'UNSAFE'}
+            | ${'\u2022'} Certificate type: ${netIden.certificateType ? `"${netIden.certificateType}"` : '<none>'}
+          `);
+          
+          for (let dc of deployConfs) {
+            
+            str += `\n\nDeployed "${dc.loft.prefix}.${dc.loft.name}" on:`;
+            
+            for (let { name, port } of dc.host.protocols.toArr(v => v))
+              str += `\n${'\u2022'} ${netIden.getServer(name, port).desc()}`;
+            
+          }
+          
+          return str;
+          
+        });
         
         runOnNetworkTmp.endWith(() => setupSc.kid('deploy')(`Hut with removed from network (identity: "${netIden.name}")`));
-        
-        // setupSc.kid('ready')([
-        //   `${this.desc()} running "${term}" is open:`,
-        //   ...portServers.toArr((servers, port) => `Port ${port}:\n` + servers.toArr(s => s.desc()).join('\n').indent('- '))
-        // ].join('\n'));
         
       }
       
