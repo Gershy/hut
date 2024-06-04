@@ -219,6 +219,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
           buff: Buffer.alloc(0),
           writeQueue: Promise.resolve()
         });
+        denumerate(this, 'socket');
         
         this.sc(() => ({ event: 'init', id: this.id, belowHut: this.belowHut, netAddr: this.socket.remoteAddress }));
         this.endWith(() => this.sc(() => ({ event: 'fini', id: this.id })));
@@ -356,6 +357,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         sayGoodbyePrm.finally(() => socket.destroy());
         
       },
+      desc() { return `${getFormName(this)}(${this.socket.remoteAddress})`; },
       
       cleanup() {
         forms.Road.cleanup.call(this);

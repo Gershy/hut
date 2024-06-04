@@ -1,4 +1,5 @@
 /// <reference path="./ts/hut.d.ts"/>
+
 // Comments may precede "use strict": https://stackoverflow.com/questions/31412978
 'use strict';
 

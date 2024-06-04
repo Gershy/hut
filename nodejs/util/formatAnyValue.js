@@ -72,13 +72,15 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
   
   if (isForm(val?.desc, Function)) {
     
-    try {
+    //try {
       let str = ansi(val.desc(), 'blue');
       seen.set(val, str);
       return str;
-    } catch (err) {
+    //} catch (err) {
+      // TODO: Ignore errors here? Or output them separately? Or allow them to propagate?
+      //gsc(err.mod(msg => `Failed to format value with "desc" fn: ${msg}`));
       // Ignore any errors from calling `val.desc`
-    }
+    //}
     
   }
   

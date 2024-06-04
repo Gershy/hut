@@ -93,59 +93,6 @@ module.exports = (cfg={}) => {
       
     });
     
-    /*
-    return thenAll(args.map(arg => isForm(arg, Function) ? arg(sc) : arg), args => {
-      
-      // Note that setting { chatter: false } disables any subcon except "gsc" and "warn"
-      if (!chatter && ![ 'gsc', 'warn' ].has(sc.term)) return { params, args };
-      
-      if (chatterFormat) {
-        // The subcon's "chatterFormat" param takes the argument arr and returns a new arr, or
-        // `null` to silence this item
-        args = eval(chatterFormat)(...args);
-        if (args === null) return null;
-        if (!isForm(args, Array)) args = [ args ];
-      }
-      
-      // Merge leading sequence of Strings, then leading sequence of Objects
-      let rawArgs = args;
-      let strs = [];
-      let obj = {};
-      let ind = 0;
-      while (isForm(rawArgs[ind], String)) strs.push(rawArgs[ind++]);
-      while (isForm(rawArgs[ind], String)) obj.merge(rawArgs[ind++]);
-      args = [ ...(strs.empty() ? [] : [ strs.join(' ') ]), ...(obj.empty() ? [] : [ obj ]), ...rawArgs.slice(ind) ];
-      
-      let leftLns = [ `[${sc.term.slice(-leftColW)}]`, now ];
-      let rightLns = args.map(v => {
-        if (!isForm(v, String)) v = formatAnyValue(v, { d: formatDepth, w: rightColW });
-        return v.split(/\r?\n/);
-      }).flat();
-      
-      /// {DEBUG=
-      let call = trace?.[relevantTraceIndex];
-      call = call?.file && `${token.dive(call.file).at(-1)} ${call.row}:${call.col}`;
-      if (call) {
-        let extraChars = call.length - leftColW;
-        if (extraChars > 0) call = call.slice(extraChars + 1) + '\u2026';
-        leftLns.push(call);
-      }
-      /// =DEBUG}
-      
-      let logStr = Math.max(leftLns.length, rightLns.length).toArr(n => {
-        let l = (leftLns[n] || '').padTail(leftColW);
-        let r = rightLns[n] || '';
-        return l + vertDash() + ' ' + r;
-      }).join('\n');
-      
-      let topLine = leftColW.toArr(horzDash).join('') + junction() + (1 + rightColW).toArr(horzDash).join('');
-      console.log(topLine + '\n' + logStr);
-      
-      return { params, args };
-      
-    });
-    */
-    
   };
   
   return Object.assign(outputter, { debug: true, relevantTraceIndex: 0, leftColW: 28, rightColW: 50, ...cfg });

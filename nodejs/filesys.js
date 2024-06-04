@@ -1,15 +1,15 @@
 'use strict';
 
 require('../room/setup/clearing/clearing.js');
-let nodejs = [ 'path' ].toObj(t => [ t, require(`node:${t}`) ]);
+let nodejs = [ 'path', 'fs' ].toObj(t => [ t, require(`node:${t}`) ]);
 
 let getUid = () => (Number.int32 * Math.random()).encodeStr(String.base32, 7);
 
 let fs = (fs => ({
   ...fs.promises,
   ...fs.slice([ 'createReadStream', 'createWriteStream' ])
-}))(require('fs')).map((fn, name) => (...args) => {
-  let err = Error('='.repeat(300));
+}))(nodejs.fs).map((fn, name) => (...args) => {
+  let err = Error();
   return then(fn(...args), Function.stub, cause => err.propagate({ cause, msg: `Failed low-level ${name} on "${args[0]}"` }));
 });
 
@@ -64,7 +64,8 @@ let Filepath = form({ name: 'Filepath', props: (forms, Form) => ({
       if (!/^([A-Z]{1,2}[:])?[/\\]/.test(fspVal)) throw Error('Api: path doesn\'t start with optional drive indicator (e.g. "C:") followed by "/" or "\\"').mod({ fp: this, fsp: fspVal });
       /// =ASSERT}
       
-      if (this.path === nodejs.path.win32 && [ '/', '\\' ].has(fspVal[0])) fspVal = `C:${fspVal}`;
+      // On windows, if the initial Cmp is a slash, prefix it with "C:"
+      if (this.path === nodejs.path.win32 && '/\\'.has(fspVal[0])) fspVal = `C:${fspVal}`;
       
       this.fspVal = fspVal;
     }
@@ -143,9 +144,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
   },
   async xEnsureNode(fp) {
     
-    // Ensure all nodes up to (but excluding) `fp`
-    // Really this ensures that an entity can be written at `fp`. It
-    // doesn't actually set `fp`, only `fp`'s direct parent!
+    // Ensure nodes up to (but excluding) `fp`; overall ensures a leaf can be written at `fp`.
     
     let ptr = this.fp;
     while (!ptr.equals(fp)) {

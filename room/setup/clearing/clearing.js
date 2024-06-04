@@ -252,8 +252,7 @@ Object.assign(global, {
     $charset: str => {
       let cache = Map();
       return {
-        str,
-        size: BigInt(str.length),
+        str, size: BigInt(str.length),
         charVal: c => {
           if (!cache.has(c)) {
             let ind = str.indexOf(c);
@@ -454,54 +453,58 @@ Object.assign(global, {
       seen.add(this);
       
       let { message: msg, stack, cause, ...props } = this;
-      let { preamble, trace } = this.getInfo();
-      
-      if (trace.empty()) return `Unprocessed Error:\n${stack}`;
-      
-      // We want to show the Message and Preamble; depending how the
-      // Error is generated one may contain the other - if so we show
-      // whichever is the superset, otherwise we concatenate them (we
-      // always show *all* information)
-      msg = msg.trim();
-      let fullMsg = null;
-      if (preamble.has(msg))      fullMsg = preamble;
-      else if (msg.has(preamble)) fullMsg = msg;
-      else                        fullMsg = `${msg}\n${preamble}`;
-      
-      // Replace any filepaths within `fullMsg`
-      fullMsg = fullMsg.trim().split('\n').map(line => {
+      let { desc, trace } = (() => {
         
-        let match = line.trim().match(/^((?:[/]|[A-Z][:][/\\])[^:]+)[:]([0-9]+)(?:[:]([0-9]+))?$/);
+        let { preamble, trace } = this.getInfo();
+        if (trace.empty()) return { desc: `Unprocessed Error:\n${stack}`, trace };
         
-        if (!match) return line;
-        let [ , file, row, col=null ] = match;
-        if (!file.hasHead('/[')) file = `/[file]/${file.replace(/[/\\]+/g, '/')}`;
-        let src = mapCmpToSrc(file, row, col ?? 0);
-        return `${src.file.replace(/[\\]+/g, '/')} [${src.row}:${src.col}]`;
+        // We want to show the Message and Preamble; depending how the
+        // Error is generated one may contain the other - if so we show
+        // whichever is the superset, otherwise we concatenate them (we
+        // always show *all* information)
+        msg = msg.trim();
+        let fullMsg = null;
+        if (preamble.has(msg))      fullMsg = preamble;
+        else if (msg.has(preamble)) fullMsg = msg;
+        else                        fullMsg = `${msg}\n${preamble}`;
         
-      }).join('\n');
+        // Replace any filepaths within `fullMsg`
+        fullMsg = fullMsg.trim().split('\n').map(line => {
+          
+          let match = line.trim().match(/^((?:[/]|[A-Z][:][/\\])[^:]+)[:]([0-9]+)(?:[:]([0-9]+))?$/);
+          
+          if (!match) return line;
+          let [ , file, row, col=null ] = match;
+          if (!file.hasHead('/[')) file = `/[file]/${file.replace(/[/\\]+/g, '/')}`;
+          let src = mapCmpToSrc(file, row, col ?? 0);
+          return `${src.file.replace(/[\\]+/g, '/')} [${src.row}:${src.col}]`;
+          
+        }).join('\n');
+        
+        // Stringify "row" and "col"
+        trace = trace.map(val => {
+          if (val.type !== 'line') return val;
+          let { row, col, ...props } = val;
+          return { ...props, row: row.toString(10), col: col.toString(10) };
+        });
+        
+        let lineTrace = trace.filter(t => t.type === 'line');
+        let fileChars = Math.max(...lineTrace.map(t => t.file.length));
+        let rowChars = Math.max(...lineTrace.map(t => t.row.length));
+        let colChars = Math.max(...lineTrace.map(t => t.col.length));
+        trace = trace.map(t => {
+          if (t.type === 'line') {
+            let { file, row, col } = t;
+            return `${file.padTail(fileChars)} [${row.padHead(rowChars)}:${col.padHead(colChars)}]`;
+          } else if (t.type === 'info') {
+            return t.info;
+          }
+        });
+        
+        return { desc: fullMsg || getFormName(this), trace };
+        
+      })();
       
-      // Stringify "row" and "col"
-      trace = trace.map(val => {
-        if (val.type !== 'line') return val;
-        let { row, col, ...props } = val;
-        return { ...props, row: row.toString(10), col: col.toString(10) };
-      });
-      
-      let lineTrace = trace.filter(t => t.type === 'line');
-      let fileChars = Math.max(...lineTrace.map(t => t.file.length));
-      let rowChars = Math.max(...lineTrace.map(t => t.row.length));
-      let colChars = Math.max(...lineTrace.map(t => t.col.length));
-      trace = trace.map(t => {
-        if (t.type === 'line') {
-          let { file, row, col } = t;
-          return `${file.padTail(fileChars)} [${row.padHead(rowChars)}:${col.padHead(colChars)}]`;
-        } else if (t.type === 'info') {
-          return t.info;
-        }
-      });
-      
-      let desc = fullMsg || getFormName(this);
       if (!trace.empty()) desc += '\n' + trace.join('\n').indent('\u2022 ');
       if (!props.empty()) desc += '\n' + formatAnyValue(props).indent(2);
       
@@ -666,6 +669,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   /// =DEBUG}
   
   // Flow controls, sync/async interoperability
+  soon: fn => fn ? Promise.resolve().then(fn) : Promise.resolve(),
   onto: (val, fn) => (fn(val), val),
   safe: (fn, onErr) => {
     
@@ -680,11 +684,10 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     catch (err) { return onErr(err); }
     
   },
-  soon: fn => fn ? Promise.resolve().then(fn) : Promise.resolve(),
   then: (val, rsv=Function.stub, rjc=null) => {
     
     // Act on `val` regardless of whether it's a Promise or an immediate
-    // value; return `rsv(val)` either immediately or as a Promise;
+    // value; return `rsv(val)` either immediately or as a Promise
     
     // Promises are returned with `then`/`fail` handling
     if (val instanceof Promise) return val.then(rsv).catch(rjc);

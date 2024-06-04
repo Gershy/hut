@@ -82,3 +82,61 @@ declare const getRooms: <RoomNames extends keyof Room_mapping>(rooms: RoomNames[
 declare const global: {
   rooms: typeof rooms,
 };
+
+
+// "HUT PRIMITIVES"
+
+type Obj = { [key: string]: any };
+type Fun<Return=any> = Fun0<Return>;
+type Fun0<Return=any> = (...a: any[]) => Return;
+type Fun1<A1, Return=any> = (a1: A1, ...a: any[]) => Return;
+type Fun2<A1, A2, Return=any> = (a1: A1, a2: A2, ...a: any[]) => Return;
+type Fun3<A1, A2, A3, Return=any> = (a1: A1, a2: A2, a3: A3, ...a: any[]) => Return;
+type Fun4<A1, A2, A3, A4, Return=any> = (a1: A1, a2: A2, a3: A3, a4: A4, ...a: any[]) => Return;
+type Fun5<A1, A2, A3, A4, A5, Return=any> = (a1: A1, a2: A2, a3: A3, a4: A4, a5: A5, ...a: any[]) => Return;
+
+
+// PROTOTYPE EXTENSIONS
+
+interface ObjectConstructor {
+}
+interface Object {
+  empty: () => boolean,
+  has: (k: string) => boolean,
+  map: (fn: (val: any, key: string) => any) => any,
+  mapk: (fn: (val: any, key: string) => [ string, any ]) => any,
+  at: (k: string | string[], def?: any) => any,
+  plain: (obj?: any) => any,
+  slice: <T>(this: T, keys: (keyof T)[]) => Partial<T>,
+  omit: <T>(this: T, keys: (keyof T)[]) => Partial<T>,
+  toArr: <T extends (v: any, k: string) => any>(fn: T) => ReturnType<T>[],
+  built: () => Object,
+  merge: <T>(val: T) => Object & T,
+  gain: (...args: any[]) => any,
+  [Symbol.iterator]: () => Iterator<[ string, any]>
+}
+
+interface Array<T> {
+  any: (fn: Fun) => boolean,
+  has: (val: T) => boolean,
+  add: (val: T) => void,
+  count: () => number,
+  valSort: (fn: (val: T) => number) => Array<T>,
+  each: (fn: (val: T) => void) => void,
+  empty: () => boolean,
+  equals: <Z>(arr: Array<T>) => Z extends T ? boolean : false,
+  toObj: (fn: Fun) => any,
+  seek: (fn: (val: T) => any) => { found: boolean, val: T | undefined, ind: number },
+}
+interface ArrayConstructor {
+  stub: any[]
+}
+
+interface Error {
+  mod: (props: { [key: string]: any }) => Error
+  propagate: (props?: { [key: string]: any }) => never
+}
+
+// GLOBALS
+
+declare var safe: any;
