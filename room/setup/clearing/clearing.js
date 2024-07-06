@@ -13,9 +13,11 @@ if (!global.mmm)      global.mmm = () => {};
 
 Object.assign(global, {
   Regex: RegExp,
-  AsyncFunction: (async () => {}).constructor,
-  GeneratorFunction: (function*(){})().constructor,
-  AsyncGeneratorFunction: (async function*(){})().constructor,
+  AsyncFunction:          (async () => {}).constructor,
+  GeneratorFunction:      (function*(){}).constructor,
+  Generator:              (function*(){})().constructor,
+  AsyncGeneratorFunction: (async function*(){}).constructor,
+  AsyncGenerator:         (async function*(){})().constructor,
   C: Object.freeze({
     def: (obj, prop, value, opts={}) => Object.defineProperty(obj, prop, { value, configurable: true, ...opts }),
     skip: undefined,
@@ -510,7 +512,7 @@ Object.assign(global, {
       
       if (cause) {
         if (hasForm(cause, Error)) cause = cause.desc(seen);
-        else                       cause = cause.map((err, n) => `Cause #${n + 1}: ` + err.desc(seen)).join('\n');
+        else                       cause = cause.map((c, n) => `Cause #${n + 1}: ` + c.desc(seen)).join('\n');
         desc += `\nCAUSE:\n${cause.indent(2)}`;
       }
       
@@ -638,7 +640,7 @@ Object.assign(global, {
     }
     
   });
-  newlessProtoDefs(GeneratorFunction, {
+  newlessProtoDefs(Generator, {
     each(fn) { for (let v of this) fn(v); },
     toArr(fn) { return [ ...this ].map(fn); },
     toObj(fn) {
@@ -646,6 +648,11 @@ Object.assign(global, {
       for (let v of this) { v = fn(v); if (v !== skip) ret[v[0]] = v[1]; }
       return ret;
     }
+  });
+  newlessProtoDefs(AsyncGenerator, {
+    async each(fn) { for await (let v of this) await fn(v); },
+    async toArr(fn) { let arr = []; for await (let v of this) arr.push(v); return arr.map(fn); },
+    async toObj(fn) { let arr = []; for await (let v of this) arr.push(v); return arr.toObj(fn); }
   });
   
 }

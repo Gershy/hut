@@ -73,7 +73,7 @@ global.rooms['setup.hut.hinterland.RoadAuthority'] = async () => form({ name: 'R
       Object.assign(this, { roadAuth, belowHut });
     },
     desc() {
-      let netAddrs = this.belowHut.getKnownNetAddrs()[0];
+      let netAddrs = this.belowHut.getKnownNetAddrs();
       return `${getFormName(this)}(${this.roadAuth.desc()} <-> ${this.belowHut.hid}@[${netAddrs.join('+')}])`;
     },
     currentCost() { throw Error('Not implemented'); },
