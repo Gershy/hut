@@ -78,12 +78,10 @@ global.rooms['setup.hut.hinterland.RoadAuthority'] = async () => form({ name: 'R
     },
     currentCost() { throw Error('Not implemented'); },
     tellAfar() {
-      // NOTE: TELLING IS DONE BY A (Hut, Road) PAIR! HUTS MAY HAVE
-      // MULTIPLE ROADS! The final transport operation is performed by
-      // a Road, but the op needs to be initiated with the Hut, which
-      // picks which of its Roads to use! This is why RoadAuthority
-      // only handles incoming Comms (clients use any RoadAuthority),
-      // and Roads handle outgoing Comms!
+      // NOTE: TELLING IS DONE BY A (Hut, Road) PAIR! HUTS MAY HAVE MULTIPLE ROADS! The final
+      // transport operation is performed by a Road, but the op needs to be initiated with the Hut,
+      // which picks which of its Roads to use! This is why RoadAuthority only handles incoming
+      // Comms (clients use any RoadAuthority), and Roads handle outgoing Comms!
       throw Error('Not implemented');
     }
     

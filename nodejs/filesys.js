@@ -229,8 +229,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
       for (let lock1 of locks)
         if (this.locksCollide(lock0, lock1)) { collLocks.push(lock0); break; }
     
-    // We've got our "prereq" Promise - now add a new Lock so any new
-    // actions are blocked until `fn` completes
+    // Add new Locks so any new colliding ops are blocked until `fn` completes
     for (let lock of locks) {
       mmm('filesysLock', +1);
       this.locks.add(lock);
@@ -251,11 +250,9 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
   },
   async transact({ name='?', fp, fn }) {
     
-    // Maybe functions can pass in a whole bunch of initial locks with
-    // various bounding - the caller can end these locks whenever they
-    // see fit (and `doLocked` can simply remove entries from
-    // `this.locks` when the corresponding resolves - not just at the
-    // end of the function!!)
+    // Maybe functions can pass in a whole bunch of initial locks with various bounding - the
+    // caller can end these locks whenever they see fit (and `doLocked` can simply remove entries
+    // from `this.locks` when the corresponding resolves - not just at the end of the function!!)
     
     this.checkFp(fp);
     

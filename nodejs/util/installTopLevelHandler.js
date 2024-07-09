@@ -38,6 +38,7 @@ module.exports = () => {
 
   let onErr = err => {
     if (err['~suppressed']) return; // Ignore suppressed errors
+    if (err?.code === 'ECONNRESET') { gsc('Top-level ignore for ECONNRESET', { err });  return; }
     gsc(`Uncaught ${getFormName(err)}: ${err.desc()}`);
     process.exitNow(1);
   };

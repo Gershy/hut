@@ -67,7 +67,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     
     // Setup `global.formatAnyValue`
     global.formatAnyValue = require('./util/formatAnyValue.js'); // (val, { colours, w, d }) => formattedStr;
-    global.getMs = require('./util/getCalibratedUtcMillis.js')(/* involves a busy-wait */);
+    global.getMs = require('./util/getCalibratedUtcMillis.js')(/* involves a brief busy-wait */);
     
     { // Setup `global.keep`
       

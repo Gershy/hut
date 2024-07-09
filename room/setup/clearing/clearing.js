@@ -458,7 +458,7 @@ Object.assign(global, {
       let { desc, trace } = (() => {
         
         let { preamble, trace } = this.getInfo();
-        if (trace.empty()) return { desc: `Unprocessed Error:\n${stack}`, trace };
+        if (trace.empty()) return { desc: `Loose stack: "${stack}"`, trace };
         
         // We want to show the Message and Preamble; depending how the
         // Error is generated one may contain the other - if so we show

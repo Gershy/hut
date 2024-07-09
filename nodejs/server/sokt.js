@@ -48,6 +48,9 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         
         let initialMs = getMs();
         
+        // Make sure socket errors never crash the top-level
+        socket.on('error', err => err.suppress());
+        
         if (req.headers['upgrade'] !== 'websocket') return socket.end('Api: upgrade header must be "websocket"');
         if (!req.headers['sec-websocket-key'])      return socket.end('Api: missing "sec-websocket-key" header');
         
