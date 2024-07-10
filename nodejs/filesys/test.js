@@ -59,7 +59,7 @@ let inTmpDir = async (fn, { tmpUid=Math.random().toString(36).slice(2, 8) }={}) 
 };
 
 // Test definitions
-let testFilter = /simple encryption/;
+let testFilter = null;
 let tests = [
   
   async () => { // FsKeep.fromFp interpretation
@@ -120,7 +120,7 @@ let tests = [
     
     let keep = FsKeep.fromFp('/test', { path: nodejs.path.win32 });
     let kid = keep.kid([ 'a' ]);
-    if (kid.fp !== 'c:/test/a') throw Error('Failed');
+    if (kid.fp !== 'c:/test/a') throw Error('Failed').mod({ kid });
     
   },
   async () => { // FsKeep(...).kid(...) ensure posix is comparable to win32
@@ -152,7 +152,7 @@ let tests = [
     let keep = FsKeep.fromFp('/test', { path: nodejs.path.win32 });
     let kid = keep.kid([ { sg: '^^' } ]);
     
-    if (kid.mode !== 'native') throw Error('Failed');
+    if (kid.mode !== 'native') throw Error('Failed').mod({ kid });
     
     let err = shouldFail(() => kid.kid([ '^^' ]));
     if (!err.message.hasHead('Api: invalid Cmp;')) throw Error('Failed').mod({ cause: err });
@@ -163,7 +163,7 @@ let tests = [
     let keep = FsKeep.fromFp('/test', { path: nodejs.path.win32 });
     let kid = keep.kid({ mode: 'native' }, [ { sg: '^^' } ]);
     
-    if (kid.mode !== 'native') throw Error('Failed');
+    if (kid.mode !== 'native') throw Error('Failed').mod({ kid });
     
     let err = shouldFail(() => kid.kid([ '^^' ]));
     if (!err.message.hasHead('Api: invalid Cmp;')) throw Error('Failed').mod({ cause: err });
@@ -189,7 +189,7 @@ let tests = [
     let keep = FsKeep.fromFp('/test', { path: nodejs.path.win32 });
     let kid = keep.kid({ mode: 'strong' });
     let kid2 = kid.kid([ '..', '...' ]);
-    if (kid2.fp !== 'c:/test/7l5/1q~z~') throw Error('Failed');
+    if (kid2.fp !== 'c:/test/7l5/1q~z~') throw Error('Failed').mod({ kid2 });
     
   },
   async () => { // FsKeep(...).kid({ mode: 'native' }, cmps) works
@@ -214,10 +214,10 @@ let tests = [
     let fk = FsKeep.fromFp('/a/b/c', { path: nodejs.path.win32 });
     let lineage = [ ...fk.lineage() ].map(ln => ln.fk);
     
-    if (lineage.length !== 3)                             throw Error('Failed');
-    if (!cmpArrs(lineage[0].fd, [ 'c:', 'a' ]))           throw Error('Failed');
-    if (!cmpArrs(lineage[1].fd, [ 'c:', 'a', 'b' ]))      throw Error('Failed');
-    if (!cmpArrs(lineage[2].fd, [ 'c:', 'a', 'b', 'c' ])) throw Error('Failed');
+    if (lineage.length !== 3)                             throw Error('Failed').mod({ lineage });
+    if (!cmpArrs(lineage[0].fd, [ 'c:', 'a' ]))           throw Error('Failed').mod({ lineage });
+    if (!cmpArrs(lineage[1].fd, [ 'c:', 'a', 'b' ]))      throw Error('Failed').mod({ lineage });
+    if (!cmpArrs(lineage[2].fd, [ 'c:', 'a', 'b', 'c' ])) throw Error('Failed').mod({ lineage });
     
   },
   async () => { // FsKeep(...).lineage(itself)
@@ -225,7 +225,7 @@ let tests = [
     let fk = FsKeep.fromFp('/a/b/c', { path: nodejs.path.win32 });
     let lineage = [ ...fk.lineage(fk) ].map(ln => ln.fk);
     
-    if (lineage.length !== 0) throw Error('Failed');
+    if (lineage.length !== 0) throw Error('Failed').mod({ lineage });
     
   },
   async () => { // FsKeep(...).lineage(par)
@@ -235,10 +235,10 @@ let tests = [
     
     let lineage = [ ...kidFk.lineage(parFk) ].map(ln => ln.fk);
     
-    if (lineage.length !== 3)                                            throw Error('Failed');
-    if (!cmpArrs(lineage[0].fd, [ 'c:', 'a', 'b', 'c', 'd' ]))           throw Error('Failed');
-    if (!cmpArrs(lineage[1].fd, [ 'c:', 'a', 'b', 'c', 'd', 'e' ]))      throw Error('Failed');
-    if (!cmpArrs(lineage[2].fd, [ 'c:', 'a', 'b', 'c', 'd', 'e', 'f' ])) throw Error('Failed');
+    if (lineage.length !== 3)                                            throw Error('Failed').mod({ lineage });
+    if (!cmpArrs(lineage[0].fd, [ 'c:', 'a', 'b', 'c', 'd' ]))           throw Error('Failed').mod({ lineage });
+    if (!cmpArrs(lineage[1].fd, [ 'c:', 'a', 'b', 'c', 'd', 'e' ]))      throw Error('Failed').mod({ lineage });
+    if (!cmpArrs(lineage[2].fd, [ 'c:', 'a', 'b', 'c', 'd', 'e', 'f' ])) throw Error('Failed').mod({ lineage });
     
   },
   async () => { // FsKeep(...).lineage(invalidPar)
@@ -342,16 +342,16 @@ let tests = [
       ft = FsTxn({ fk: fk.kid([ 'a', 'b', 'c' ]) });
       await ft.initPrm;
       
-      if (fk.txn) throw Error('Failed'); // Don't mutate the param!
+      if (fk.txn) throw Error('Failed').mod({ fk }); // Don't mutate the param!
       
       let kidFk = ft.fk.kid([ 'd' ]);
-      if (!kidFk.txn) throw Error('Failed');
+      if (!kidFk.txn) throw Error('Failed').mod({ kidFk });
       
       let parFk = kidFk.par(1);
-      if (!parFk.txn) throw Error('Failed');
+      if (!parFk.txn) throw Error('Failed').mod({ parFk });
       
       let deepParFk = parFk.par(1);
-      if (deepParFk.txn) throw Error('Failed'); // Outside `ft`; shouldn't have a "txn"
+      if (deepParFk.txn) throw Error('Failed').mod({ deepParFk }); // Outside `ft`; shouldn't have a "txn"
       
     }).finally(() => ft?.end());
     
@@ -381,12 +381,12 @@ let tests = [
     let ft2;
     await inTmpDir(async fk => {
       
-      ft1 = FsTxn({ fk, cfg: { ownershipTimeoutMs: 500, throttler: fn => fn() } });
+      ft1 = FsTxn({ fk, cfg: { ownershipTimeoutMs: 500 } });
       await ft1.initPrm;
       
-      ft2 = FsTxn({ fk, cfg: { ownershipTimeoutMs: 500, throttler: fn => fn() } });
+      ft2 = FsTxn({ fk, cfg: { ownershipTimeoutMs: 500 } });
       let err = await shouldFail(() => ft2.initPrm);
-      if (!err.message.has('unable to take ownership')) throw Error('Failed');
+      if (!err.message.has('unable to take ownership')) throw Error('Failed').mod({ cause: err });
       
     }).finally(() => { ft1?.end(); ft2?.end(); });
     
@@ -441,23 +441,23 @@ let tests = [
       
       // Object, binary
       let data1 = await ft.getData(nonexistentFk, { encoding: null });
-      if (!isForm(data1, Buffer)) throw Error('Failed');
-      if (data1.length !== 0) throw Error('Failed');
+      if (!isForm(data1, Buffer)) throw Error('Failed').mod({ data1 });
+      if (data1.length !== 0) throw Error('Failed').mod({ data1 });
       
       // Object, utf8
       let data2 = await ft.getData(nonexistentFk, { encoding: 'utf8' });
-      if (!isForm(data2, String)) throw Error('Failed');
-      if (data2.length !== 0) throw Error('Failed');
+      if (!isForm(data2, String)) throw Error('Failed').mod({ data2 });
+      if (data2.length !== 0) throw Error('Failed').mod({ data2 });
       
       // Shorthand, binary
       let data3 = await ft.getData(nonexistentFk, null);
-      if (!isForm(data3, Buffer)) throw Error('Failed');
-      if (data2.length !== 0) throw Error('Failed');
+      if (!isForm(data3, Buffer)) throw Error('Failed').mod({ data3 });
+      if (data3.length !== 0) throw Error('Failed').mod({ data3 });
       
       // Shorthand, string
       let data4 = await ft.getData(nonexistentFk, 'utf8');
-      if (!isForm(data4, String)) throw Error('Failed');
-      if (data4.length !== 0) throw Error('Failed');
+      if (!isForm(data4, String)) throw Error('Failed').mod({ data4 });
+      if (data4.length !== 0) throw Error('Failed').mod({ data4 });
       
     });
     
@@ -472,11 +472,11 @@ let tests = [
       await ft.setData(dataFk, 'lalala', { encoding: 'utf8' });
       
       let data1 = await ft.getData(dataFk, { encoding: 'utf8' });
-      if (data1 !== 'lalala') throw Error('Failed');
+      if (data1 !== 'lalala') throw Error('Failed').mod({ data1 });
       
       let data2 = await ft.getData(dataFk, { encoding: null });
-      if (!isForm(data2, Buffer))              throw Error('Failed');
-      if (data2.toString('utf8') !== 'lalala') throw Error('Failed');
+      if (!isForm(data2, Buffer))              throw Error('Failed').mod({ data2 });
+      if (data2.toString('utf8') !== 'lalala') throw Error('Failed').mod({ data2 });
       
     });
     
@@ -529,24 +529,46 @@ let tests = [
   },
   async () => { // FsTxn simple encryption
     
-    let ft;
+    // Key is utf8; data is utf8
+    let ft1;
     await inTmpDir(async (fk, { fs }) => {
       
-      gsc('ENCRYPT');
-      ft = FsTxn({ fk, cfg: {
-        throttler: fn => fn(),
-        key: 'my secret key'
-      }});
+      ft1 = FsTxn({ fk, cfg: { throttler: fn => fn(), key: 'my secret key' }});
       
-      await ft.setData(fk.kid([ 'data' ]), 'VERY SENSITIVE');
+      await ft1.setData(fk.kid([ 'data' ]), 'VERY SENSITIVE');
       
-      gsc('Wrote, reading...');
+      let val = await ft1.getData(fk.kid([ 'data' ]), 'utf8');
+      if (val !== 'VERY SENSITIVE') throw Error('Failed').mod({ val });
       
-      let val = await ft.getData(fk.kid([ 'data' ]), 'utf8');
+    }).finally(() => ft1?.end());
+    
+    // Key is Buffer, data is utf8
+    let ft2;
+    await inTmpDir(async (fk, { fs }) => {
       
-      gsc('ENCRYPTION', { val });
+      ft2 = FsTxn({ fk, cfg: { throttler: fn => fn(), key: Buffer.allocUnsafe(100) }});
       
-    }).finally(() => ft?.end());
+      await ft2.setData(fk.kid([ 'data' ]), 'VERY SENSITIVE');
+      
+      let val = await ft2.getData(fk.kid([ 'data' ]), 'utf8');
+      if (val !== 'VERY SENSITIVE') throw Error('Failed').mod({ val });
+      
+    }).finally(() => ft2?.end());
+    
+    // Key is Buffer, data is Buffer
+    let ft3;
+    await inTmpDir(async (fk, { fs }) => {
+      
+      ft3 = FsTxn({ fk, cfg: { throttler: fn => fn(), key: 'yolooo' }});
+      
+      let buff = Buffer.allocUnsafe(100);
+      await ft3.setData(fk.kid([ 'data' ]), buff);
+      
+      let buff2 = await ft3.getData(fk.kid([ 'data' ]));
+      if (Buffer.compare(buff, buff2)) throw Error('Failed').mod({ buff, buff2 });
+      
+    }).finally(() => ft3?.end());
+    
     
   },
   

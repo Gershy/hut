@@ -458,7 +458,11 @@ Object.assign(global, {
       let { desc, trace } = (() => {
         
         let { preamble, trace } = this.getInfo();
-        if (trace.empty()) return { desc: `Loose stack: "${stack}"`, trace };
+        
+        // "Loose" errors suck; nodejs is known to throw them in certain areas. The worst part is
+        // that they have no stacktrace. For example, fs.stat will throw a loose error if used on
+        // a non-existent path - or we could throw one, via `throw { name: 'loose error :(' }`
+        if (trace.empty()) return { desc: `Loose Error:\n  ${msg}\n  "${stack}"`, trace };
         
         // We want to show the Message and Preamble; depending how the
         // Error is generated one may contain the other - if so we show

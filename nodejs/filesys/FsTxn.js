@@ -208,36 +208,31 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
   
   $fkToIv: fk => {
     
-    let iv = fk.fp;
-    if (iv.length < 16) {
-      let missing = 16 - iv.length;
-      iv = '/'.repeat(missing) + iv;
-    }
-    return iv.slice(-16);
+    // TODO: This implementation is no good
+    
+    return fk.fp.padHead(16, '/').slice(-16);
     
   },
   $encrypt: ({ data, key, fk }) => {
     
-    let err = Error('');
-    
     let { crypto } = nodejs;
     if (isForm(data, String)) data = Buffer.from(data);
     
+    let err = Error('');
     return crypto.subtle.encrypt({ name: 'AES-CBC', iv: Form.fkToIv(fk) }, key, data)
-      .catch(cause => err.propagate({ cause, code: cause.message }))
+      .catch(cause => err.propagate({ msg: `Failed to encrypt: ${cause.message}`, cause }))
       .then(arrBuff => Buffer.from(arrBuff));
     
   },
   $decrypt: ({ data, key, fk }) => {
     
-    let err = Error('');
-    
     let { crypto } = nodejs;
     if (isForm(data, String)) data = Buffer.from(data);
     
     // TODO: HEEERE `cause.message` is "error:1C80006B:Provider routines::wrong final block length"
+    let err = Error('');
     return crypto.subtle.decrypt({ name: 'AES-CBC', iv: Form.fkToIv(fk) }, key, data)
-      .catch(cause => err.propagate({ cause, code: cause.message }))
+      .catch(cause => err.propagate({ msg: `Failed to decrypt: ${cause.message}`, cause }))
       .then(arrBuff => Buffer.from(arrBuff));
     
   },
@@ -280,12 +275,12 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
           
           let opts = {
             type: 'raw',
-            value: buff,
+            buff,
             encryptionMode: { name: 'AES-CBC' },
             extractable: false,
             uses: [ 'encrypt', 'decrypt' ]
           };
-          cfg.cryptoKey = await nodejs.crypto.subtle.importKey(opts.type, opts.value, opts.encryptionMode, opts.extractable, opts.uses);
+          cfg.cryptoKey = await nodejs.crypto.subtle.importKey(opts.type, opts.buff, opts.encryptionMode, opts.extractable, opts.uses);
         }
         
         let canOwn = async () => {
@@ -611,23 +606,23 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
   },
   getData(fk, opts={}) /* Promise<string | Buffer> */ {
     
+    if (!isForm(opts, Object)) opts = { encoding: opts };
+    let { encoding: enc=null } = opts;
+    
     this.checkFp(fk);
     
     return this.processOp({
+      
       name: 'getData',
       locks: [ Form.lock('nodeRead', fk) ],
       fn: async () => {
-        if (!isForm(opts, Object)) opts = { encoding: opts };
-        let { encoding: enc=null } = opts;
         
-        let emptyVal = enc ? '' : Buffer.alloc(0);
-        
-        let result = await nodejs.fs.readFile(fk.fp, opts).catch(fsCodes({
+        let result = await nodejs.fs.readFile(fk.fp).catch(fsCodes({
           
           // Reading a nonexistent entity resolves to 0-length data
-          ENOENT: emptyVal,
+          ENOENT: Buffer.alloc(0),
           
-          // Signal we found a dir with `null`
+          // Use this opportunity to detect if it's a node
           EISDIR: null
           
         }));
@@ -635,12 +630,18 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
         if (result !== null) return result;
         
         // If `result` was `null` then `fk` indicates a node; try to read the "~" kid...
-        return nodejs.fs.readFile(fk.kid([ '~' ]).fp, opts).catch(fsCodes({ ENOENT: emptyVal }));
+        return nodejs.fs.readFile(fk.kid([ '~' ]).fp).catch(fsCodes({ ENOENT: Buffer.alloc(0) }));
         
       },
       volatilityMemo: null
-    }).then(data => {
-      return this.cfg.cryptoKey ? Form.decrypt({ data, key: this.cfg.cryptoKey, fk }) : data
+      
+    }).then(async buff => {
+      
+      if (this.cfg.cryptoKey) buff = await Form.decrypt({ data: buff, key: this.cfg.cryptoKey, fk });
+      
+      // Apply encoding
+      return (enc === null) ? buff : buff.toString(enc);
+      
     });
     
   },
