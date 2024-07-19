@@ -274,7 +274,7 @@ Object.assign(global, {
     $base62: '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ',
     $base64: '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ=-',
     
-    $$: 'has:includes,hasHead:startsWith,hasTail:endsWith,padHead:padStart,padTail:padEnd,trimHead:trimStart,trimTail:trimEnd,upper:toUpperCase,lower:toLowerCase',
+    $$: 'code:charCodeAt,has:includes,hasHead:startsWith,hasTail:endsWith,padHead:padStart,padTail:padEnd,trimHead:trimStart,trimTail:trimEnd,upper:toUpperCase,lower:toLowerCase',
     
     cut(delim, cuts=1) { // e.g. `cuts === 1` produces Array of length 2
       // `cuts` defines # of cuts (resulting array length is `num + 1`)
@@ -286,7 +286,6 @@ Object.assign(global, {
       if (lenConsumed < this.length) split = [ ...split, this.slice(lenConsumed + delim.length) ];
       return split;
     },
-    code(ind=0) { return this.charCodeAt(0); },
     count() { return this.length; },
     ellipsis(limit, chr='\u2026') { return this.length > limit ? this.slice(0, limit - 1) + chr : this; },
     indent(...args /* amt=2, char=' ' | indentStr=' '.repeat(2) */) {

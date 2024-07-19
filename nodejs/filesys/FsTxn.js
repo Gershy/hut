@@ -206,11 +206,32 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     
   },
   
+  $fkToIvCache: Map(/* fk.fp -> iv */),
   $fkToIv: fk => {
     
-    // TODO: This implementation is no good
+    let str = fk.fp;
+    if (!Form.fkToIvCache.has(str)) {
+      
+      let num = 5n;
+      for (let i of str.length) {
+        let c = str.code(i);
+        num = ((num * (5n + BigInt(c))) ^ ((num * 7n) + BigInt(i))) % BigInt(36 ** 16);
+      }
+      
+      Form.fkToIvCache.set(str, {
+        // TODO: Right now this uses a 16-char string, where each char has 36 possible vals;
+        // consider using a 16-byte buffer, where each byte has 256 possible vals??
+        iv: num.toString(36).padTail(' ', 10).slice(0, 16),
+        timeout: null
+      });
+      
+    }
     
-    return fk.fp.padHead(16, '/').slice(-16);
+    // Reset cache timeout; return cached value
+    let cached = Form.fkToIvCache.get(str);
+    clearTimeout(cached.timeout);
+    cached.timeout = setTimeout(() => Form.fkToIvCache.rem(str), 5 * 1000);
+    return cached.iv;
     
   },
   $encrypt: ({ data, key, fk }) => {

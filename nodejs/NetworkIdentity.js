@@ -1084,17 +1084,17 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     return { prv, csr, crt, invalidate: async () => {
       
       let now = Date.now();
-      let bakKeep = this.keep.seek('acme', type, 'bak', now.toString(10));
+      let bakKeep = this.keep.dive([ 'acme', type, 'bak', now.toString(10) ]);
       await Promise.all([
-        bakKeep.seek('prv').setContent(prv),
-        bakKeep.seek('csr').setContent(csr),
-        bakKeep.seek('crt').setContent(crt)
+        bakKeep.dive([ 'prv' ]).setContent(prv),
+        bakKeep.dive([ 'csr' ]).setContent(csr),
+        bakKeep.dive([ 'crt' ]).setContent(crt)
       ]);
       
       // Note this doesn't invalidate `prv`, which can safely be reused!
       await Promise.all([
-        this.keep.seek('acme', type, 'csr').rem(),
-        this.keep.seek('acme', type, 'crt').rem()
+        this.keep.dive([ 'acme', type, 'csr' ]).rem(),
+        this.keep.dive([ 'acme', type, 'crt' ]).rem()
       ]);
       
     }};
