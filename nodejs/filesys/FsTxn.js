@@ -105,21 +105,27 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     
     if (isForm(lineage, Generator)) lineage = [ ...lineage ];
     
-    if (!lineage.length) return;
+    if (!lineage.length) return 'zero-length lineage';
     
-    if ('node' === await Form.xGetType(lineage.at(-1).fk)) { lineage.each(ln => ln.prm?.resolve()); return; }
+    // We can skip this entire process if the deepest item is already a node - this check should
+    // effectively short-circuit in many cases!
+    if ('node' === await Form.xGetType(lineage.at(-1).fk)) { lineage.each(ln => ln.prm?.resolve()); return lineage.map(ln => ln.fk.fp).toObj(fp => [ fp, 'already exists' ]); }
     
+    let result = {};
     for (let { fk, prm } of lineage) {
       
       let type = await Form.xGetType(fk);
       
       // If nothing exists create dir; if file exists swap it to dir
-      if      (type === null)   await nodejs.fs.mkdir(fk.fp);
-      else if (type === 'leaf') await Form.xSwapLeafToNode(fk);
+      if      (type === null)   { await nodejs.fs.mkdir(fk.fp); result[fk.fp] = 'mkdir'; }
+      else if (type === 'leaf') { await Form.xSwapLeafToNode(fk); result[fk.fp] = 'swapped'; result[fk.kid([ '~' ]).fp] = 'created'; }
+      else                      { result[fk.fp] = 'already exists'; }
       
       prm?.resolve();
       
     }
+    
+    return result;
     
   },
   $xRemEmptyNodes: async (fk, until=fk.par(Infinity)) => {
@@ -221,7 +227,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
       Form.fkToIvCache.set(str, {
         // TODO: Right now this uses a 16-char string, where each char has 36 possible vals;
         // consider using a 16-byte buffer, where each byte has 256 possible vals??
-        iv: num.toString(36).padTail(' ', 10).slice(0, 16),
+        iv: num.toString(36).padHead(16, '0').slice(0, 16),
         timeout: null
       });
       
@@ -240,8 +246,9 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     if (isForm(data, String)) data = Buffer.from(data);
     
     let err = Error('');
-    return crypto.subtle.encrypt({ name: 'AES-CBC', iv: Form.fkToIv(fk) }, key, data)
-      .catch(cause => err.propagate({ msg: `Failed to encrypt: ${cause.message}`, cause }))
+    let iv = Form.fkToIv(fk);
+    return crypto.subtle.encrypt({ name: 'AES-CBC', iv }, key, data)
+      .catch(cause => err.propagate({ msg: `Failed to encrypt: ${cause.message}`, cause, fk, iv }))
       .then(arrBuff => Buffer.from(arrBuff));
     
   },
@@ -277,14 +284,11 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
       
       let hutFsNode = cfg.rootFk.kid([ '.hutfs' ]);
       let ownershipFk = hutFsNode.kid([ 'owner' ]);
-      let refreshOwnership = async () => {
-        await Form.xEnsureLineage([ ...ownershipFk.par().lineage() ]);
-        await nodejs.fs.writeFile(ownershipFk.fp, valToJson({ ownerId, ms: getMs() }));
-      };
       
       // We are the root item
       cfg.initPrm = (async () => {
         
+        // Create a crypto key if `cfg.key` was supplied
         if (cfg.key) {
           
           let rawBuff = Buffer.from(cfg.key, 'utf8');
@@ -302,42 +306,66 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
             uses: [ 'encrypt', 'decrypt' ]
           };
           cfg.cryptoKey = await nodejs.crypto.subtle.importKey(opts.type, opts.buff, opts.encryptionMode, opts.extractable, opts.uses);
+          
         }
         
+        let { ownershipTimeoutMs } = cfg;
         let canOwn = async () => {
           
           let ms = getMs();
           
           let type = await Form.xGetType(ownershipFk);
           
-          if (type === null)   return true;
+          if (type === null) return true;
           if (type === 'node') throw Error('Api: unable to take ownership; fk type is "node"').mod({ ownershipFk, type });
           
-          let content = jsonToVal(await nodejs.fs.readFile(ownershipFk.fp, 'utf8'));
-          if (content.ownerId === ownerId) return true; // Our id is already the owner
-          if ((ms - content.ms) > cfg.ownershipTimeoutMs) return true; // No heartbeat in last 2000ms
+          // If the file exists with a non-JSON value it likely represents a collision between:
+          // 1. the moment the `fs.writeFile` call of some other owning FsTxn truncates the
+          //    ownership file, and
+          // 2. the current FsTxn's attempt to read the ownership file
+          // 
+          // In this case, it's important to handle the ownership as if some other FsTxn's
+          // heartbeat occurred very recently (deny ownership to current FsTxn)
+          let rawContent = await nodejs.fs.readFile(ownershipFk.fp);
+          let { isValidJson, content } = safe(
+            () => ({ isValidJson: true, content: jsonToVal(rawContent) }),
+            () => ({ isValidJson: false })
+          );
+          if (!isValidJson) return false;
+          
+          let ownedBySomeoneElse = true
+            && content.ownerId !== ownerId             // Our id must be the owner
+            && (ms - content.ms) < ownershipTimeoutMs; // Heartbeat has been seen too recently
+          if (ownedBySomeoneElse) return false;
+          
+          return true;
           
         };
         
         // TODO: If there's another owner use ipc or http/ws to access the owning instance
-        let { ownershipTimeoutMs } = cfg;
-        let startTakeOwnershipMs = getMs();
-        let available = false;
-        while (getMs() < (startTakeOwnershipMs + ownershipTimeoutMs * 1.5)) { // Spend some time waiting for previous ownership to elapse
-          if (available = await canOwn()) break;
-          await Promise(r => setTimeout(r, 10 + Math.random() * ownershipTimeoutMs * 0.3));
-        }
-        if (!available) throw Error('Api: unable to take ownership after multiple attempts').mod({ ownerFk: ownershipFk });
+        let availableAfterReattempts = await (async () => {
+          
+          let startTakeOwnershipMs = getMs();
+          let giveUpMs = startTakeOwnershipMs + Math.min(ownershipTimeoutMs * 1.2, ownershipTimeoutMs + 2000);
+          while (getMs() < giveUpMs) { // Spend some time waiting for previous ownership to elapse
+            if (await canOwn()) return true;
+            await Promise(r => setTimeout(r, 30 + Math.random() * ownershipTimeoutMs * 0.2));
+          }
+          return false;
+          
+        })();
         
-        await refreshOwnership();
+        if (!availableAfterReattempts) throw Error('Api: unable to take ownership after multiple attempts').mod({ ownerFk: ownershipFk });
         
-        // Now maintain ownership so long as we live
+        // Now acquire and maintain ownership so long as we live
+        await Form.xEnsureLineage([ ...ownershipFk.par().lineage() ]);
+        await nodejs.fs.writeFile(ownershipFk.fp, valToJson({ ownerId, ms: getMs() }));
         cfg.ownershipLifecyclePrm = (async () => {
           
           while (cfg.active) {
             await Promise(r => setTimeout(r, ownershipTimeoutMs * 0.9));
             if (!cfg.active) break;
-            await refreshOwnership();
+            await nodejs.fs.writeFile(ownershipFk.fp, valToJson({ ownerId, ms: getMs() }));
           }
           
         })().catch(err => {
@@ -597,10 +625,6 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
             // we simply overwrite it. If it's the node, we simply write to the "~" child, which will
             // either be an overwrite or a new value.
             
-            // TODO: Is `data` small enough that we're confident it will be written to the filesystem
-            // atomically, in a single chunk?? Is `nodejs.fs.writeFile(writeFk.fp, data)` possible in
-            // such cases (avoids the additional `rename` call)??
-            
             // Free up lineage locks immediately
             for (let { prm } of lineageLocks) prm.resolve();
             
@@ -613,8 +637,16 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
           } else /* if (type ===  null) */ {
             
             // Simply ensure the node exists and write the (new) leaf
-            await Form.xEnsureLineage(lineageLocks);
-            await nodejs.fs.writeFile(fk.fp, await data);
+            let ensureLineageResult = await Form.xEnsureLineage(lineageLocks);
+            await nodejs.fs.writeFile(fk.fp, await data).catch(err => {
+              
+              throw err.mod(msg => ({
+                msg: `Failed even after ensuring lineage: ${msg}`,
+                fp: fk.fp,
+                ensureLineageResult
+              }));
+              
+            });
             
           }
           
@@ -671,7 +703,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     
     this.checkFp(fk);
     
-    let locks = [ Form.lock('subtreeRead', fk) ]; // TODO: Case for a "subtreeRead" type??
+    let locks = [ Form.lock('subtreeRead', fk) ];
     return this.processOp({
       name: 'getKids',
       locks,

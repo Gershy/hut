@@ -1,24 +1,11 @@
 'use strict';
-require('../../room/setup/clearing/clearing.js');
-require('../util/installV8PrepareStackTrace.js')();
+
+require('../util/setup.js');
 
 let nodejs = require('./nodejs.js');
 let FsKeep = require('./FsKeep.js');
 let FsTxn = require('./FsTxn.js');
 let sys = require('./system.js');
-
-// Environment setup...
-require('../util/installTopLevelHandler.js')();
-global.formatAnyValue = require('../util/formatAnyValue.js');
-global.getMs = require('../util/getCalibratedUtcMillis.js')();
-
-let getStdoutSubcon = require('../util/getStdoutSubconOutputter.js');
-global.subconOutput = getStdoutSubcon({
-  debug: true,           // Results in expensive stack traces - could be based on conf??
-  relevantTraceIndex: 2, // Hardcoded value; determined simply by testing
-  leftColW: 30,
-  rightColW: 80
-});
 
 // Test utils
 let cmpArrs = (arr1, arr2) => {
@@ -61,7 +48,6 @@ let inTmpDir = async (fn, { tmpUid=Math.random().toString(36).slice(2, 8) }={}) 
 // Test definitions
 let testFilter = null;
 let tests = [
-  
   async () => { // FsKeep.fromFp interpretation
     
     let origWin32DefaultDrive = sys.win32DefaultDrive;
@@ -375,16 +361,44 @@ let tests = [
     }).finally(() => ft?.end());
     
   },
-  async () => { // FsTxn constructor ownership conflict
+  async () => { // FsTxn constructor ownership conflict (longer timeout)
     
     let ft1;
     let ft2;
     await inTmpDir(async fk => {
       
-      ft1 = FsTxn({ fk, cfg: { ownershipTimeoutMs: 500 } });
+      // Note the consumer should be aware that all attempts to acquire ownership on the same FsTxn
+      // root should use the same timeout ms (the frequency of heartbeats is based on the timeout
+      // value, and it's important that currently-owning and wanting-to-own FsTxns have the same
+      // heartbeat expectations
+      let ownershipTimeoutMs = 600;
+      
+      ft1 = FsTxn({ fk, cfg: { ownershipTimeoutMs } });
       await ft1.initPrm;
       
-      ft2 = FsTxn({ fk, cfg: { ownershipTimeoutMs: 500 } });
+      ft2 = FsTxn({ fk, cfg: { ownershipTimeoutMs } });
+      let err = await shouldFail(() => ft2.initPrm);
+      if (!err.message.has('unable to take ownership')) throw Error('Failed').mod({ cause: err });
+      
+    }).finally(() => { ft1?.end(); ft2?.end(); });
+    
+  },
+  async () => { // FsTxn constructor ownership conflict (shorter timeout)
+    
+    let ft1;
+    let ft2;
+    await inTmpDir(async fk => {
+      
+      // Note the consumer should be aware that all attempts to acquire ownership on the same FsTxn
+      // root should use the same timeout ms (the frequency of heartbeats is based on the timeout
+      // value, and it's important that currently-owning and wanting-to-own FsTxns have the same
+      // heartbeat expectations
+      let ownershipTimeoutMs = 300;
+      
+      ft1 = FsTxn({ fk, cfg: { ownershipTimeoutMs } });
+      await ft1.initPrm;
+      
+      ft2 = FsTxn({ fk, cfg: { ownershipTimeoutMs } });
       let err = await shouldFail(() => ft2.initPrm);
       if (!err.message.has('unable to take ownership')) throw Error('Failed').mod({ cause: err });
       
@@ -564,11 +578,13 @@ let tests = [
       let buff = Buffer.allocUnsafe(100);
       await ft3.setData(fk.kid([ 'data' ]), buff);
       
+      let encBuff = await fs.readFile(fk.kid([ 'data' ]).fp, null);
+      if (Buffer.compare(buff, encBuff) === 0) throw Error('Failed').mod({ buff, encBuff });
+      
       let buff2 = await ft3.getData(fk.kid([ 'data' ]));
-      if (Buffer.compare(buff, buff2)) throw Error('Failed').mod({ buff, buff2 });
+      if (Buffer.compare(buff, buff2) !== 0) throw Error('Failed').mod({ buff, buff2 });
       
     }).finally(() => ft3?.end());
-    
     
   },
   
@@ -578,6 +594,49 @@ let tests = [
 (async () => {
   
   gsc('Filesys tests\u2026');
+  
+  /* fs.writeFile non-atomically truncates and then stores a new value
+  
+  let fp = 'C:/dev/proj/lmao.txt';
+  let rand = () => Math.random().toString(36).slice(2);
+  let doWrite = () => nodejs.fs.writeFile(fp, valToJson({ a: rand(), b: rand(), c: rand() }));
+  let doRead = () => nodejs.fs.readFile(fp).then(val => ({ result: true, ...jsonToVal(val) })).catch(err => ({ result: false, err }));
+  
+  await doWrite();
+  let active = true;
+  let gud = 0;
+  let bad = 0;
+  setTimeout(() => active = false, 5 * 1000);
+  
+  let reads = (async () => {
+    
+    while (active) {
+      
+      let val = await doRead();
+      if (!val.result) { bad++; }
+      else             { gud++; }
+      
+    }
+    
+  })();
+  let writes = (async () => {
+    
+    while (active) {
+      
+      await doWrite();
+      
+    }
+    
+  })();
+  
+  await Promise.all([ reads, writes ]);
+  
+  gsc({ total: gud + bad, gud, bad, percent: ((100 * gud) / (gud + bad)).toFixed(2) });
+  return;
+  
+  */
+  
+  
   
   /* Looks like 16, 24, and 32 are valid sizes (could try letting this run longer) {
     let { subtle } = nodejs.crypto;
@@ -613,6 +672,7 @@ let tests = [
     process.exit(0);
   } */
   
+  let ms = getMs();
   let results = [];
   for (let test of tests) {
     
@@ -622,7 +682,7 @@ let tests = [
     
     let ms = getMs();
     try         { await test(); results.push({ desc, success: 1, ms: getMs() - ms }); }
-    catch (err) {               results.push({ desc, success: 0, ms: getMs() - ms, err }); }
+    catch (err) {               results.push({ desc, success: 0, ms: getMs() - ms, err: err.mod(msg => `${msg} (${desc})`) }); }
     
   }
   
@@ -631,7 +691,7 @@ let tests = [
 
   gsc(results.map(r => `[${r.success ? 'pass' : 'FAIL'}] (${Math.round(r.ms).toString(10).padHead(maxMsDigits, ' ')}ms) ${r.desc}`).join('\n'));
   for (let r of results.filter(r => !r.success)) gsc(r.err);
-  gsc(`Tests complete; passed ${results.filter(r => r.success).count()} / ${results.count()}`);
+  gsc(`Tests complete after ${(getMs() - ms).toFixed(0)}ms; passed ${results.filter(r => r.success).count()} / ${results.count()}`);
   
 })()
   .catch(err => gsc('FATAL', err.desc()))

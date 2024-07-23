@@ -274,6 +274,8 @@ Object.assign(global, {
     $base62: '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ',
     $base64: '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ=-',
     
+    // padHead: (len: number, str: string) => string,
+    // padTail: (len: number, str: string) => string,
     $$: 'code:charCodeAt,has:includes,hasHead:startsWith,hasTail:endsWith,padHead:padStart,padTail:padEnd,trimHead:trimStart,trimTail:trimEnd,upper:toUpperCase,lower:toLowerCase',
     
     cut(delim, cuts=1) { // e.g. `cuts === 1` produces Array of length 2
