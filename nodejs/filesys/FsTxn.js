@@ -319,20 +319,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
           if (type === null) return true;
           if (type === 'node') throw Error('Api: unable to take ownership; fk type is "node"').mod({ ownershipFk, type });
           
-          // If the file exists with a non-JSON value it likely represents a collision between:
-          // 1. the moment the `fs.writeFile` call of some other owning FsTxn truncates the
-          //    ownership file, and
-          // 2. the current FsTxn's attempt to read the ownership file
-          // 
-          // In this case, it's important to handle the ownership as if some other FsTxn's
-          // heartbeat occurred very recently (deny ownership to current FsTxn)
-          let rawContent = await nodejs.fs.readFile(ownershipFk.fp);
-          let { isValidJson, content } = safe(
-            () => ({ isValidJson: true, content: jsonToVal(rawContent) }),
-            () => ({ isValidJson: false })
-          );
-          if (!isValidJson) return false;
-          
+          let content = jsonToVal(await nodejs.fs.readFile(ownershipFk.fp));
           let ownedBySomeoneElse = true
             && content.ownerId !== ownerId             // Our id must be the owner
             && (ms - content.ms) < ownershipTimeoutMs; // Heartbeat has been seen too recently
@@ -359,18 +346,20 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
         
         // Now acquire and maintain ownership so long as we live
         await Form.xEnsureLineage([ ...ownershipFk.par().lineage() ]);
-        await nodejs.fs.writeFile(ownershipFk.fp, valToJson({ ownerId, ms: getMs() }));
+        await nodejs.fs.atomicWrite(ownershipFk.fp, valToJson({ ownerId, ms: getMs() }));
         cfg.ownershipLifecyclePrm = (async () => {
           
           while (cfg.active) {
             await Promise(r => setTimeout(r, ownershipTimeoutMs * 0.9));
             if (!cfg.active) break;
-            await nodejs.fs.writeFile(ownershipFk.fp, valToJson({ ownerId, ms: getMs() }));
+            await nodejs.fs.atomicWrite(ownershipFk.fp, valToJson({ ownerId, ms: getMs() }));
           }
           
         })().catch(err => {
+          
           gsc('Api: error maintaining ownership file (this is bad!)');
           throw err;
+          
         });
         
         // Ensure that a volatility memo dir exists
@@ -462,9 +451,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     let memoId = (this.cfg.volatilityCnt++).toString(36).padHead(10, '0');
     let memoFk = this.cfg.rootFk.kid([ '.hutfs', 'memo' ]);
     
-    let tmpFile = path.join(nodejs.os.tmpdir(), Math.random().toString(36).slice(2, 12).padHead('0', 10));
-    await nodejs.fs.writeFile(tmpFile, '<volatility memo>');    // TODO!!! Compose memo!!!
-    await nodejs.fs.rename(tmpFile, memoFk.kid([ memoId ]).fp);
+    await nodejs.fs.atomicWrite(memoFk.kid([ memoId ]).fp, '<volatility memo>'); // TODO!!! Compose memo!!!
     
     return async () => {
       
@@ -629,24 +616,13 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
             for (let { prm } of lineageLocks) prm.resolve();
             
             let writeFk = (type === 'node') ? fk.kid('~') : fk;
-            let tmpFp = this.fk.path.join(sys.tempNode, Math.random().toString(36).slice(2));
-            
-            await nodejs.fs.writeFile(tmpFp, await data);
-            await nodejs.fs.rename(tmpFp, writeFk.fp);
+            await nodejs.fs.atomicWrite(writeFk.fp, await data);
             
           } else /* if (type ===  null) */ {
             
             // Simply ensure the node exists and write the (new) leaf
-            let ensureLineageResult = await Form.xEnsureLineage(lineageLocks);
-            await nodejs.fs.writeFile(fk.fp, await data).catch(err => {
-              
-              throw err.mod(msg => ({
-                msg: `Failed even after ensuring lineage: ${msg}`,
-                fp: fk.fp,
-                ensureLineageResult
-              }));
-              
-            });
+            await Form.xEnsureLineage(lineageLocks);
+            await nodejs.fs.atomicWrite(fk.fp, await data);
             
           }
           

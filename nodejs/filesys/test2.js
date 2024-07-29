@@ -690,33 +690,25 @@ let tests = [
   };
   
   
-  // Run arbitrary number of tests in serial/parallel
-  if (1) { let numParallelBatches = 1; let parallelBatchSize = 20;
+  if (1) { // Run arbitrary number of tests in serial/parallel
     
-    let hadFailure = false;
+    let num = 1;
+    let numParallel = 20;
+    
     let runTest = async () => {
       let { durMs, results } = await getTestResults();
-      if (results.some(r => !r.success)) {
-        showTestResults({ durMs, results })
-        hadFailure = true;
-      }
+      if (results.some(r => !r.success)) showTestResults({ durMs, results })
+      else                               gsc('Complete success');
     };
     
-    for (let i = 0; i < numParallelBatches; i++) {
-      gsc('Start parallel batch...');
-      await Promise.all(parallelBatchSize.toArr(runTest));
-    }
-    
-    gsc(`Ran ${numParallelBatches} x size-${parallelBatchSize} parallel batches`);
-    if (hadFailure) gsc('100% success');
-    
+    gsc('Start parallel batch...');
+    for (let i = 0; i < num; i++)
+      await Promise.all(numParallel.toArr(runTest));
   }
   
   
   // Run a single test
-  if (0) {
-    showTestResults(await getTestResults());
-  }
+  if (0) showTestResults(await getTestResults());
   
 })()
   .catch(err => gsc('FATAL', err.desc()))
