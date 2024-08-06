@@ -39,14 +39,14 @@ let inTmpDir = async (fn, { tmpUid=Math.random().toString(36).slice(2, 8) }={}) 
     await FsTxn.xEnsureLineage(testFk.par().lineage());
     await fn(testFk, { fs, path });
   } finally {
-    await fs.rm(testFk.fp, { recursive: true, maxRetries: 5, retryDelay: 60 }).catch(e => {});
-    await FsTxn.xRemEmptyNodes(testFk);
+    await fs.rm(testFk.fp, { recursive: true, maxRetries: 0 }).catch(e => {});
+    await FsTxn.xRemEmptyNodes(testFk).catch(e => {});
   }
   
 };
 
 // Test definitions
-let testFilter = null;
+let testFilter = /FsKeep.*methods/;
 let tests = [
   async () => { // FsKeep.fromFp interpretation
     
@@ -231,7 +231,7 @@ let tests = [
     
     let fk = FsKeep.fromFp('/a/b/c/d', { path: nodejs.path.win32 });
     let err = shouldFail(() => [ ...fk.lineage(FsKeep.fromFp('/a/b/unrelated')) ]);
-    if (!err.message.hasHead('Api: givenFk is not a parent')) throw Error('Failed').mod({ cause: err });
+    if (!err.message.hasHead('Api: ancestorFk is not a parent')) throw Error('Failed').mod({ cause: err });
     
   },
   async () => { // FsTxn.xGetType(...)
@@ -498,6 +498,167 @@ let tests = [
     }).finally(() => ft?.end());
     
   },
+  async () => { // FsKeep.txn(...) methods, especially using "~"
+    
+    // TODO: HEEERE! `setData` should work on the root item!!!
+    let fts = [];
+    await inTmpDir(async fk => {
+      
+      fk = FsKeep.txn(fk.fp);
+      fts.push(fk.txn);
+      
+      if ('' !== await fk.getData('utf8')) throw Error('Failed');
+      
+      await fk.setData('x'.repeat(100), 'utf8');
+      
+      let subtree = await fk.getSubtree();
+      if (!cmpArrs(subtree.toArr((v, k) => k), [ 'getData', 'kids' ]))
+        throw Error('Failed').mod({ subtree });
+      
+      if (!isForm(subtree.getData, Function))                throw Error('Failed').mod({ subtree });
+      if ('x'.repeat(100) !== await subtree.getData('utf8')) throw Error('Failed').mod({ subtree });
+      
+      if (!isForm(subtree.kids, Object)) throw Error('Failed').mod({ subtree });
+      if (subtree.kids.count() !== 0)    throw Error('Failed').mod({ subtree });
+      
+      await fk.kid([ 'aaa', 'bbb' ]).setData('i am bbb', 'utf8');
+      await fk.kid([ 'aaa', 'bbb', 'ccc' ]).setData('bbb goes to ~', 'utf8');
+      await fk.kid([ 'aaa', 'zzz' ]).setData('i am a sibling', 'utf8');
+      await fk.kid([ 'aaa' ]).setData('written to ~', 'utf8');
+      
+      let traverse = async (obj, fn) => {
+        obj = await fn(obj);
+        for (let [ prop, val ] of obj)
+          if (isForm(val, Object))
+            obj[prop] = await traverse(val, fn);
+        return obj;
+      };
+      let subtree2 = await traverse(
+        await fk.kid([ 'aaa' ]).getSubtree(),
+        async st => st.getData ? ({ val: await st.getData('utf8'), kids: st.kids }) : st
+      );
+      if (subtree2.val !== 'written to ~')                    throw Error('Failed').mod({ subtree2 });
+      if (subtree2.kids.zzz.val !== 'i am a sibling')         throw Error('Failed').mod({ subtree2 });
+      if (subtree2.kids.bbb.val !== 'i am bbb')               throw Error('Failed').mod({ subtree2 });
+      if (subtree2.kids.bbb.kids.ccc.val !== 'bbb goes to ~') throw Error('Failed').mod({ subtree2 });
+      
+      let tailStreamResult = async (fk, enc='utf8') => {
+        
+        let tailStream = await fk.getDataTailStream();
+        let chunks = [];
+        tailStream.on('data', d => chunks.push(d));
+        await tailStream.prm;
+        
+        let buff = Buffer.concat(chunks);
+        return enc ? buff.toString(enc) : buff;
+        
+      };
+      
+      // Stream from the "zzz" item (it's an ordinary non-"~" leaf)
+      let zzzFromStream = await tailStreamResult(fk.kid([ 'aaa', 'zzz' ]));
+      if (zzzFromStream !== 'i am a sibling') throw Error('Failed').mod({ zzzFromStream });
+      
+      // Stream from a non-existent item
+      let nonexistentFromStream = await tailStreamResult(fk.kid([ 'aaa', '000' ]));
+      if (nonexistentFromStream !== '') throw Error('Failed').mod({ nonexistentFromStream });
+      
+      // Stream from a node with a "~" kid
+      let tildeFromStream = await tailStreamResult(fk.kid([ 'aaa', 'bbb' ]));
+      if (tildeFromStream !== 'i am bbb') throw Error('Failed').mod({ tildeFromStream });
+      
+      // NOTE: if instead of streaming "aaa/bbb" -> "aaa" we instead did "aaa/bbb" -> "aaa/bbb/zzz"
+      // (which ought to be a valuable test case) we'd get an infinite lock: because aaa/bbb is a
+      // "~" kid we may think FsTxn should easily be able to create a "zzz" item as a sibling of
+      // the "~" kid - this intuition is misleading; consider if "aaa/bbb" is a regular file/leaf!
+      // In this case there would be no way to create a child under it *while it is being read*.
+      // And because FsTxn can't know ahead-of-time whether "aaa/bbb" is a normal leaf or a "~" kid
+      // it needs to lock the full tree below it ahead of time. Now the infinite lock is in place:
+      // the "aaa/bbb" tail stream is returned to the consumer, but the "aaa/bbb/zzz" head can't be
+      // returned until the "aaa/bbb" read lock expires. But the "aaa/bbb" tail stream won't end
+      // because it hasn't been piped (because its head target hasn't been returned yet). So
+      // neither stream can resolve, and we have an infinite lock. TODO: I think FsTxn should
+      // require streams to be made to start flowing within some timeout - otherwise the stream
+      // Promise can be failed. In the above case, the `bbbTail` promise would fail (because it was
+      // returned but not made to flow within a timeout), causing the Promise.all to fail and
+      // saving the consumer of the much more sinister case of a circular/infinite FsTxn lock!
+      
+      // Let's pipe "aaa/bbb" to "aaa"; this should clobber/copy bbb's value to aaa
+      let [ bbbTail, aaaHead ] = await Promise.all([
+        fk.kid([ 'aaa', 'bbb' ]).getDataTailStream(),
+        fk.kid([ 'aaa' ]).getDataHeadStream()
+      ]);
+      bbbTail.pipe(aaaHead);
+      await Promise.all([ bbbTail.prm, aaaHead.prm ]);
+      
+      let aaaFromStream = await tailStreamResult(fk.kid([ 'aaa' ]));
+      if (aaaFromStream !== 'i am bbb') throw Error('Failed').mod({ aaaFromStream });
+      
+      let aaaMeta = await fk.kid([ 'aaa' ]).getMeta();
+      if (aaaMeta.type !== 'leaf') throw Error('Failed').mod({ aaaMeta });
+      if (aaaMeta.size !== 8) throw Error('Failed').mod({ aaaMeta });
+      
+    }).finally(() => fts.each(ft => ft.end()));
+    
+  },
+  
+  async () => { // FsTxn streaming
+    
+    let ft;
+    await inTmpDir(async fk => {
+      
+      let ft = FsTxn({ fk });
+      
+      ({ fk } = ft);
+      
+      await fk.kid([ 'a' ]).setData('hahaha!', 'utf8');
+      
+      let tailStream = await fk.kid([ 'a' ]).getDataTailStream();
+      let headStream = await fk.kid([ 'b' ]).getDataHeadStream();
+      
+      tailStream.pipe(headStream);
+      await Promise.all([ tailStream.prm, headStream.prm ]);
+      
+      if ((await fk.kid([ 'b' ]).getData('utf8')) !== 'hahaha!') throw Error('Failed');
+      
+    }).finally(() => ft?.end());
+    
+  },
+  async () => { // FsTxn streaming with race conditions
+    
+    let ft;
+    await inTmpDir(async fk => {
+      
+      let ft = FsTxn({ fk });
+      ({ fk } = ft);
+      
+      
+      let [ writeA, contentA, writeB, contentB, rewriteA, tailStream, headStream ] = await Promise.all([
+        
+        fk.kid([ 'a' ]).setData('content for AAA', { encoding: 'utf8' }).then(() => null),
+        fk.kid([ 'a' ]).getData({ encoding: 'utf8' }),
+        
+        fk.kid([ 'b' ]).setData('content for BBB', { encoding: 'utf8' }).then(() => null),
+        fk.kid([ 'b' ]).getData({ encoding: 'utf8' }),
+        
+        fk.kid([ 'a' ]).setData('hahaha!', 'utf8').then(() => null),
+        fk.kid([ 'a' ]).getDataTailStream(),
+        fk.kid([ 'b' ]).getDataHeadStream()
+        
+      ]);
+      
+      tailStream.pipe(headStream);
+      await Promise.all([ tailStream.prm, headStream.prm ]);
+      
+      if ([ writeA, writeB, rewriteA ].some(v => v !== null)) throw Error('Failed').mod({ writeA, writeB, rewriteA });
+      if (contentA !== 'content for AAA') throw Error('Failed').mod({ contentA });
+      if (contentB !== 'content for BBB') throw Error('Failed').mod({ contentB });
+      
+      if ((await fk.kid([ 'b' ]).getData('utf8')) !== 'hahaha!') throw Error('Failed');
+      
+    }).finally(() => ft?.end());
+    
+  },
+  
   async () => { // FsTxn(...) set/get with leaf->node conversion
     
     let ft;
@@ -670,7 +831,7 @@ let tests = [
       
       let ms = getMs();
       try         { await test(); results.push({ desc, success: 1, ms: getMs() - ms }); }
-      catch (err) {               results.push({ desc, success: 0, ms: getMs() - ms, err: err.mod(msg => `${msg} (${desc})`) }); }
+      catch (err) {               results.push({ desc, success: 0, ms: getMs() - ms, err: err.mod(msg => `${msg}; test: ${desc}`) }); }
       
     }
     
@@ -689,9 +850,8 @@ let tests = [
     
   };
   
-  
   // Run arbitrary number of tests in serial/parallel
-  if (1) { let numParallelBatches = 1; let parallelBatchSize = 20;
+  if (0) { let numParallelBatches = 1; let parallelBatchSize = 20;
     
     let hadFailure = false;
     let runTest = async () => {
@@ -708,13 +868,12 @@ let tests = [
     }
     
     gsc(`Ran ${numParallelBatches} x size-${parallelBatchSize} parallel batches`);
-    if (hadFailure) gsc('100% success');
+    if (!hadFailure) gsc('Full success');
     
   }
   
-  
   // Run a single test
-  if (0) {
+  if (1) {
     showTestResults(await getTestResults());
   }
   

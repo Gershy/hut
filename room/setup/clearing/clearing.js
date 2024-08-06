@@ -571,6 +571,7 @@ Object.assign(global, {
       
       if (mapFn) prms = prms.map(mapFn);
       
+      // TODO: Removing undefineds from `Promise.all` return value is backwards-incompatible
       if (isForm(prms, Array)) return C['Promise.all'](prms).then(a => a.toArr(v => v)); // Remove any `skip` results
       
       if (isForm(prms, Object)) {

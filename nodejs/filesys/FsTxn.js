@@ -80,12 +80,11 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
   },
   $xSwapLeafToNode: async (fk, { tmpCmp=`~${(Number.int32 * Math.random()).encodeStr(String.base32, 7)}` }={}) => {
     
-    // We want a dir to replace an existing file (without reads on
-    // that previously existing file to fail) - so we replace the
-    // file with a directory containing a "default value file"
+    // We want a dir to replace an existing file (without reads on that previously existing file to
+    // fail) - so we replace the file with a directory containing a "default value file"
     
-    // Basically we know that `fp` is a leaf, and we want it to become
-    // a node, with `fp.kid([ '~' ])` holding the value previously at `fp`
+    // Basically we know that `fp` is a leaf, and we want it to become a node, with
+    // `fp.kid([ '~' ])` holding the value previously at `fp`
     
     let fp = fk.fp;                    // Path to original file
     let tmpFp = fk.sib(tmpCmp).fp;     // Path to temporary file (sibling of original file)
@@ -101,31 +100,30 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     // Checks for (and if needed creates) a node at every item in `lineage`; we assume `lineage`
     // represents a valid ancestor chain! Note that all items in `lineage` will be ensured.
     
-    // Probably a good optimization: if the final item of `lineage` already exists, we're done!
-    
+    // Probably a good optimization; unwind the whole generator to allow us to check the final fk;
+    // if it already exists we can immediately short-circuit!
     if (isForm(lineage, Generator)) lineage = [ ...lineage ];
     
-    if (!lineage.length) return 'zero-length lineage';
+    if (!lineage.length) return;
     
     // We can skip this entire process if the deepest item is already a node - this check should
     // effectively short-circuit in many cases!
-    if ('node' === await Form.xGetType(lineage.at(-1).fk)) { lineage.each(ln => ln.prm?.resolve()); return lineage.map(ln => ln.fk.fp).toObj(fp => [ fp, 'already exists' ]); }
+    if ('node' === await Form.xGetType(lineage.at(-1).fk)) {
+      for (let ln of lineage) ln.prm?.resolve();
+      return;
+    }
     
-    let result = {};
     for (let { fk, prm } of lineage) {
       
       let type = await Form.xGetType(fk);
       
       // If nothing exists create dir; if file exists swap it to dir
-      if      (type === null)   { await nodejs.fs.mkdir(fk.fp); result[fk.fp] = 'mkdir'; }
-      else if (type === 'leaf') { await Form.xSwapLeafToNode(fk); result[fk.fp] = 'swapped'; result[fk.kid([ '~' ]).fp] = 'created'; }
-      else                      { result[fk.fp] = 'already exists'; }
+      if      (type === null)   await nodejs.fs.mkdir(fk.fp);
+      else if (type === 'leaf') await Form.xSwapLeafToNode(fk);
       
       prm?.resolve();
       
     }
-    
-    return result;
     
   },
   $xRemEmptyNodes: async (fk, until=fk.par(Infinity)) => {
@@ -265,7 +263,139 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     
   },
   
-  init({ cfg, fk }={ cfg: { /* ownershipTimeoutMs: 2000, throttler: fn => fn() */ } }) {
+  $initCfg: async cfg => {
+    
+    let ownerId = Math.random().toString(36).slice(2).padHead('0', 11);
+    
+    let hutFsNode = cfg.rootFk.kid([ '.hutfs' ]);
+    let ownershipFk = hutFsNode.kid([ 'owner' ]);
+    
+    // Create a crypto key if `cfg.key` was supplied
+    let getCryptoKey = async () => {
+      
+      if (!cfg.key) return null;
+      
+      let rawBuff = Buffer.from(cfg.key, 'utf8');
+      if (!rawBuff.length) throw Error('Api: empty encryption key');
+      
+      let buff = Buffer.alloc(0);
+      while (buff.length < 32) buff = Buffer.concat([ buff, rawBuff ]);
+      buff = buff.subarray(0, 32);
+      
+      let opts = {
+        type: 'raw',
+        buff,
+        encryptionMode: { name: 'AES-CBC' },
+        extractable: false,
+        uses: [ 'encrypt', 'decrypt' ]
+      };
+      return nodejs.crypto.subtle.importKey(opts.type, opts.buff, opts.encryptionMode, opts.extractable, opts.uses);
+      
+    };
+    
+    let acquireOwnership = async () => {
+      
+      let { ownershipTimeoutMs } = cfg;
+      let canOwn = async () => {
+        
+        let ms = getMs();
+        
+        let type = await Form.xGetType(ownershipFk);
+        
+        if (type === null) return true;
+        if (type === 'node') throw Error('Api: unable to take ownership; fk type is "node"').mod({ ownershipFk, type });
+        
+        let content = jsonToVal(await nodejs.fs.readFile(ownershipFk.fp));
+        let ownedBySomeoneElse = true
+          && content.ownerId !== ownerId             // Our id must be the owner
+          && (ms - content.ms) < ownershipTimeoutMs; // Heartbeat has been seen too recently
+        if (ownedBySomeoneElse) return false;
+        
+        return true;
+        
+      };
+      
+      // TODO: If there's another owner use ipc or http/ws to access the owning instance
+      let availableAfterReattempts = await (async () => {
+        
+        let startTakeOwnershipMs = getMs();
+        let giveUpMs = startTakeOwnershipMs + Math.min(ownershipTimeoutMs * 1.2, ownershipTimeoutMs + 2000);
+        while (getMs() < giveUpMs) { // Spend some time waiting for previous ownership to elapse
+          if (await canOwn()) return true;
+          await Promise(r => setTimeout(r, 30 + Math.random() * ownershipTimeoutMs * 0.2));
+        }
+        return false;
+        
+      })();
+      
+      if (!availableAfterReattempts) throw Error('Api: unable to take ownership after multiple attempts').mod({ ownerFk: ownershipFk });
+      
+      // Now acquire and maintain ownership so long as we live
+      await Form.xEnsureLineage([ ...ownershipFk.par().lineage() ]);
+      await nodejs.fs.atomicWrite(ownershipFk.fp, valToJson({ ownerId, ms: getMs() }));
+      
+      let ownershipLifecyclePrm = (async () => {
+        
+        while (cfg.active) {
+          await Promise(r => setTimeout(r, ownershipTimeoutMs * 0.9));
+          if (!cfg.active) break;
+          await nodejs.fs.atomicWrite(ownershipFk.fp, valToJson({ ownerId, ms: getMs() }));
+        }
+        
+      })().catch(err => {
+        
+        gsc('Api: error maintaining ownership file (this is probably fatal!)');
+        throw err;
+        
+      });
+      
+      return { ownershipLifecyclePrm, endOwnership: () => cfg.active = false };
+      
+    };
+    
+    let [ cryptoKey, ownershipLifecyclePrm ] = await Promise.all([ getCryptoKey(), acquireOwnership() ]);
+    Object.assign(cfg, { cryptoKey, ownershipLifecyclePrm });
+    
+    // Ensure that a volatility memo dir exists
+    let memoFk = hutFsNode.kid([ 'memo' ]);
+    await nodejs.fs.mkdir(memoFk.fp).catch(fsCodes({ EEXIST: null }));
+    
+    // Ownership is now being maintained; check for previous volatility abort
+    await (async () => {
+      
+      let memoFt = await Form.xGetType(memoFk);
+      if (memoFt !== 'node') return;
+      
+      let memoFds = await nodejs.fs.readdir(memoFk.fp);
+      for (let memoFd of memoFds.sort()) {
+        
+        // TODO: Process interrupted operations from last run!!
+        
+        let blob = await nodejs.fs.readFile(memoFk.kid([ memoFd ]).fp);
+        let newlineInd = 0;
+        while (blob[newlineInd] !== 0x0a && newlineInd < blob.length) newlineInd++;
+        
+        // Note that `Buffer(...).slice(...)` creates a view, not a copy!
+        let json = jsonToVal(blob.slice(0, newlineInd));
+        let inline = blob.slice(newlineInd + 1);
+        
+        // TODO: Run ops from `json` and `inline`
+        
+        // TODO: Delete this specific "pending" item; no need to re-process it should another
+        // volatility abort occur before all pending items have been processed!
+        
+      }
+      
+      // Note: do *not* remove the "memo" dir - only the specific memos which were successfully
+      // processed!
+      
+    })();
+    
+    cfg.volatilityCnt = 0;
+    
+  },
+  
+  init({ cfg, fk=FsKeep([]) }={ cfg: { /* ownershipTimeoutMs: 2000, throttler: fn => fn() */ } }) {
     
     if (!isForm(fk, FsKeep)) throw Error('Api: must provide fk');
     
@@ -277,129 +407,8 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
       key: null
     }.merge(cfg ?? {});
     
-    // Do any necessary initial `cfg` setup
-    if (!cfg.initPrm) {
-      
-      let ownerId = Math.random().toString(36).slice(2).padHead('0', 11);
-      
-      let hutFsNode = cfg.rootFk.kid([ '.hutfs' ]);
-      let ownershipFk = hutFsNode.kid([ 'owner' ]);
-      
-      // We are the root item
-      cfg.initPrm = (async () => {
-        
-        // Create a crypto key if `cfg.key` was supplied
-        if (cfg.key) {
-          
-          let rawBuff = Buffer.from(cfg.key, 'utf8');
-          if (!rawBuff.length) throw Error('Api: empty encryption key');
-          
-          let buff = Buffer.alloc(0);
-          while (buff.length < 32) buff = Buffer.concat([ buff, rawBuff ]);
-          buff = buff.subarray(0, 32);
-          
-          let opts = {
-            type: 'raw',
-            buff,
-            encryptionMode: { name: 'AES-CBC' },
-            extractable: false,
-            uses: [ 'encrypt', 'decrypt' ]
-          };
-          cfg.cryptoKey = await nodejs.crypto.subtle.importKey(opts.type, opts.buff, opts.encryptionMode, opts.extractable, opts.uses);
-          
-        }
-        
-        let { ownershipTimeoutMs } = cfg;
-        let canOwn = async () => {
-          
-          let ms = getMs();
-          
-          let type = await Form.xGetType(ownershipFk);
-          
-          if (type === null) return true;
-          if (type === 'node') throw Error('Api: unable to take ownership; fk type is "node"').mod({ ownershipFk, type });
-          
-          let content = jsonToVal(await nodejs.fs.readFile(ownershipFk.fp));
-          let ownedBySomeoneElse = true
-            && content.ownerId !== ownerId             // Our id must be the owner
-            && (ms - content.ms) < ownershipTimeoutMs; // Heartbeat has been seen too recently
-          if (ownedBySomeoneElse) return false;
-          
-          return true;
-          
-        };
-        
-        // TODO: If there's another owner use ipc or http/ws to access the owning instance
-        let availableAfterReattempts = await (async () => {
-          
-          let startTakeOwnershipMs = getMs();
-          let giveUpMs = startTakeOwnershipMs + Math.min(ownershipTimeoutMs * 1.2, ownershipTimeoutMs + 2000);
-          while (getMs() < giveUpMs) { // Spend some time waiting for previous ownership to elapse
-            if (await canOwn()) return true;
-            await Promise(r => setTimeout(r, 30 + Math.random() * ownershipTimeoutMs * 0.2));
-          }
-          return false;
-          
-        })();
-        
-        if (!availableAfterReattempts) throw Error('Api: unable to take ownership after multiple attempts').mod({ ownerFk: ownershipFk });
-        
-        // Now acquire and maintain ownership so long as we live
-        await Form.xEnsureLineage([ ...ownershipFk.par().lineage() ]);
-        await nodejs.fs.atomicWrite(ownershipFk.fp, valToJson({ ownerId, ms: getMs() }));
-        cfg.ownershipLifecyclePrm = (async () => {
-          
-          while (cfg.active) {
-            await Promise(r => setTimeout(r, ownershipTimeoutMs * 0.9));
-            if (!cfg.active) break;
-            await nodejs.fs.atomicWrite(ownershipFk.fp, valToJson({ ownerId, ms: getMs() }));
-          }
-          
-        })().catch(err => {
-          
-          gsc('Api: error maintaining ownership file (this is bad!)');
-          throw err;
-          
-        });
-        
-        // Ensure that a volatility memo dir exists
-        let memoFk = hutFsNode.kid([ 'memo' ]);
-        await nodejs.fs.mkdir(memoFk.fp).catch(fsCodes({ EEXIST: null }));
-        
-        // Ownership is now being maintained; check for previous volatility abort
-        await (async () => {
-          
-          let memoFt = await Form.xGetType(memoFk);
-          if (memoFt !== 'node') return;
-          
-          let memoFds = await nodejs.fs.readdir(memoFk.fp).then(dir => dir.sort());
-          for (let memoFd of memoFds) {
-            
-            let blob = await nodejs.fs.readFile(memoFk.kid([ memoFd ]).fp);
-            let newlineInd = 0;
-            while (blob[newlineInd] !== 0x0a && newlineInd < blob.length) newlineInd++;
-            
-            // Note that `Buffer(...).slice(...)` creates a view, not a copy!
-            let json = jsonToVal(blob.slice(0, newlineInd));
-            let inline = blob.slice(newlineInd + 1);
-            
-            // TODO: Run ops from `json` and `inline`
-            
-            // TODO: Delete this specific "pending" item; no need to re-process it should another
-            // volatility abort occur before all pending items have been processed!
-            
-          }
-          
-          // Note: do *not* remove the "memo" dir - only the specific memos which were successfully
-          // processed!
-          
-        })();
-        
-        cfg.volatilityCnt = 0;
-        
-      })();
-      
-    }
+    // Initialize `cfg` if we're the root item
+    if (!cfg.initPrm) cfg.initPrm = Form.initCfg(cfg);
     
     Object.assign(this, {
       fk: fk.kid([]),
@@ -426,13 +435,13 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     // there from ever being a moment for unmasking to occur; the implementation should be aware of
     // the potential for memory-leaks, i.e., don't keep track of *all* masked method calls (discard
     // ones which have already expired).
-    let requireInitMethods = 'processOp,processOps,getType,getMeta,setData,getData,getSubtree'.split(',');
+    let requireInitMethods = 'processOp,processOps,getType,getMeta,setData,getData,getSubtree,getDataHeadStream,getDataTailStream'.split(',');
     let maskedCallsPrm = this.initPrm.catch(() => { /* Ignore errors */ });
     for (let m of requireInitMethods) {
       
-      let orig = this[m];
+      let orig = this[m].bind(this);
       C.def(this, m, (...args) => {
-        let prm = this.initPrm.then(() => orig.call(this, ...args));
+        let prm = this.initPrm.then(() => orig(...args));
         maskedCallsPrm = maskedCallsPrm.then(() => prm, () => { /* Ignore errors */});
         return prm;
       });
@@ -466,28 +475,46 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     
   },
   
-  checkFp(fk) {
+  checkFk(fk) {
     if (!isForm(fk, FsKeep)) throw Error(`Api: fp must be FsKeep; got ${getFormName(fk)})`).mod({ fk });
     if (!this.fk.is(fk).par) throw Error('Api: fk is not contained within the transaction').mod({ fk, trn: this });
   },
-  async processOp({ name, locks: incomingLocks, fn }={}) {
+  getLineageLocks(fk, lockType='nodeWrite') {
+    
+    // Get the lineage locks required to lock the given `fk` in the context of this `FsTxn`
+    
+    let { eql, kid } = fk.is(this.fk);
+    
+    // The root fk requires no lineage locking
+    if (eql) return [];
+    
+    // Non-kid fks are invalid targets of lineage locking
+    if (!kid) throw Error('Api: unable to get lineage locks for fk outside of FsTxn').mod({ txnFk: this.fk, outsideFk: fk });
+    
+    // Return the lineage locks from `this.fk` up to (excluding) `fk`
+    return fk.par().lineage(this.fk).toArr(ln => Form.lock(lockType, ln.fk));
+    
+  },
+  
+  // Operation runners
+  async processOp({ name, locks: opLocks, fn }={}) {
     
     // TODO: I think `this.volatilityMemo` needs to occur in the locked context??
     //let cleanup = handleVolatility ? await this.volatilityMemo([ { name } ]) : () => {};
     let cleanup = () => {};
     
-    if (!incomingLocks.length) throw Error('Api: provide at least one lock');
+    if (!opLocks.length) throw Error('Api: provide at least one lock');
     
     // Collect all pre-existing locks that collide with any of the locks provided for this
     // operation - once all blocking locks resolve we're guaranteed our context is locked!
     let blockingLocks = [];
     for (let existingLock of this.locks)
-      if (incomingLocks.some(incomingLock => Form.locksCollide(existingLock, incomingLock)))
+      if (opLocks.some(incomingLock => Form.locksCollide(existingLock, incomingLock)))
         blockingLocks.push(existingLock);
     
     // Add new Locks so any new colliding ops are blocked until `fn` completes; note the Locks are
     // still added even if `op` is currently blocked (if `blockingLocks.length > 0`)
-    for (let lock of incomingLocks) {
+    for (let lock of opLocks) {
       this.locks.add(lock);
       lock.prm.then(() => this.locks.rem(lock));
     }
@@ -501,7 +528,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     // We now own `locks`, and any colliding ops will be delayed until ours is finished!
     try           { return await fn(); }
     catch (cause) { err.propagate({ cause, msg: `Failed locked op: "${name}"` }); }
-    finally       { for (let lock of incomingLocks) lock.prm.resolve(); /* Release locks */ await cleanup(); }
+    finally       { for (let lk of opLocks) lk.prm.resolve(); /* Release locks */ await cleanup(); }
     
   },
   async processOps(ops) {
@@ -515,9 +542,10 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     
   },
   
+  // Fk-specific operations
   getType(fk) /* Promise<null | 'leaf' | 'node'> */ {
     
-    this.checkFp(fk);
+    this.checkFk(fk);
     
     let locks = [ Form.lock('nodeRead', fk) ];
     return this.processOp({
@@ -530,7 +558,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
   },
   getMeta(fk) /* Promise<{ type: null | 'leaf' | 'node', size: number }> */ {
     
-    this.checkFp(fk);
+    this.checkFk(fk);
     
     let locks = [ Form.lock('nodeRead', fk) ];
     return this.processOp({
@@ -555,7 +583,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
   },
   setData(fk, data) /* Promise<void> */ {
     
-    this.checkFp(fk);
+    this.checkFk(fk);
     
     if (data === null || data.length === 0) {
       
@@ -595,8 +623,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
       // TODO: Watch out for FsTxns writing a leaf to their root directory - it should always be
       // put in a "~" child!!
       
-      let lineageLocks = fk.par().lineage(this.fk).toArr(ln => Form.lock('nodeWrite', ln.fk));
-      
+      let lineageLocks = this.getLineageLocks(fk, 'nodeWrite');
       if (this.cfg.cryptoKey) data = Form.encrypt({ data, key: this.cfg.cryptoKey, fk })
       
       return this.processOp({
@@ -615,7 +642,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
             // Free up lineage locks immediately
             for (let { prm } of lineageLocks) prm.resolve();
             
-            let writeFk = (type === 'node') ? fk.kid('~') : fk;
+            let writeFk = (type === 'node') ? fk.kid([ '~' ]) : fk;
             await nodejs.fs.atomicWrite(writeFk.fp, await data);
             
           } else /* if (type ===  null) */ {
@@ -638,7 +665,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     if (!isForm(opts, Object)) opts = { encoding: opts };
     let { encoding: enc=null } = opts;
     
-    this.checkFp(fk);
+    this.checkFk(fk);
     
     return this.processOp({
       
@@ -674,28 +701,151 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     });
     
   },
-  
   getSubtree(fk) {
     
-    this.checkFp(fk);
+    this.checkFk(fk);
     
     let locks = [ Form.lock('subtreeRead', fk) ];
     return this.processOp({
-      name: 'getKids',
+      name: 'getSubtree',
       locks,
       fn: async () => {
         
         let type = await Form.xGetType(fk);
         
-        if (type === null) return [];
-        if (type === 'leaf') return nodejs.fs.readFile(fk.fp, 'utf8');
+        if (type === null)   return { getData: o => null,                kids: {} };
+        if (type === 'leaf') return { getData: o => this.getData(fk, o), kids: {} };
         
-        let fds = await nodejs.fs.readdir(fk.fp);
-        return Promise.all(fds.toObj(fd => [ fd, this.getSubtree(fk.kid([ fd ])) ]));
+        return {
+          getData: o => this.getData(fk, o),
+          
+          // Read the directory
+          kids: await nodejs.fs.readdir(fk.fp)
+            // Convert readdir array to object; remove abstracted items
+            .then(fds => { fds = fds.toObj(fd => [ fd, null ]); delete fds['~']; delete fds['.hutfs']; return fds; })
+            // Convert the readdir to an object with fd names mapped to corresponding subtrees
+            .then(fds => Promise.all(fds.map( (val, fd) => this.getSubtree(fk.kid([ fd ])) )))
+        };
         
       },
       volatilityMemo: null
     });
+    
+  },
+  getDataHeadStream(fk) {
+    
+    // A "head stream" goes into a file pointer's data storage. If the file pointer is changed
+    // during the stream, writes which occur after do not fail, but no longer effect the node at
+    // the pointer. TODO: unique to win32?? If there's always no interference between incoming
+    // writes and the stream initiated earlier, we can allow this operation to not lock writes!
+    // (I think requires a new lock type!)
+    
+    this.checkFk(fk);
+    
+    let streamPrm = Promise.later();
+    
+    let lineageLocks = this.getLineageLocks(fk, 'nodeWrite');
+    let nodeLock = Form.lock('nodeWrite', fk);
+    
+    // Note that `prm`, the result of the `this.processOp(...)` call, already reflects the stream's
+    // successful close - this Promise should be exposed, since it can be helpful to the consumer!
+    let prm = this.processOp({
+      name: 'getHeadStream',
+      locks: [ ...lineageLocks, nodeLock ],
+      fn: async () => {
+        
+        let streamFk = fk;
+        
+        let type = await Form.xGetType(fk);
+        
+        // Lineage must be ensured if nothing already exists here
+        if      (type === null) await Form.xEnsureLineage(lineageLocks);
+        
+        // If the target is already a node write to the "~" kid instead
+        else if (type === 'node') streamFk = streamFk.kid([ '~' ]);
+        
+        // Note that if `type === 'leaf'` nothing needs to change; value is naturally clobbered!
+        
+        let stream = nodejs.fs.createWriteStream(streamFk.fp);
+        streamPrm.resolve(stream);
+        
+        // Hold the "nodeWrite" lock until the stream consumer has closed the stream!! (TODO: Timeout condition??)
+        await Promise((rsv, rjc) => (stream.on('close', rsv), stream.on('error', rjc)));
+        
+      },
+      volatilityMemo: null
+    });
+    
+    // Downstream use can be simple:
+    //    | let headStream = await FsTxn(...).getDataHeadStream(FsKeep(...));
+    //    | someStream.pipe(headStream); // Writes to `headStream` with automatic txn cleanup
+    // If the consumer wants to know when the piping has completed, they can simply:
+    //    | let streamToMeFk = FsKeep(...);
+    //    | let headStream = await FsTxn(...).getDataHeadStream(streamToMeFk);
+    //    | someStream.pipe(headStream); // Writes to `headStream` with automatic txn cleanup
+    //    | await headStream.prm;
+    //    | gsc(`Finished streaming value to ${streamToMeFk.desc()}`);
+    return streamPrm.then(stream => Object.assign(stream, { prm }));
+    
+  },
+  getDataTailStream(fk) {
+    
+    // A "tail stream" comes from a file pointer's data storage. Once a stream has initialized, it
+    // seems unaffected even if the file pointer is changed partway through! This means we can
+    // simply consider our operation complete once the stream has been initialized, without needing
+    // to wait for it to finish streaming.
+    
+    this.checkFk(fk);
+    
+    let streamPrm = Promise.later();
+    let nullStream = () => streamPrm.resolve({ on: () => {}, pipe: stream => stream.end() });
+    
+    let nodeLock = Form.lock('nodeRead', fk);
+    let prm = this.processOp({
+      name: 'getDataTailStream',
+      locks: [ nodeLock ],
+      fn: async () => {
+        
+        let streamFk = fk;
+        let type = await Form.xGetType(fk);
+        
+        // Return empty string if fk doesn't exist
+        if (type === null) return void nullStream();
+        
+        // If type is "node", use the "~" kid if it's available, otherwise empty result
+        if (type === 'node') {
+          streamFk = streamFk.kid([ '~' ]);
+          if ('leaf' !== await Form.xGetType(streamFk)) return void nullStream();
+        }
+        
+        // Now we know `fk` is "leaf"; expose the stream to the consumer...
+        let stream = nodejs.fs.createReadStream(streamFk.fp);
+        streamPrm.resolve(stream);
+        
+        // ... but hold the lock until the stream is finished
+        await Promise((rsv, rjc) => (stream.on('close', rsv), stream.on('error', rjc))).catch(err => {
+          
+          // TODO: Maybe this case can be ignored?? Research it!
+          // ERR_STREAM_PREMATURE_CLOSE errors can happen if piping is unexpectedly disrupted
+          if (err.code === 'ERR_STREAM_PREMATURE_CLOSE') {
+            // ERR_STREAM_PREMATURE_CLOSE unwantedly propagates to the top-level; it should reject
+            // like any other error, but need:
+            // 1. Suppress to allows catching to prevent the top-level process crashing
+            // 2. Wrap in a separate error which is then thrown; this *allows* the error to crash
+            //    at the top-level if it goes entirely unhandled
+            let unsuppressedErr = Error('Api: stream failed because it was broken (was a network stream disconnected?)');
+            throw unsuppressedErr.mod({ cause: err.suppress() });
+          }
+          
+          throw err;
+          
+        });
+        
+      },
+      volatilityMemo: null
+    });
+    
+    return streamPrm.then(stream => Object.assign(stream, { prm }));
     
   },
   

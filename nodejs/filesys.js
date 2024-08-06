@@ -545,6 +545,8 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     
     return this.doLocked({ name: 'remSubtree', locks: [{ type: 'subtreeWrite', fp }], fn: async () => {
       
+      // Watch out for `fs.rm` with retries - it's badly behaved!
+      // TODO: We probably do want some retry behaviour here though??
       try         { await fs.rm(fp.fsp(), { recursive: true, maxRetries: 0 }); }
       catch (err) { if (err.code !== 'ENOENT') throw err; }
       

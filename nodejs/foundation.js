@@ -58,7 +58,8 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
   setupSc(`utc: ${getMs()}\npid: ${process.pid}`);
   
   // The whole long Foundation logic may fail before the subcon is unsilenced; this `try` / `catch`
-  // ensures the subcon is unsilenced before any Error propagates
+  // ensures the subcon is unsilenced before any Error propagates, so that subcon can be used to
+  // show any such Error!
   try {
     
     // Asynchronously init the Hut transaction

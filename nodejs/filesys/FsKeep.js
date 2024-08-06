@@ -94,6 +94,15 @@ module.exports = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => (
     return FsKeepForm({ ...conf, fd, path });
     
   },
+  $txn: (fp, { path=nodejs.path, ...conf }={}) => {
+    
+    let fk = Form.fromFp(fp, { path, ...conf });
+    let FsTxn = require('./FsTxn.js')
+    
+    let { cfg={} } = conf;
+    return FsTxn({ fk, cfg }).fk;
+    
+  },
   $isRel: {
     sep: Object.freeze({ sep: true,  eql: false, par: false, kid: false }),
     eql: Object.freeze({ sep: false, eql: true,  par: true,  kid: true  }),
@@ -133,7 +142,7 @@ module.exports = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => (
     let min = Math.min(srcLen, trgLen);
     for (numCommon = 0; numCommon < min; numCommon++) if (srcFd[numCommon] !== trgFd[numCommon]) break;
     
-    // Disjoint
+    // Separated (disjoint; neither is the common ancestor; neither contains the other)
     if (numCommon !== min) return Form.isRel.sep;
     
     // Exact same FsKeep! Considered to both contain each other
@@ -224,7 +233,7 @@ module.exports = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => (
     // Yields the whole ancestor chain from `ancestorFk` (exclusive) to `this` (inclusive)
     
     if (ancestorFk.path !== this.path) throw Error('Api: mixing FsKeeps with different path modules').mod({ fk: this, ancestorFk });
-    if (!ancestorFk.is(this).par)      throw Error('Api: givenFk is not a parent').mod({ ancestorFk });
+    if (!ancestorFk.is(this).par)      throw Error('Api: ancestorFk is not a parent fk').mod({ fk: this, ancestorFk });
     
     let pfxCmps = this.fd.slice(0, ancestorFk.fd.length);
     let lineageCmps = this.fd.slice(pfxCmps.length);
@@ -238,6 +247,11 @@ module.exports = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => (
     }
     
   },
+  
+  ...'getType,getMeta,setData,getData,getSubtree,getDataHeadStream,getDataTailStream'.split(',').toObj(term => [
+    term,
+    function(...args) { return this.txn[term](this, ...args); }
+  ]),
   
   desc() { return `/[file]${this.fp.hasHead('/') ? '' : '/'}${this.fp}`; },
   
