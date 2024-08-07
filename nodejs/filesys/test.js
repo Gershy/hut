@@ -500,7 +500,6 @@ let tests = [
   },
   async () => { // FsKeep.txn(...) methods, especially using "~"
     
-    // TODO: HEEERE! `setData` should work on the root item!!!
     let fts = [];
     await inTmpDir(async fk => {
       
@@ -582,7 +581,7 @@ let tests = [
       // returned but not made to flow within a timeout), causing the Promise.all to fail and
       // saving the consumer of the much more sinister case of a circular/infinite FsTxn lock!
       
-      // Let's pipe "aaa/bbb" to "aaa"; this should clobber/copy bbb's value to aaa
+      // Let's pipe "aaa/bbb" to "aaa"; this should clobber bbb's value to aaa's
       let [ bbbTail, aaaHead ] = await Promise.all([
         fk.kid([ 'aaa', 'bbb' ]).getDataTailStream(),
         fk.kid([ 'aaa' ]).getDataHeadStream()

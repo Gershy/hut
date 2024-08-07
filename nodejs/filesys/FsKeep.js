@@ -248,7 +248,7 @@ module.exports = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => (
     
   },
   
-  ...'getType,getMeta,setData,getData,getSubtree,getDataHeadStream,getDataTailStream'.split(',').toObj(term => [
+  ...'getType,getMeta,setData,getData,getKids,getSubtree,getDataHeadStream,getDataTailStream'.split(',').toObj(term => [
     term,
     function(...args) { return this.txn[term](this, ...args); }
   ]),

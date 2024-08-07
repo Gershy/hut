@@ -165,6 +165,20 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     }
     
   },
+  $xReadNode: async fk => {
+    
+    // Returns an Object mapping the cmp name for every Kid directly under `fk` to the Fk
+    // representing that Kid; also filters out any "hidden" cmps
+    
+    let fds = await nodejs.fs.readdir(fk.fp);
+    return fds.toObj(fd => {
+      if (fd === '~')      return skip;
+      if (fd === '.hutfs') return skip;
+      return [ fd, fk.kid([ fd ]) ];
+    });
+    
+  },
+  
   $locksCollide: (lock0, lock1) => {
     
     // Locks: 
@@ -210,6 +224,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     
   },
   
+  $fkToIvCacheMs: 5 * 10000,
   $fkToIvCache: Map(/* fk.fp -> iv */),
   $fkToIv: fk => {
     
@@ -234,7 +249,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     // Reset cache timeout; return cached value
     let cached = Form.fkToIvCache.get(str);
     clearTimeout(cached.timeout);
-    cached.timeout = setTimeout(() => Form.fkToIvCache.rem(str), 5 * 1000);
+    cached.timeout = setTimeout(() => Form.fkToIvCache.rem(str), Form.fkToIvCacheMs);
     return cached.iv;
     
   },
@@ -255,7 +270,6 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     let { crypto } = nodejs;
     if (isForm(data, String)) data = Buffer.from(data);
     
-    // TODO: HEEERE `cause.message` is "error:1C80006B:Provider routines::wrong final block length"
     let err = Error('');
     return crypto.subtle.decrypt({ name: 'AES-CBC', iv: Form.fkToIv(fk) }, key, data)
       .catch(cause => err.propagate({ msg: `Failed to decrypt: ${cause.message}`, cause }))
@@ -698,6 +712,32 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
       // Apply encoding
       return (enc === null) ? buff : buff.toString(enc);
       
+    });
+    
+  },
+  getKids(fk) {
+    
+    this.checkFk(fk);
+    
+    // TODO: This isn't a perfect lock... theoretically we only want to add "nodeRead" locks to
+    // `fk` itself, and all its direct kids (and prevent writing more kids to `fk`) - i.e. this op
+    // should block any `setData` or `xEnsureLineage` attempts which could write a kid into `fk`
+    // Note that "family" corresponds nicely to "subtree"; it refers to a node and its direct kids
+    let locks = [ Form.lock('subtreeRead', fk) ];
+    
+    return this.processOp({
+      name: 'getKids',
+      locks,
+      fn: async () => {
+        
+        let type = await Form.xGetType(fk);
+        if (type === null)   return {};
+        if (type === 'leaf') return {};
+        
+        // Now the type must be "node"
+        return this.xReadNode(fk);
+        
+      }
     });
     
   },
