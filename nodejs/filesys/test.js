@@ -57,18 +57,21 @@ let tests = [
       
       let tests = [
         
+        [ nodejs.path.win32, '/',        'x:/' ],
         [ nodejs.path.win32, '/a/b/c',   'x:/a/b/c' ],
         [ nodejs.path.win32, '///a/b/c', 'x:/a/b/c' ],
         [ nodejs.path.win32, '//a//b/c', 'x:/a/b/c' ],
         [ nodejs.path.win32, 'c:/a/b/c', 'c:/a/b/c' ],
         [ nodejs.path.win32, 'C:/a/b/c', 'c:/a/b/c' ],
-        [ nodejs.path.win32, 'c:/',      'c:/' ],       // Note that "c:" alone is the *CWD* of the drive!! Not the rootttt!!! (So dumb.)
-        [ nodejs.path.win32, 'C:/',      'c:/' ],       // Note that "c:" alone is the *CWD* of the drive!! Not the rootttt!!! (So dumb.)
-        [ nodejs.path.win32, 'c:',       'c:/' ],       // Note that "c:" alone is the *CWD* of the drive!! Not the rootttt!!! (So dumb.)
-        [ nodejs.path.win32, 'D:',       'd:/' ],       // Note that "c:" alone is the *CWD* of the drive!! Not the rootttt!!! (So dumb.)
+        [ nodejs.path.win32, 'c:/',      'c:/' ],
+        [ nodejs.path.win32, 'C:/',      'c:/' ],
+        [ nodejs.path.win32, 'c:',       'c:/' ], // Note that "c:" alone is the *CWD* of the drive!! Not the rootttt!!! (So dumb.)
+        [ nodejs.path.win32, 'D:',       'd:/' ], // Note that "D:" alone is the *CWD* of the drive!! Not the rootttt!!! (So dumb.)
+        [ nodejs.path.win32, '',         Error('Api: invalid relative fp') ],
         [ nodejs.path.win32, 'a/b/c',    Error('Api: invalid relative fp') ],
         [ nodejs.path.win32, '0:/a/b',   Error('Api: invalid relative fp') ],
         
+        [ nodejs.path.posix, '/',         '/' ],
         [ nodejs.path.posix, '/a/b/c',    '/a/b/c' ],
         [ nodejs.path.posix, '///a/b/c',  '/a/b/c' ],
         [ nodejs.path.posix, '//a//b/c',  '/a/b/c' ],
@@ -76,6 +79,7 @@ let tests = [
         [ nodejs.path.posix, '/C:/a/b/c', '/c:/a/b/c' ],
         [ nodejs.path.posix, '/c:/',      '/c:' ],
         [ nodejs.path.posix, '/D:',       '/d:' ],
+        [ nodejs.path.posix, '',          Error('Api: invalid relative fp') ],
         [ nodejs.path.posix, 'a/b/c',     Error('Api: invalid relative fp') ],
         [ nodejs.path.posix, '0:/a/b',    Error('Api: invalid relative fp') ],
         
@@ -845,7 +849,7 @@ let tests = [
     let maxMsDigits = Math.max(...results.map(r => r.ms.length));
 
     gsc(results.map(r => `[${r.success ? 'pass' : 'FAIL'}] (${Math.round(r.ms).toString(10).padHead(maxMsDigits, ' ')}ms) ${r.desc}`).join('\n'));
-    for (let r of results.filter(r => !r.success)) gsc(r.err.mod(msg => `Test failed: ${msg}`));
+    for (let r of results.filter(r => !r.success)) gsc(r.err.mod(msg => `Test failed:\n${msg}`));
     gsc(`Tests complete after ${durMs.toFixed(0)}ms; passed ${results.filter(r => r.success).count()} / ${results.count()}`);
     
   };

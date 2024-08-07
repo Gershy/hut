@@ -84,7 +84,7 @@ module.exports = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => (
     
     fp = fp.replaceAll('\\', '/');
     
-    if (path === nodejs.path.win32 && !/^(?:[a-zA-Z][:]|[/])/.test(fp)) throw Error('Api: invalid relative fp').mod({ fp });
+    if (path === nodejs.path.win32 && !/^(?:[/]|[a-zA-Z][:])/.test(fp)) throw Error('Api: invalid relative fp').mod({ fp });
     if (path === nodejs.path.posix && fp[0] !== '/')                    throw Error('Api: invalid relative fp').mod({ fp });
     if (path === nodejs.path.win32 && fp[0] === '/')                    fp = sys.win32DefaultDrive + fp;
     
@@ -97,7 +97,7 @@ module.exports = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => (
   $txn: (fp, { path=nodejs.path, ...conf }={}) => {
     
     let fk = Form.fromFp(fp, { path, ...conf });
-    let FsTxn = require('./FsTxn.js')
+    let FsTxn = require('./FsTxn.js');
     
     let { cfg={} } = conf;
     return FsTxn({ fk, cfg }).fk;
@@ -172,7 +172,7 @@ module.exports = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => (
       throw Error('Api: invalid arg').mod({ arg });
     }).join('');
     
-    let validPatterns = [ 'a', 'o', 'ao', 'oa', 'oao' ];
+    let validPatterns = [ 'a', 'o', 'ao', 'oa', 'oao' ]; // "a" = "array", "o" = "object"
     if (!validPatterns.has(pattern)) throw Error('Api: invalid arg combination').mod({ validPatterns, pattern });
     
     let headConf = pattern.hasHead('o') ? args.at( 0) : {};
@@ -193,6 +193,11 @@ module.exports = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => (
       path: this.path
     });
     
+  },
+  kidFromFp(fp) {
+    let kid = this.Form.fromFp(fp, { mode: 'native', path: this.path });
+    if (!this.is(kid).par) throw Error('Api: fp outside jurisdiction').mod({ fk: this, fp });
+    return Object.assign(kid, { txn: this.txn });
   },
   par(num=1) {
     
