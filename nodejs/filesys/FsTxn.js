@@ -165,7 +165,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     }
     
   },
-  $xReadNode: async fk => {
+  $xGetKids: async fk => {
     
     // Returns an Object mapping the cmp name for every Kid directly under `fk` to the Fk
     // representing that Kid; also filters out any "hidden" cmps
@@ -179,48 +179,67 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     
   },
   
-  $locksCollide: (lock0, lock1) => {
+  $lockCollisionResolvers: {
     
-    // Locks: 
-    // { type: 'nodeRead' | 'nodeWrite' | 'subtreeRead' | 'subtreeWrite', fk: FsKeep }
-    
-    // Order `lock0` and `lock1` by their "type" properties
-    if (lock0.type.localeCompare(lock1.type) > 0) [ lock0, lock1 ] = [ lock1, lock0 ];
-    
-    let collTypeKey = `${lock0.type}/${lock1.type}`;
+    // TODO: Implement these!!
+    'family.get/family.get':  () => {},
+    'family.get/family.set':  () => {},
+    'family.get/node.get':    () => {},
+    'family.get/node.set':    () => {},
+    'family.get/subtree.get': () => {},
+    'family.get/subtree.set': () => {},
+    'family.set/family.get':  () => {},
+    'family.set/family.set':  () => {},
+    'family.set/node.get':    () => {},
+    'family.set/node.set':    () => {},
+    'family.set/subtree.get': () => {},
+    'family.set/subtree.set': () => {},
     
     // OS filesystem reads can safely race!
-    if (collTypeKey === 'nodeRead/nodeRead') return false;
+    'node.get/node.get': () => false,
     
     // Reads and writes conflict if they occur on the exact same node
-    if (collTypeKey === 'nodeRead/nodeWrite') return lock0.fk.is(lock1.fk).eql;
+    'node.get/node.set': (fk1, fk2) => fk1.is(fk2).eql,
     
     // OS filesystem reads can safely race!
-    if (collTypeKey === 'nodeRead/subtreeRead') return false;
+    'node.get/subtree.get': () => false,
     
-    if (collTypeKey === 'nodeRead/subtreeWrite') return lock0.fk.is(lock1.fk).kid;
     // Node reads conflict with subtree writes if they're anywhere within the subtree
+    'node.get/subtree.set': (fk1, fk2) => fk1.is(fk2).kid,
     
     // OS filesystem has unexpected results for racing writes
-    if (collTypeKey === 'nodeWrite/nodeWrite') return lock0.fk.is(lock1.fk).eql;
+    'node.set/node.set': (fk1, fk2) => fk1.is(fk2).eql,
     
     // Prevent write from occurring in the subtree locked for reading
-    if (collTypeKey === 'nodeWrite/subtreeRead') return lock0.fk.is(lock1.fk).kid;
+    'node.set/subtree.get': (fk1, fk2) => fk1.is(fk2).kid,
     
     // Node writes conflict with subtree writes if they're anywhere within the subtree
-    if (collTypeKey === 'nodeWrite/subtreeWrite') return lock0.fk.is(lock1.fk).kid;
+    'node.set/subtree.set': (fk1, fk2) => fk1.is(fk2).kid,
     
     // OS filesystem reads can safely race!
-    if (collTypeKey === 'subtreeRead/subtreeRead') return false;
+    'subtree.get/subtree.get': () => false,
     
     // Don't write to locked subtree being read; don't read from locked subtree being written!
-    if (collTypeKey === 'subtreeRead/subtreeWrite') { let is = lock0.fk.is(lock1.fk); return is.kid || is.par; }
+    'subtree.get/subtree.set': (fk1, fk2) => { let is = fk1.is(fk2); return is.kid || is.par; },
     
     // Subtree writes may not contain each other - note that it's perfectly possible that, given
     // subtrees X and Y, knowing X is a non-Par of Y tells us nothing of whether Y is X's Par!
-    if (collTypeKey === 'subtreeWrite/subtreeWrite') { let is = lock0.fk.is(lock1.fk); return is.kid || is.par; }
+    'subtree.set/subtree.set': (fk1, fk2) => { let is = fk1.is(fk2); return is.kid || is.par; }
     
-    throw Error(`Api: collision type "${collTypeKey}" not implemented`);
+  },
+  $locksCollide: (lock1, lock2) => {
+    
+    // Locks: 
+    // { type: 'node.get' | 'node.set' | 'subtree.get' | 'subtree.set', fk: FsKeep }
+    
+    // Order `lock0` and `lock1` by their "type" properties
+    if (lock1.type.localeCompare(lock2.type) > 0) [ lock1, lock2 ] = [ lock2, lock1 ];
+    
+    let collTypeKey = `${lock1.type}/${lock2.type}`;
+    
+    let resolvers = Form.lockCollisionResolvers;
+    if (!resolvers.has(collTypeKey)) throw Error(`Api: collision type "${collTypeKey}" not supported`);
+    return resolvers[collTypeKey](lock1.fk, lock2.fk);
     
   },
   
@@ -493,7 +512,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     if (!isForm(fk, FsKeep)) throw Error(`Api: fp must be FsKeep; got ${getFormName(fk)})`).mod({ fk });
     if (!this.fk.is(fk).par) throw Error('Api: fk is not contained within the transaction').mod({ fk, trn: this });
   },
-  getLineageLocks(fk, lockType='nodeWrite') {
+  getLineageLocks(fk, lockType='node.set') {
     
     // Get the lineage locks required to lock the given `fk` in the context of this `FsTxn`
     
@@ -561,7 +580,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     
     this.checkFk(fk);
     
-    let locks = [ Form.lock('nodeRead', fk) ];
+    let locks = [ Form.lock('node.get', fk) ];
     return this.processOp({
       name: 'getType',
       locks,
@@ -574,7 +593,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     
     this.checkFk(fk);
     
-    let locks = [ Form.lock('nodeRead', fk) ];
+    let locks = [ Form.lock('node.get', fk) ];
     return this.processOp({
       name: 'getMeta',
       locks,
@@ -606,7 +625,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
       
       return this.processOp({
         name: 'setDataEmpty',
-        locks: [ Form.lock('nodeWrite', fk) ],
+        locks: [ Form.lock('node.set', fk) ],
         fn: async () => {
           
           let type = await Form.xGetType(fk);
@@ -637,13 +656,13 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
       // TODO: Watch out for FsTxns writing a leaf to their root directory - it should always be
       // put in a "~" child!!
       
-      let lineageLocks = this.getLineageLocks(fk, 'nodeWrite');
+      let lineageLocks = this.getLineageLocks(fk, 'node.set');
       if (this.cfg.cryptoKey) data = Form.encrypt({ data, key: this.cfg.cryptoKey, fk })
       
       return this.processOp({
         name: 'setData',
         // Overall, we have a series of lineage locks and a single leaf lock
-        locks: [ ...lineageLocks, Form.lock('nodeWrite', fk) ],
+        locks: [ ...lineageLocks, Form.lock('node.set', fk) ],
         fn: async () => {
           
           let type = await Form.xGetType(fk);
@@ -684,7 +703,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     return this.processOp({
       
       name: 'getData',
-      locks: [ Form.lock('nodeRead', fk) ],
+      locks: [ Form.lock('node.get', fk) ],
       fn: async () => {
         
         let result = await nodejs.fs.readFile(fk.fp).catch(fsCodes({
@@ -719,11 +738,8 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     
     this.checkFk(fk);
     
-    // TODO: This isn't a perfect lock... theoretically we only want to add "nodeRead" locks to
-    // `fk` itself, and all its direct kids (and prevent writing more kids to `fk`) - i.e. this op
-    // should block any `setData` or `xEnsureLineage` attempts which could write a kid into `fk`
-    // Note that "family" corresponds nicely to "subtree"; it refers to a node and its direct kids
-    let locks = [ Form.lock('subtreeRead', fk) ];
+    // TODO: Switch to "family.get" lock; implement "family.get" in `lockCollisionResolvers`
+    let locks = [ Form.lock('subtree.get', fk) ];
     
     return this.processOp({
       name: 'getKids',
@@ -735,7 +751,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
         if (type === 'leaf') return {};
         
         // Now the type must be "node"
-        return this.xReadNode(fk);
+        return Form.xGetKids(fk);
         
       }
     });
@@ -745,7 +761,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     
     this.checkFk(fk);
     
-    let locks = [ Form.lock('subtreeRead', fk) ];
+    let locks = [ Form.lock('subtree.get', fk) ];
     return this.processOp({
       name: 'getSubtree',
       locks,
@@ -753,19 +769,12 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
         
         let type = await Form.xGetType(fk);
         
-        if (type === null)   return { getData: o => null,                kids: {} };
-        if (type === 'leaf') return { getData: o => this.getData(fk, o), kids: {} };
+        if (type === null)   return Object.assign(fk, { kids: {} });
+        if (type === 'leaf') return Object.assign(fk, { kids: {} });
         
-        return {
-          getData: o => this.getData(fk, o),
-          
-          // Read the directory
-          kids: await nodejs.fs.readdir(fk.fp)
-            // Convert readdir array to object; remove abstracted items
-            .then(fds => { fds = fds.toObj(fd => [ fd, null ]); delete fds['~']; delete fds['.hutfs']; return fds; })
-            // Convert the readdir to an object with fd names mapped to corresponding subtrees
-            .then(fds => Promise.all(fds.map( (val, fd) => this.getSubtree(fk.kid([ fd ])) )))
-        };
+        return Object.assign(fk, {
+          kids: await Form.xGetKids(fk).then(fks => Promise.all(fks.map(fk => this.getSubtree(fk))))
+        });
         
       },
       volatilityMemo: null
@@ -784,8 +793,8 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     
     let streamPrm = Promise.later();
     
-    let lineageLocks = this.getLineageLocks(fk, 'nodeWrite');
-    let nodeLock = Form.lock('nodeWrite', fk);
+    let lineageLocks = this.getLineageLocks(fk, 'node.set');
+    let nodeLock = Form.lock('node.set', fk);
     
     // Note that `prm`, the result of the `this.processOp(...)` call, already reflects the stream's
     // successful close - this Promise should be exposed, since it can be helpful to the consumer!
@@ -809,7 +818,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
         let stream = nodejs.fs.createWriteStream(streamFk.fp);
         streamPrm.resolve(stream);
         
-        // Hold the "nodeWrite" lock until the stream consumer has closed the stream!! (TODO: Timeout condition??)
+        // Hold the "node.set" lock until the stream consumer has closed the stream!! (TODO: Timeout condition??)
         await Promise((rsv, rjc) => (stream.on('close', rsv), stream.on('error', rjc)));
         
       },
@@ -840,7 +849,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     let streamPrm = Promise.later();
     let nullStream = () => streamPrm.resolve({ on: () => {}, pipe: stream => stream.end() });
     
-    let nodeLock = Form.lock('nodeRead', fk);
+    let nodeLock = Form.lock('node.get', fk);
     let prm = this.processOp({
       name: 'getDataTailStream',
       locks: [ nodeLock ],

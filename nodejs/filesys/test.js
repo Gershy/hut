@@ -46,7 +46,7 @@ let inTmpDir = async (fn, { tmpUid=Math.random().toString(36).slice(2, 8) }={}) 
 };
 
 // Test definitions
-let testFilter = /FsKeep.*methods/;
+let testFilter = null; // /FsKeep.*methods/;
 let tests = [
   async () => { // FsKeep.fromFp interpretation
     
@@ -511,32 +511,25 @@ let tests = [
       await fk.setData('x'.repeat(100), 'utf8');
       
       let subtree = await fk.getSubtree();
-      if (!cmpArrs(subtree.toArr((v, k) => k), [ 'getData', 'kids' ]))
-        throw Error('Failed').mod({ subtree });
-      
-      if (!isForm(subtree.getData, Function))                throw Error('Failed').mod({ subtree });
-      if ('x'.repeat(100) !== await subtree.getData('utf8')) throw Error('Failed').mod({ subtree });
-      
-      if (!isForm(subtree.kids, Object)) throw Error('Failed').mod({ subtree });
-      if (subtree.kids.count() !== 0)    throw Error('Failed').mod({ subtree });
+      if (!isForm(subtree, FsKeep))                          throw Error('Failed').mod({ subtree });
+      if (!isForm(subtree.kids, Object))                     throw Error('Failed').mod({ subtree });
+      if (subtree.kids.count() !== 0)                        throw Error('Failed').mod({ subtree });
+      if ('x'.repeat(100) !== await subtree.getData('utf8')) throw Error('Failed').mod({ data: await subtree.getData('utf8') });
       
       await fk.kid([ 'aaa', 'bbb' ]).setData('i am bbb', 'utf8');
       await fk.kid([ 'aaa', 'bbb', 'ccc' ]).setData('bbb goes to ~', 'utf8');
       await fk.kid([ 'aaa', 'zzz' ]).setData('i am a sibling', 'utf8');
       await fk.kid([ 'aaa' ]).setData('written to ~', 'utf8');
       
-      let traverse = async (obj, fn) => {
-        obj = await fn(obj);
-        for (let [ prop, val ] of obj)
-          if (isForm(val, Object))
-            obj[prop] = await traverse(val, fn);
-        return obj;
+      let subtree2 = await fk.kid([ 'aaa' ]).getSubtree();
+      let traverse = async (st, fn) => {
+        await fn(st);
+        for (let [ fd, kid ] of st.kids) await traverse(kid, fn);
       };
-      let subtree2 = await traverse(
-        await fk.kid([ 'aaa' ]).getSubtree(),
-        async st => st.getData ? ({ val: await st.getData('utf8'), kids: st.kids }) : st
-      );
-      if (subtree2.val !== 'written to ~')                    throw Error('Failed').mod({ subtree2 });
+      
+      await traverse(subtree2, async fk => Object.assign(fk, { val: await fk.getData('utf8') }));
+      
+      if (subtree2.val !== 'written to ~')                    throw Error('Failed').mod({ subtree2, t2Data });
       if (subtree2.kids.zzz.val !== 'i am a sibling')         throw Error('Failed').mod({ subtree2 });
       if (subtree2.kids.bbb.val !== 'i am bbb')               throw Error('Failed').mod({ subtree2 });
       if (subtree2.kids.bbb.kids.ccc.val !== 'bbb goes to ~') throw Error('Failed').mod({ subtree2 });
@@ -595,6 +588,14 @@ let tests = [
       let aaaMeta = await fk.kid([ 'aaa' ]).getMeta();
       if (aaaMeta.type !== 'leaf') throw Error('Failed').mod({ aaaMeta });
       if (aaaMeta.size !== 8) throw Error('Failed').mod({ aaaMeta });
+      
+      let aaaKids = await fk.kid([ 'aaa' ]).getKids();
+      if (!isForm(aaaKids, Object))                      throw Error('Failed').mod({ aaaKids });
+      if (aaaKids.count() !== 2)                         throw Error('Failed').mod({ aaaKids });
+      if (!aaaKids.has('bbb'))                           throw Error('Failed').mod({ aaaKids });
+      if (!aaaKids.bbb.is(fk.kid([ 'aaa', 'bbb' ])).eql) throw Error('Failed').mod({ aaaKids });
+      if (!aaaKids.has('zzz'))                           throw Error('Failed').mod({ aaaKids });
+      if (!aaaKids.zzz.is(fk.kid([ 'aaa', 'zzz' ])).eql) throw Error('Failed').mod({ aaaKids });
       
     }).finally(() => fts.each(ft => ft.end()));
     
@@ -844,13 +845,13 @@ let tests = [
     let maxMsDigits = Math.max(...results.map(r => r.ms.length));
 
     gsc(results.map(r => `[${r.success ? 'pass' : 'FAIL'}] (${Math.round(r.ms).toString(10).padHead(maxMsDigits, ' ')}ms) ${r.desc}`).join('\n'));
-    for (let r of results.filter(r => !r.success)) gsc(r.err);
+    for (let r of results.filter(r => !r.success)) gsc(r.err.mod(msg => `Test failed: ${msg}`));
     gsc(`Tests complete after ${durMs.toFixed(0)}ms; passed ${results.filter(r => r.success).count()} / ${results.count()}`);
     
   };
   
   // Run arbitrary number of tests in serial/parallel
-  if (0) { let numParallelBatches = 1; let parallelBatchSize = 20;
+  if (1) { let numParallelBatches = 1; let parallelBatchSize = 20;
     
     let hadFailure = false;
     let runTest = async () => {
@@ -872,7 +873,7 @@ let tests = [
   }
   
   // Run a single test
-  if (1) {
+  if (0) {
     showTestResults(await getTestResults());
   }
   
