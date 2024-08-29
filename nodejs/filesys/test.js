@@ -1,5 +1,11 @@
 'use strict';
 
+// TODO: Now `fp` and `fd` are no longer forced to lowercase (because forcing a value to lowercase
+// corrupts it in case-sensitive filesystems!)
+// - Test "json" encoding
+// - Test child iteration using "strong" mode (child names should be resolved!)
+// - Coverage for FsKeep(...).getMeta(...).then(meta => meta.exists) and FsKeep(...).exists()
+
 require('../util/setup.js');
 
 let nodejs = require('./nodejs.js');
@@ -46,27 +52,27 @@ let inTmpDir = async (fn, { tmpUid=Math.random().toString(36).slice(2, 8) }={}) 
 };
 
 // Test definitions
-let testFilter = null; // /FsKeep.*methods/;
+let testFilter = null; ///Simple FsTxn constructor/; // /FsKeep.*methods/;
 let tests = [
   async () => { // FsKeep.fromFp interpretation
     
     let origWin32DefaultDrive = sys.win32DefaultDrive;
-    sys.win32DefaultDrive = 'x:'; // Overwrite this for tests to allow detecting it getting prepended
+    sys.win32DefaultDrive = 'X:'; // Overwrite this for tests to allow detecting it getting prepended
     
     try {
       
       let tests = [
         
-        [ nodejs.path.win32, '/',        'x:/' ],
-        [ nodejs.path.win32, '/a/b/c',   'x:/a/b/c' ],
-        [ nodejs.path.win32, '///a/b/c', 'x:/a/b/c' ],
-        [ nodejs.path.win32, '//a//b/c', 'x:/a/b/c' ],
+        [ nodejs.path.win32, '/',        'X:/' ],
+        [ nodejs.path.win32, '/a/b/c',   'X:/a/b/c' ],
+        [ nodejs.path.win32, '///a/b/c', 'X:/a/b/c' ],
+        [ nodejs.path.win32, '//a//b/c', 'X:/a/b/c' ],
         [ nodejs.path.win32, 'c:/a/b/c', 'c:/a/b/c' ],
-        [ nodejs.path.win32, 'C:/a/b/c', 'c:/a/b/c' ],
-        [ nodejs.path.win32, 'c:/',      'c:/' ],
-        [ nodejs.path.win32, 'C:/',      'c:/' ],
+        [ nodejs.path.win32, 'C:/a/b/c', 'C:/a/b/c' ],
+        [ nodejs.path.win32, 'C:/',      'C:/' ],
         [ nodejs.path.win32, 'c:',       'c:/' ], // Note that "c:" alone is the *CWD* of the drive!! Not the rootttt!!! (So dumb.)
-        [ nodejs.path.win32, 'D:',       'd:/' ], // Note that "D:" alone is the *CWD* of the drive!! Not the rootttt!!! (So dumb.)
+        [ nodejs.path.win32, 'D:',       'D:/' ], // Note that "D:" alone is the *CWD* of the drive!! Not the rootttt!!! (So dumb.)
+        [ nodejs.path.win32, 'd:',       'd:/' ], // Note that "D:" alone is the *CWD* of the drive!! Not the rootttt!!! (So dumb.)
         [ nodejs.path.win32, '',         Error('Api: invalid relative fp') ],
         [ nodejs.path.win32, 'a/b/c',    Error('Api: invalid relative fp') ],
         [ nodejs.path.win32, '0:/a/b',   Error('Api: invalid relative fp') ],
@@ -76,9 +82,10 @@ let tests = [
         [ nodejs.path.posix, '///a/b/c',  '/a/b/c' ],
         [ nodejs.path.posix, '//a//b/c',  '/a/b/c' ],
         [ nodejs.path.posix, '/c:/a/b/c', '/c:/a/b/c' ],
-        [ nodejs.path.posix, '/C:/a/b/c', '/c:/a/b/c' ],
+        [ nodejs.path.posix, '/C:/a/b/c', '/C:/a/b/c' ],
         [ nodejs.path.posix, '/c:/',      '/c:' ],
-        [ nodejs.path.posix, '/D:',       '/d:' ],
+        [ nodejs.path.posix, '/D:',       '/D:' ],
+        [ nodejs.path.posix, '/d:',       '/d:' ],
         [ nodejs.path.posix, '',          Error('Api: invalid relative fp') ],
         [ nodejs.path.posix, 'a/b/c',     Error('Api: invalid relative fp') ],
         [ nodejs.path.posix, '0:/a/b',    Error('Api: invalid relative fp') ],
@@ -110,7 +117,7 @@ let tests = [
     
     let keep = FsKeep.fromFp('/test', { path: nodejs.path.win32 });
     let kid = keep.kid([ 'a' ]);
-    if (kid.fp !== 'c:/test/a') throw Error('Failed').mod({ kid });
+    if (kid.fp !== 'C:/test/a') throw Error('Failed').mod({ kid });
     
   },
   async () => { // FsKeep(...).kid(...) ensure posix is comparable to win32
@@ -134,7 +141,7 @@ let tests = [
     
     let keep = FsKeep.fromFp('/test', { path: nodejs.path.win32 });
     let kid = keep.kid([ { sg: '^^' } ]);
-    if (kid.fp !== 'c:/test/rvy') throw Error('Failed').mod({ kid });
+    if (kid.fp !== 'C:/test/rvy') throw Error('Failed').mod({ kid });
     
   },
   async () => { // FsKeep(...).kid(...) strong mode via { sg: '...' } doesn't propagate to Kids
@@ -179,7 +186,7 @@ let tests = [
     let keep = FsKeep.fromFp('/test', { path: nodejs.path.win32 });
     let kid = keep.kid({ mode: 'strong' });
     let kid2 = kid.kid([ '..', '...' ]);
-    if (kid2.fp !== 'c:/test/7l5/1q~z~') throw Error('Failed').mod({ kid2 });
+    if (kid2.fp !== 'C:/test/7l5/1q~z~') throw Error('Failed').mod({ kid2 });
     
   },
   async () => { // FsKeep(...).kid({ mode: 'native' }, cmps) works
@@ -195,7 +202,7 @@ let tests = [
     
     let keep = FsKeep.fromFp('/test', { path: nodejs.path.win32 });
     let kid = keep.kid({ mode: 'strong' }, [ '..', '...' ], { mode: 'native' });
-    if (kid.fp !== 'c:/test/7l5/1q~z~') throw Error('Failed').mod({ kid });
+    if (kid.fp !== 'C:/test/7l5/1q~z~') throw Error('Failed').mod({ kid });
     if (kid.mode !== 'native') throw Error('Failed').mod({ kid });
     
   },
@@ -205,9 +212,9 @@ let tests = [
     let lineage = [ ...fk.lineage() ].map(ln => ln.fk);
     
     if (lineage.length !== 3)                             throw Error('Failed').mod({ lineage });
-    if (!cmpArrs(lineage[0].fd, [ 'c:', 'a' ]))           throw Error('Failed').mod({ lineage });
-    if (!cmpArrs(lineage[1].fd, [ 'c:', 'a', 'b' ]))      throw Error('Failed').mod({ lineage });
-    if (!cmpArrs(lineage[2].fd, [ 'c:', 'a', 'b', 'c' ])) throw Error('Failed').mod({ lineage });
+    if (!cmpArrs(lineage[0].fd, [ 'C:', 'a' ]))           throw Error('Failed').mod({ lineage });
+    if (!cmpArrs(lineage[1].fd, [ 'C:', 'a', 'b' ]))      throw Error('Failed').mod({ lineage });
+    if (!cmpArrs(lineage[2].fd, [ 'C:', 'a', 'b', 'c' ])) throw Error('Failed').mod({ lineage });
     
   },
   async () => { // FsKeep(...).lineage(itself)
@@ -226,9 +233,9 @@ let tests = [
     let lineage = [ ...kidFk.lineage(parFk) ].map(ln => ln.fk);
     
     if (lineage.length !== 3)                                            throw Error('Failed').mod({ lineage });
-    if (!cmpArrs(lineage[0].fd, [ 'c:', 'a', 'b', 'c', 'd' ]))           throw Error('Failed').mod({ lineage });
-    if (!cmpArrs(lineage[1].fd, [ 'c:', 'a', 'b', 'c', 'd', 'e' ]))      throw Error('Failed').mod({ lineage });
-    if (!cmpArrs(lineage[2].fd, [ 'c:', 'a', 'b', 'c', 'd', 'e', 'f' ])) throw Error('Failed').mod({ lineage });
+    if (!cmpArrs(lineage[0].fd, [ 'C:', 'a', 'b', 'c', 'd' ]))           throw Error('Failed').mod({ lineage });
+    if (!cmpArrs(lineage[1].fd, [ 'C:', 'a', 'b', 'c', 'd', 'e' ]))      throw Error('Failed').mod({ lineage });
+    if (!cmpArrs(lineage[2].fd, [ 'C:', 'a', 'b', 'c', 'd', 'e', 'f' ])) throw Error('Failed').mod({ lineage });
     
   },
   async () => { // FsKeep(...).lineage(invalidPar)
@@ -855,7 +862,7 @@ let tests = [
   };
   
   // Run arbitrary number of tests in serial/parallel
-  if (1) { let numParallelBatches = 1; let parallelBatchSize = 20;
+  if (0) { let numParallelBatches = 1; let parallelBatchSize = 20;
     
     let hadFailure = false;
     let runTest = async () => {
@@ -877,7 +884,7 @@ let tests = [
   }
   
   // Run a single test
-  if (0) {
+  if (1) {
     showTestResults(await getTestResults());
   }
   

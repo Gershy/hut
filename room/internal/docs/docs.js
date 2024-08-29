@@ -143,7 +143,7 @@ global.rooms['internal.docs'] = async foundation => {
     habitats: [ HtmlBrowserHabitat() ],
     above: async (hut, docsRec, real, dep) => {
       
-      // let allTopicTerms = await foundation.seek('keep', 'fileSystem', [ 'room', 'internal', 'docs', 'topic' ]).getContent();
+      // let allTopicTerms = await foundation.seek('keep', 'fileSystem', [ 'room', 'internal', 'docs', 'topic' ]).getData();
       
     },
     below: async (hut, docsRec, real, dep) => {

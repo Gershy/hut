@@ -36,7 +36,7 @@ let InsulatedInstance = form({ name: 'InsulatedInstance', has: { Tmp }, props: (
       if (msg?.type === 'room') {
         let room = token.dive(msg?.room);
         let cmpKeep = await getCmpKeep('below', room);
-        let content = await cmpKeep.getContent('utf8');
+        let content = await cmpKeep.getData('utf8');
         this.proc.send({ scope: 'foundation', msg: { type: 'room', room: room.join('.'), content } });
       }
       

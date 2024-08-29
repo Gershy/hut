@@ -488,7 +488,7 @@ module.exports = async ({ rootKeep, rawConf, confUpdateCb=Function.stub }) => {
       
       let content = null;
       try {
-        content = await confKeep.getContent('utf8');
+        content = await confKeep.getData('utf8');
         content = content.replace(/[;\s]+$/, ''); // Remove tailing whitespace and semicolons
         return await eval(`(${content})`);
       } catch (err) {

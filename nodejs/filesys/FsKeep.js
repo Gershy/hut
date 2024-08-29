@@ -4,15 +4,15 @@ require('../../room/setup/clearing/clearing.js');
 let nodejs = require('./nodejs.js');
 let sys = require('./system.js');
 
-module.exports = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => ({
+module.exports = form({ name: 'FsKeep', has: { Slots, Keep }, props: (forms, Form) => ({
   
   // FsKeeps understand Cmp traversal (e.g. "par", "sib", "kid"), and may also be connected to a
   // FsTxn; if connected, FsKeeps are able to perform data manipulation - otherwise, they are
   // limited to performing Cmp-traversal-related tasks
   
   // Finds non-alphanumerics other than "~", "_", "." and "-"
-  $invalidCmpCharsRegex: /[^0-9a-z~_.-]/,
-  $nativeCmpCharset: String.charset('~1234567890-qwertyuiopasdfghjklzxcvbnm_'),
+  $invalidCmpCharsRegex: /[^0-9a-zA-Z~_.-]/,
+  $nativeCmpCharset: String.charset('~1234567890-qwertyuiopasdfghjklzxcvbnm_'), // Must not include uppercase and lowercase as these may incorrectly treated the same on win32
   $strongCmpCharset: String.charset((256).toArr(n => n.char()).join('')),
   $reservedWin32Cmps: Set([
     'con', 'conin$', 'conout$', 'prn', 'aux', 'clock$', 'null',
@@ -20,6 +20,17 @@ module.exports = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => (
     ...(9).toArr(v => `lpt${v}`),
     'lst', 'keybd$', 'screen$', '$idle$', 'config$'
   ]),
+  $extToContentType: {
+    js: 'text/javascript; charset=utf-8',
+    json: 'text/json; charset=utf-8',
+    html: 'text/html; charset=utf-8',
+    css: 'text/css; charset=utf-8',
+    txt: 'text/plain; charset=utf-8',
+    ico: 'image/x-icon',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    svg: 'image/svg+xml'
+  },
   
   $resolveCmp: (cmp, { allowWin32Drive=false, mode='native' }={}) => {
     
@@ -31,11 +42,11 @@ module.exports = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => (
     
     if (!isForm(cmp, String)) throw Error('Api: failed to resolve Cmp').mod({ cmp });
     
-    // Win32 restriction: Cmps are always considered in lowercase
-    cmp = cmp.lower();
+    // // Win32 restriction: Cmps are always considered in lowercase
+    // cmp = cmp/*.lower()*/;
     
     // Allow drive indicators as the first item
-    if (allowWin32Drive && /^[a-z]:$/.test(cmp)) return cmp.lower();
+    if (allowWin32Drive && /^[a-z]:$/i.test(cmp)) return cmp/*.lower()*/;
     
     // We can tolerate invalid win32 Cmps, in "strong" mode, by deconflicting them by prepending
     // "~", which allows windows to tolerate them, while "strong" interpretation is unaffected
@@ -61,14 +72,14 @@ module.exports = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => (
     let nativeCmps = fd.map((cmp, i) => Form.resolveCmp(cmp, { allowWin32Drive: i === 0, mode }));
     
     let root = (path === nodejs.path.win32) ? [ sys.win32DefaultDrive ] : [];
-    let fp = path.resolve('/', ...root, ...nativeCmps).replaceAll('\\', '/').lower();
+    let fp = path.resolve('/', ...root, ...nativeCmps).replaceAll('\\', '/'); /*.lower();*/
     if (path === nodejs.path.win32) {
       
       // Ensure drive component exists
       if    (fp[0] === '/') fp = sys.win32DefaultDrive + fp;
       
-      // Ensure drive component is lowercase
-      fp = fp.slice(0, sys.win32DefaultDrive.length).lower() + fp.slice(sys.win32DefaultDrive.length);
+      // Ensure drive component exists
+      fp = fp.slice(0, sys.win32DefaultDrive.length) /*.lower()*/ + fp.slice(sys.win32DefaultDrive.length);
       
     }
     
@@ -88,7 +99,7 @@ module.exports = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => (
     if (path === nodejs.path.posix && fp[0] !== '/')                    throw Error('Api: invalid relative fp').mod({ fp });
     if (path === nodejs.path.win32 && fp[0] === '/')                    fp = sys.win32DefaultDrive + fp;
     
-    let fd = fp.split('/').map(cmp => cmp.lower().trim() || skip);
+    let fd = fp.split('/').map(cmp => cmp/*.lower()*/.trim() || skip);
     
     let FsKeepForm = Form;
     return FsKeepForm({ ...conf, fd, path });
@@ -96,10 +107,10 @@ module.exports = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => (
   },
   $txn: (fp, { path=nodejs.path, ...conf }={}) => {
     
-    let fk = Form.fromFp(fp, { path, ...conf });
-    let FsTxn = require('./FsTxn.js');
+    let { cfg={}, ...moreConf } = conf;
     
-    let { cfg={} } = conf;
+    let fk = Form.fromFp(fp, { path, ...moreConf });
+    let FsTxn = require('./FsTxn.js');
     return FsTxn({ fk, cfg }).fk;
     
   },
@@ -156,6 +167,22 @@ module.exports = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => (
     
   },
   
+  access(...args) {
+    
+    args = args.flat(Infinity);
+    
+    // Note that trying to log here with `gsc` may cause a stack overflow because `gsc` will want
+    // to log the line responsible for making the `gsc` call:
+    // - which initializes an Error and uses `Error(...).getInfo().trace`
+    // - which generates lines of formatted codepoints
+    // - where each line includes a formatted Keep name
+    // - which requires an instance of a Keep to format
+    // - and the Keep instance is obtained using this `access` method, closing the loop!!
+    return (args.length === 1 && /[:/]/.test(args[0]))
+      ? this.kidFromFp(args[0])
+      : this.kid(args);
+    
+  },
   kid(...args) {
     
     // Example usage:
@@ -201,7 +228,8 @@ module.exports = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => (
   },
   par(num=1) {
     
-    if (num < 1) throw Error('Api: invalid "num"').mod({ num });
+    if (num < 1)          throw Error('Api: num must be >= 1').mod({ num });
+    if (!num.isInteger()) throw Error('Api: num must be an integer').mod({ num });
     
     let par = (0, this.Form)({
       txn: null,
@@ -252,11 +280,15 @@ module.exports = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => (
     }
     
   },
+  getContentType() {
+    let pcs = this.fd.at(-1).split('.');
+    let ext = pcs.length >= 2 ? pcs.at(-1) : null;
+    return Form.extToContentType[ext] ?? 'application/octet-stream';
+  },
   
-  ...'getType,getMeta,setData,getData,getKids,getSubtree,getDataHeadStream,getDataTailStream'.split(',').toObj(term => [
-    term,
-    function(...args) { return this.txn[term](this, ...args); }
-  ]),
+  ...'getType,getMeta,exists,setData,getData,setContent,getContent,rem,getKids,getSubtree,getDataHeadStream,getDataTailStream'
+    .split(',')
+    .toObj(term => [ term, function(...args) { return this.txn[term](this, ...args); } ]),
   
   desc() { return `/[file]${this.fp.hasHead('/') ? '' : '/'}${this.fp}`; },
   

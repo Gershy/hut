@@ -631,11 +631,11 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     let keep = this.keep.dive(diveToken);
     
     let json = encoding === 'json';
-    let val = await keep.getContent(json ? null : encoding);
+    let val = await keep.getData(json ? null : encoding);
     if (val) return json ? jsonToVal(val) : val;
     
     val = await fn();
-    await keep.setContent(json ? valToSer(val) : val);
+    await keep.setData(json ? valToSer(val) : val);
     
     return val;
     
@@ -744,9 +744,9 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       let now = Date.now();
       let bakKeep = this.keep.dive([ 'selfSign', 'bak', now.toString(10) ]);
       await Promise.all([
-        bakKeep.dive('prv').setContent(prv),
-        bakKeep.dive('csr').setContent(csr),
-        bakKeep.dive('crt').setContent(crt)
+        bakKeep.dive('prv').setData(prv),
+        bakKeep.dive('csr').setData(csr),
+        bakKeep.dive('crt').setData(crt)
       ]);
       
       // Note this doesn't invalidate `prv`, which can safely be reused!
@@ -1086,9 +1086,9 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       let now = Date.now();
       let bakKeep = this.keep.dive([ 'acme', type, 'bak', now.toString(10) ]);
       await Promise.all([
-        bakKeep.dive([ 'prv' ]).setContent(prv),
-        bakKeep.dive([ 'csr' ]).setContent(csr),
-        bakKeep.dive([ 'crt' ]).setContent(crt)
+        bakKeep.dive([ 'prv' ]).setData(prv),
+        bakKeep.dive([ 'csr' ]).setData(csr),
+        bakKeep.dive([ 'crt' ]).setData(crt)
       ]);
       
       // Note this doesn't invalidate `prv`, which can safely be reused!

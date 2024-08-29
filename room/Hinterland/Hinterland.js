@@ -204,7 +204,7 @@ global.rooms['Hinterland'] = async () => {
           }),
           
           // TODO: Warning vs fatal err should depend on stability config?
-          err => subcon('warning')(err.mod(msg => `Failed to setup record sampling: ${msg}`))
+          err => subcon('warn')(err.mod(msg => `Failed to setup record sampling: ${msg}`))
           
         );
           

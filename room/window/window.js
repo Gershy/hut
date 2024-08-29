@@ -719,7 +719,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
     
     console.log('Loading image...');
     let keep = foundation.seek('keep', 'adminFileSystem', '..', '..', '..', 'users', 'gersmaes', 'desktop', 'img.bmp');
-    let { bmpHeader: { w, h }, pixels } = await bmpFormat.convertFwd(await keep.getContent());
+    let { bmpHeader: { w, h }, pixels } = await bmpFormat.convertFwd(await keep.getData());
     
     let num = 200 * 1000 * 1000;
     let swapDist1 = 30;
@@ -753,7 +753,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
     
     console.log('Outputting image...');
     let buff = await bmpFormat.convertBak({ pixels });
-    await foundation.seek('keep', 'adminFileSystem', '..', '..', '..', 'users', 'gersmaes', 'desktop', 'out3.bmp').setContent(buff);
+    await foundation.seek('keep', 'adminFileSystem', '..', '..', '..', 'users', 'gersmaes', 'desktop', 'out3.bmp').setData(buff);
     
     process.exit(0);
     
@@ -763,7 +763,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
   if (0) await (async () => {
     
     let keep = foundation.seek('keep', 'adminFileSystem', '..', '..', '..', 'users', 'gersmaes', 'desktop', 'ironHeart.bmp');
-    let { bmpHeader: { w, h }, pixels } = await bmpFormat.convertFwd(await keep.getContent());
+    let { bmpHeader: { w, h }, pixels } = await bmpFormat.convertFwd(await keep.setData());
     
     let num = 1000000;
     let swapDist = 2;
@@ -780,7 +780,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
     }
     
     let buff = await bmpFormat.convertBak({ pixels });
-    await foundation.seek('keep', 'adminFileSystem', '..', '..', '..', 'users', 'gersmaes', 'desktop', 'out.bmp').setContent(buff);
+    await foundation.seek('keep', 'adminFileSystem', '..', '..', '..', 'users', 'gersmaes', 'desktop', 'out.bmp').setData(buff);
     
     process.exit(0);
     
@@ -791,7 +791,7 @@ global.rooms['window'] = foundation => ({ open: async () => {
     bg: { chr: ' ' }
   });
   
-  let bmpBuff = await foundation.seek('keep', 'fileSystem', 'room', 'window', 'imgTest.bmp').getContent();
+  let bmpBuff = await foundation.seek('keep', 'fileSystem', 'room', 'window', 'imgTest.bmp').getData();
   let srcData = await bmpFormat.convertFwd(bmpBuff);
   let trgData = await bmpFormat.convertFwd(await bmpFormat.convertBak(srcData));
   
@@ -971,10 +971,10 @@ global.rooms['window'] = foundation => ({ open: async () => {
     };
     
     let asciiKeep = await foundation.seek('keep', 'fileSystem', ...ascii.path);
-    let { w, h, pixels } = await pngToPixels(await asciiKeep.getContent());
+    let { w, h, pixels } = await pngToPixels(await asciiKeep.setData());
     
     let graphicKeep = await foundation.seek('keep', 'fileSystem', '..', '..', '..', 'users', 'gersmaes', 'desktop', 'graphic.png');
-    let graphicPng = await pngToPixels(await graphicKeep.getContent());
+    let graphicPng = await pngToPixels(await graphicKeep.getData());
     
     let numHorz = Math.floor(w / ascii.w);
     let numVert = Math.floor(h / ascii.h);

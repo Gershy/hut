@@ -431,7 +431,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     
     let lineageLocks = this.fp.getLineage(fp).toArr(fp => ({ type: 'nodeWrite', fp }));
     let nodeLock = { type: 'nodeWrite', fp };
-    let prm = this.doLocked({ name: 'getHeadStream', locks: [ ...lineageLocks, nodeLock ], fn: async () => {
+    let prm = this.doLocked({ name: 'getDataHeadStream', locks: [ ...lineageLocks, nodeLock ], fn: async () => {
       
       // Ensure lineage
       for (let { fp, prm } of lineageLocks) {
@@ -472,7 +472,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     let streamPrm = Promise.later();
     
     let nodeLock = { type: 'nodeRead', fp };
-    let prm = this.doLocked({ name: 'getTailStream', locks: [ nodeLock ], fn: async () => {
+    let prm = this.doLocked({ name: 'getDataTailStream', locks: [ nodeLock ], fn: async () => {
       
       let type = await this.xGetType(fp);
       if (type === null) return;
@@ -630,8 +630,8 @@ let FsKeep = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => ({
     },
     getContentByteLength() { return Buffer.byteLength(this.getContent()); },
     streamable() { return true; },
-    getHeadStream() { return {}; }, // TODO: Mock this
-    getTailStream() { return ({ pipe: writable => writable.end(this.getContent()) }); }
+    getDataHeadStream() { return {}; }, // TODO: Mock this
+    getDataTailStream() { return ({ pipe: writable => writable.end(this.getContent()) }); }
     
   })})(),
   $extToContentType: {
@@ -676,13 +676,9 @@ let FsKeep = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => ({
   // Meta
   getContentType() {
     
-    let lastCmp = this.fp.cmps.at(-1);
-    let pcs = lastCmp.split('.');
-    
-    // If no "." the content type is unknown
-    if (pcs.length < 2) return 'application/octet-stream';
-    
-    return Form.extToContentType[pcs.at(-1)] ?? 'application/octet-stream';
+    let pcs = this.fp.cmps.at(-1).split('.');
+    let ext = pcs.length >= 2 ? pcs.at(-1) : null;
+    return Form.extToContentType[ext] ?? 'application/octet-stream';
     
   },
   async getContentByteLength() { return this.trn.getDataBytes(this.fp); },
@@ -718,16 +714,16 @@ let FsKeep = form({ name: 'FsKeep', has: { Keep }, props: (forms, Form) => ({
   // Tree
   contains(keep) { return hasForm(keep, Form) && this.fp.contains(keep.fp); },
   equals(keep) { return hasForm(keep, Form) && this.fp.equals(keep.fp); },
-  async getChildNames(opts={}) {
+  async getKidNames(opts={}) {
     let names = await this.trn.getKidNames(this.fp);
     return this.forbid
       ? names.filter(name => !this.forbid.has(name))
       : names;
   },
   async streamable() { return true; return (await this.trn.getType(this.fp)) === 'leaf'; },
-  async getHeadStream() { return this.trn.getDataHeadStream(this.fp, this.forbid); },
-  async getTailStream() { return this.trn.getDataTailStream(this.fp, this.forbid); },
-  iterateChildren(dbg=Function.stub) {
+  async getDataHeadStream() { return this.trn.getDataHeadStream(this.fp, this.forbid); },
+  async getDataTailStream() { return this.trn.getDataTailStream(this.fp, this.forbid); },
+  getKids(dbg=Function.stub) {
     
     // Returns { [Symbol.asyncIterator]: fn, close: fn }
     return this.trn.iterateNode(this.fp, { map: n => this.forbid.has(n) ? skip : [ n, this.access(n) ] });

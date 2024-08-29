@@ -54,7 +54,11 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
   // Note these "x" ops take FsKeeps, and resolve them to Fps using `fk.fp`
   
   $fsRetry: { recursive: false, maxRetries: 8, retryDelay: 75 }, // Up to 600ms total
-  $lock: (type, fk) => ({ type, fk, prm: Promise.later() }), 
+  $lock: (type, fk) => {
+    if (!isForm(type, String)) throw Error('Api: invalid type').mod({ type });
+    if (!Form.lockCollisionResolvers.has(`${type}/${type}`)) throw Error('Api: invalid lock type').mod({ fk, type });
+    return { type, fk, prm: Promise.later() };
+  }, 
   
   $xSafeStat: async fk => {
     
@@ -65,7 +69,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     return nodejs.fs.stat(fk.fp).catch(fsCodes({ ENOENT: null, ENOTDIR: null }));
     
   },
-  $xGetType: async (fk, stat=null) => {
+  $xGetType: async (fk, stat=null) /* Promise<null | 'leaf' | 'node'> */ => {
     
     if (!stat) stat = await Form.xSafeStat(fk);
     
@@ -432,8 +436,22 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     
     if (!isForm(fk, FsKeep)) throw Error('Api: must provide fk');
     
+    // TODO: HEEERE `rootFk` -> `fk`, `FsKeep(...).access(...)` uses kidFromFp, FsTxn root fks
+    // should *not go in the filesystem root* - they should go under "mill", overall try to get
+    // `node hut.js` working! I think it's almost there!!
+    
+    // Note that even for the "holder" FsTxn (the one whose creation initiates ownership), there
+    // may be a difference between:
+    // - cfg.rootFk
+    // - this.fk
+    // Note that `this.fk` is the root filesys node controlled by the FsTxn, whereas `cfg.rootFk`
+    // is simply the directory the ".hutfs" ownership file is written to! Note that the consumer
+    // must be diligent to configure multiple competing FsTxns to use the same "rootFk" (otherwise
+    // they may not detect that there are other FsTxns competing for the same ownership).
+    
     cfg = {
-      active: true,
+      active: true,             // Is this FsTxn configured to be active? Calling the constructor implies "yes"
+      held: false,              // Used to determine if ending this FsTxn ends ownership
       ownershipTimeoutMs: 2000,
       rootFk: fk,
       throttler: fn => fn(),
@@ -445,12 +463,15 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     
     Object.assign(this, {
       fk: fk.kid([]),
+      holder: false,
       cfg,
       throttler: cfg.throttler,
       locks: Set(),
       initPrm: cfg.initPrm.then(() => this)
     });
     denumerate(this, 'locks');
+    
+    if (!cfg.held) { this.holder = cfg.held = true; }
     
     // Assign `this` as the FsTxn of our FsKeep!
     this.fk.txn = this;
@@ -589,7 +610,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     });
     
   },
-  getMeta(fk) /* Promise<{ type: null | 'leaf' | 'node', size: number }> */ {
+  getMeta(fk) /* Promise<{ type: null | 'leaf' | 'node', size: number, exists: boolean }> */ {
     
     this.checkFk(fk);
     
@@ -601,22 +622,27 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
         
         let stat = await Form.xSafeStat(fk);
         let type = await Form.xGetType(fk, stat);
-        
-        if (type === 'leaf') return { type, size: stat.size };
+        if (type === 'leaf') return { type, exists: true, size: stat.size };
         
         // Try to interpret the node as its "~" leaf value
         stat = await Form.xSafeStat(fk.kid([ '~' ]));
         type = await Form.xGetType(fk, stat);
-        return { type, size: type === 'leaf' ? stat.size : 0 };
+        if (type === 'leaf') return { type, exists: true, size: stat.size };
+        
+        return { type, exists: !!type, size: 0 };
         
       },
       volatilityMemo: null
     });
     
   },
-  setData(fk, data) /* Promise<void> */ {
+  exists(fk) { return this.getMeta(fk).then(v => v.exists); },
+  setData(fk, data, opts={}) /* Promise<void> */ {
     
     this.checkFk(fk);
+    
+    if (!isForm(opts, Object)) opts = { encoding: opts };
+    let { encoding: enc=null } = opts;
     
     if (data === null || data.length === 0) {
       
@@ -657,6 +683,8 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
       // put in a "~" child!!
       
       let lineageLocks = this.getLineageLocks(fk, 'node.set');
+      
+      if (enc === 'json') data = valToJson(data);
       if (this.cfg.cryptoKey) data = Form.encrypt({ data, key: this.cfg.cryptoKey, fk })
       
       return this.processOp({
@@ -695,10 +723,10 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
   },
   getData(fk, opts={}) /* Promise<string | Buffer> */ {
     
+    this.checkFk(fk);
+    
     if (!isForm(opts, Object)) opts = { encoding: opts };
     let { encoding: enc=null } = opts;
-    
-    this.checkFk(fk);
     
     return this.processOp({
       
@@ -729,12 +757,49 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
       if (this.cfg.cryptoKey) buff = await Form.decrypt({ data: buff, key: this.cfg.cryptoKey, fk });
       
       // Apply encoding
-      return (enc === null) ? buff : buff.toString(enc);
+      if (enc === null) return buff;
+      if (enc === 'json') return buff.length ? JSON.parse(buff) : null;
+      return buff.toString(enc);
       
     });
     
   },
+  
+  getContent(...args) { // DEPRECATED
+    
+    subcon('warn')(Error('Deprecated "getContent" method (use "getData" instead)'));
+    return this.getData(...args);
+    
+  },
+  setContent(...args) { // DEPRECATED
+    
+    subcon('warn')(Error('Deprecated "setContent" method (use "setData" instead)'));
+    return this.setData(...args);
+    
+  },
+  
+  rem(fk) {
+    
+    this.checkFk(fk);
+    
+    let locks = [ Form.lock('subtree.set', fk) ];
+    return this.processOp({
+      name: 'rem',
+      locks,
+      fn: async () => {
+        
+        // Watch out for `fs.rm` with retries - it's badly behaved!
+        try         { await nodejs.fs.rm(fk.fp, { recursive: true, maxRetries: 0 }); }
+        catch (err) { if (err.code !== 'ENOENT') throw err; }
+        
+      }
+    });
+    
+  },
+  
   getKids(fk) {
+    
+    // Note this method returns an Enumerable; not necessarily an Array! (TODO: use streaming?)
     
     this.checkFk(fk);
     
@@ -799,7 +864,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     // Note that `prm`, the result of the `this.processOp(...)` call, already reflects the stream's
     // successful close - this Promise should be exposed, since it can be helpful to the consumer!
     let prm = this.processOp({
-      name: 'getHeadStream',
+      name: 'getDataHeadStream',
       locks: [ ...lineageLocks, nodeLock ],
       fn: async () => {
         
@@ -900,10 +965,9 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
   
   cleanup() {
     
-    let { fk, cfg } = this;
-    
-    // Ending the root FsTxn sets `cfg.active` to false
-    if (fk.is(cfg.rootFk).eql) cfg.active = false;
+    // Ending the "holder" ends cfg ownership (by setting the "active" prop to false, which breaks
+    // an async loop)
+    if (this.holder) this.cfg.active = false;
     
   }
   

@@ -1394,17 +1394,17 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
     desc: C.noFn('desc'),
     exists: C.noFn('exists'),
     getUri: C.noFn('getUri'),
-    getContent: C.noFn('getContent'),
-    setContent: C.noFn('setContent'),
+    getData: C.noFn('getData'),
+    setData: C.noFn('setData'),
     getContentType: C.noFn('getContentType'),
     getContentByteLength: C.noFn('getContentByteLength'),
-    iterateChildren: C.noFn('iterateChildren', () => {
+    getKids: C.noFn('getKids', () => {
       // Generator returning [ key, Keep(...) ] entries, where
       // `this.access(key)` is expected to return the same Keep(...)
     }),
     streamable: C.noFn('streamable'),
-    getHeadStream: C.noFn('getHeadStream'), // The "head" precedes the content; it allows piping *into* the Keep
-    getTailStream: C.noFn('getTailStream') // The "tail" comes after the conent; it allows piping *out of* the Keep
+    getDataHeadStream: C.noFn('getDataHeadStream'), // The "head" precedes the content; it allows piping *into* the Keep
+    getDataTailStream: C.noFn('getDataTailStream') // The "tail" comes after the conent; it allows piping *out of* the Keep
     /// =DEBUG}
     
   })});

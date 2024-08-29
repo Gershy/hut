@@ -34,13 +34,13 @@ module.exports = () => Error.prepareStackTrace = (err, callSites) => {
     return {
       type: 'line',
       fnName: cs.getFunctionName(),
-      keepTerm: '/[file]/' + file.replace(/[/\\]+/g, '/'),
+      keepTerm: '/[file]/' + file.replace(/[/\\]+/g, '/')/*.lower()*/,
       row: cs.getLineNumber(),
       col: cs.getColumnNumber()
     };
     
   });
   
-  return `>>>HUTTRACE>>>${JSON.stringify(trace)}<<<HUTTRACE<<<`;
+  return `${err.message}\n>>>HUTTRACE>>>${JSON.stringify(trace)}<<<HUTTRACE<<<\n${trace.map(t => `- ${t.keepTerm}:${t.row}:${t.col}`).join('\n')}`;
   
 };

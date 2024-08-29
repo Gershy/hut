@@ -6,12 +6,15 @@
 // Ellipsis: '\u2026'
 
 require('../room/setup/clearing/clearing.js');
-let { rootTransaction: rootTrn, Filepath, FsKeep } = require('./filesys.js');
+let FsKeep = require('./filesys/FsKeep.js');
+
 let NetworkIdentity = require('./NetworkIdentity.js');
 let getStdoutSubcon = require('./util/getStdoutSubconOutputter.js');
 
 // Set up basic monitoring
 let { processExitSrc } = require('./util/installTopLevelHandler.js')();
+let activeTmp = Tmp();
+processExitSrc.route(() => activeTmp.end());
 
 // Avoid "//" within String by processing non-String-open characters, or fully enclosed Strings
 // (note: may fail to realize that a String with escaped quotes stays open e.g. `'i criii :\')'`)
@@ -29,7 +32,7 @@ let captureInlineBlockCommentRegex = Regex.readable('g', String.baseline(`
   |         [^'"] ['][^']*['] ["][^"]*["] #[^#]*#       [/][*](?:            )*[*][/]
 `).replace(/#/g, '`')); // Simple way to include literal "`" in regex
 
-module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
+module.exports = async ({ hutFp, conf: rawConf }) => {
   
   // Make `global.subconOutput` immediately available (but any log
   // invocations will only show up after configuration is complete)
@@ -63,8 +66,12 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
   try {
     
     // Asynchronously init the Hut transaction
-    let hutFp = Filepath(hutFpRaw);
-    let hutKeepPrm = rootTrn.kid(hutFp).then(trn => FsKeep(trn, hutFp));
+    // TODO: Write ".hutfs" to mill?? What if mill is defined to be a location e.g. somewhere
+    // outside the repo?? I think the only way "mill" can be moved is via an environment variable
+    // or command-line argument; otherwise "mill" contains the configuration file which defines
+    // where "mill" is!!
+    let rootFsKeep = FsKeep.txn('/', { cfg: `${hutFp}/mill` });
+    activeTmp.endWith(rootFsKeep.txn); // Make sure to end the FsTxn when Hut is no longer active
     
     // Setup `global.formatAnyValue`
     global.formatAnyValue = require('./util/formatAnyValue.js'); // (val, { colours, w, d }) => formattedStr;
@@ -83,9 +90,9 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         
       })});
       
-      let rootFsKeep = FsKeep(rootTrn, Filepath([]));
-      let hutKeep = await hutKeepPrm;
+      let hutKeep = rootFsKeep.kidFromFp(hutFp);
       let millKeep = hutKeep.dive('mill');
+      
       hutKeep.forbid = { 'mill': 1, '.git': 1 };
       
       let rootKeep = RootKeep({
@@ -221,7 +228,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         if (invalidFeature) throw Error(`Invalid feature: "${invalidFeature}"`);
         /// =DEBUG}
         
-        let content = await keep.getContent('utf8');
+        let content = await keep.getData('utf8');
         if (!content) throw Error(`Api: no sourcecode available from ${keep.desc()}`);
         
         let srcLines = content.split(/\r?\n/);
@@ -388,7 +395,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         });
         
         if (!lines.count()) {
-          await cmpKeep.setContent(`'use strict';`); // Write something to avoid recompiling later
+          await cmpKeep.setData(`'use strict';`); // Write something to avoid recompiling later
           return cmpKeep;
         }
         
@@ -445,26 +452,27 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           
         }
         
-        await cmpKeep.setContent(lines.join('\n'));
+        await cmpKeep.setData(lines.join('\n'));
         
         return cmpKeep;
         
       };
       global.mapCmpToSrc = (cmpDiveToken, row, col) => {
         
-        // Note `file` is a String with sequential slashes (bwds and fwds)
-        // replaced with a single forward slash
         // Returns `{ file, col, row, context }`
+        // Note the `file` value is a String with repeated slashes (bwds and fwds) replaced with a
+        // single forward slash
         
         let mapCmpKeep = global.keep(cmpDiveToken);
         
         // Only map compiled files
-        if (!cmpKeep.contains(mapCmpKeep)) return { file: mapCmpKeep.desc(), row, col, context: null };
+        if (!cmpKeep.is(mapCmpKeep).par) return { file: mapCmpKeep.desc(), row, col, context: null };
         
-        // Path looks like "..../path/to/compiled/<bearing>/<roomName>
-        let [ bearing, roomName, cmp ] = mapCmpKeep.fp.cmps.slice(cmpKeep.fp.cmps.length);
+        // Path looks like "..../path/to/compiled/<bearing>/<roomName>"
+        let [ bearing, roomName, cmp ] = mapCmpKeep.fd.slice(cmpKeep.fd.length);
         
-        let { offsets } = global.rooms[roomName];
+        // TODO: HEEEEEEERE suddenly we are trying to `mapCmpToSrc` rooms which haven't been inserted yet into "offsets"? (Is there a mis-mapping with casing?? New FsKeep makes everything lowercase!)
+        let { offsets } = global.rooms[roomName] ?? { offsets: [] };
         
         let context = {};   // Store metadata from final relevant offset
         let srcRow = 0;     // The line of code in the source which maps to the line of compiled code
@@ -485,8 +493,9 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         
         let roomPcs = roomName.split('.');
         let roomPcLast = roomPcs.at(-1);
+        let fileFk = srcKeep.kid([ ...roomPcs, roomPcLast + '.js' ]);
         return {
-          file: srcKeep.fp.kid([ roomPcs, roomPcLast + '.js' ]).desc(),
+          file: srcKeep.kid([ ...roomPcs, roomPcLast + '.js' ]).desc(),
           row: srcRow,
           col: srcCol,
           context
@@ -513,14 +522,14 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
               });
               
               let roomCmpKeep = cmpKeep.dive([ bearing, name, 'cmp' ]);
-              await roomCmpKeep.setContent(lines.join('\n'));
+              await roomCmpKeep.setData(lines.join('\n'));
               
               let roomDbgKeep = cmpKeep.dive([ bearing, name, 'debug' ]);
-              await roomDbgKeep.setContent(valToSer({ offsets }));
+              await roomDbgKeep.setData(valToSer({ offsets }));
               
               global.rooms[name] = { offsets }; // Make debug info available before `require` to help map SyntaxErrors
               
-              require(roomCmpKeep.fp.fsp()); // Need to stop pretending like `cmpKeep` is a generic Keep (although maybe could `eval` it??)
+              require(roomCmpKeep.fp); // Need to stop pretending like `cmpKeep` is a generic Keep (although maybe could `eval` it??)
               if (!global.rooms[name]) throw Error(`Room "${name}" didn't set global.rooms['${name}']`);
               if (!hasForm(global.rooms[name], Function)) throw Error(`Room "${name}" set non-function at global.rooms['${name}']`).mod({ value: global.rooms[name] });
               
@@ -596,12 +605,6 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
     };
     
     { // RUN DAT
-      
-      let activateTmp = Tmp();
-      
-      // Hacky: want `activateTmp` to end if the process exits, but it should do so before other exit
-      // handlers trigger
-      processExitSrc.route(() => activateTmp.end());
       
       // Clear data from previous runs
       await Promise.all([
@@ -683,13 +686,13 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
         
         // Initialize a Bank based on `keep`
         let bank = keep
-          ? KeepBank({ sc: deploySc.kid('bank'), keep: global.keep(keep) })
+          ? KeepBank({ sc: deploySc.kid('bank'), keep: global.keep(keep).kid({ mode: 'strong' }) })
           : WeakBank({ sc: deploySc.kid('bank') });
         
         // Get an AboveHut with the appropriate config
         let recMan = record.Manager({ bank, sc: deploySc.kid('manager') });
         let aboveHut = hut.AboveHut({ hid: uid, isHere: true, recMan, heartbeatMs, deployConf, sc: deploySc.kid('hut') });
-        activateTmp.endWith(aboveHut);
+        activeTmp.endWith(aboveHut);
         
         // Server management...
         let roadAuths = await Promise.all(protocols.toArr(async protocolOpts => {
@@ -732,7 +735,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           
           // Associate the Loft with the Therapy rec as soon as possible
           let loftRh = aboveHut.relHandler({ type: `${pfx}.loft`, term: 'hut', limit: 1 });
-          activateTmp.endWith(loftRh);
+          activeTmp.endWith(loftRh);
           loftRh.route(loftHrec => {
             
             // Once this Record is added, Therapy data can be accessed from the loftRec with:
@@ -771,7 +774,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
                   // into filenames so it's important to be certain (see realessay encoding solution)
                   // Consumers NEED to be agnostic of filename encoding requirements!!!!!! BAD!!
                   let ms = getMs();
-                  let streamUid = `!stream@${sc.term.replaceAll('.', '@')}`;
+                  let streamUid = `!stream@${sc.term}`;
                   
                   (async () => {
                     
@@ -847,10 +850,10 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           rec:     aboveHut,
           netIden: netIdenDeployConf.netIden
         });
-        activateTmp.endWith(loftTmp);
+        activeTmp.endWith(loftTmp);
         
         // Run load-testing if configured
-        if (loadtest) activateTmp.endWith(loadtest.run());
+        if (loadtest) activeTmp.endWith(loadtest.run());
         
       };
       
@@ -878,13 +881,13 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
       for (let { netIden, deployConfs } of netIdenMap.values()) {
         
         let runOnNetworkTmp = await netIden.runOnNetwork(deployConfs.map(dpc => dpc.loft.name.split('.').at(-1)).join('+'));
-        activateTmp.endWith(runOnNetworkTmp);
+        activeTmp.endWith(runOnNetworkTmp);
         await runOnNetworkTmp.prm;
         
         setupSc.kid('deploy')(() => {
           
           let str = String.baseline(`
-            | Hut deployed to network!
+            | Hut with identity "${netIden.name}" exposed to network
             | 
             | Network config:
             | ${'\u2022'} Identity: "${netIden.name}"
@@ -905,7 +908,7 @@ module.exports = async ({ hutFp: hutFpRaw, conf: rawConf }) => {
           
         });
         
-        runOnNetworkTmp.endWith(() => setupSc.kid('deploy')(`Hut with removed from network (identity: "${netIden.name}")`));
+        runOnNetworkTmp.endWith(() => setupSc.kid('deploy')(`Hut with identity "${netIden.name}" removed from network `));
         
       }
       

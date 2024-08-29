@@ -28,11 +28,12 @@ module.exports = () => {
   // https://github.com/nodejs/node-v0.x-archive/issues/6339
   let evts = 'hup,int,pipe,quit,term,tstp,break'.split(',');
   let haltEvts = Set('int,term,quit'.split(','));
-  for (let evt of evts) process.on(`sig${evt}`.upper(), (...args) => {
-    gsc(`Received event: "${evt}"`, args);
+  for (let evt of evts) process.on(`sig${evt}`.upper(), (term, code) => {
+    let expectedCode = isForm(code, Number);
+    gsc(`Process received event "${term.lower()}" (code: ${code}${expectedCode ? '' : '??'})`);
     if (haltEvts.has(evt)) {
       process.exitSig = evt;
-      process.exit(isForm(args[1], Number) ? args[1] : -1);
+      process.exit(expectedCode ? code : -1);
     }
   });
 

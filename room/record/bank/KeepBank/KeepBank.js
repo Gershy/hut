@@ -2,27 +2,17 @@ global.rooms['record.bank.KeepBank'] = async () => {
   
   return form({ name: 'KeepBank', has: { Endable }, props: (forms, Form) => ({
     
-    $casedCmp: term => {
-      
-      if (term.length > 32) throw Error(`Term "${term}" is too long (max 32 chars)`);
-      
-      // Map string to [01]; 0 for lower, 1 for upper...
-      let mask = [ ...term ].reverse().map(char => (char === char.lower()) ? '0' : '1').join('');
-      
-      // Simply parse as base-2, and encode as hex
-      return term.lower() + '@' + parseInt(mask, 2).toString(16);
-      
-    },
-    $uncasedCmp: term => {
-      
-      let ind = term.lastIndexOf('@');
-      let cmp = term.slice(0, ind);
-      let mask = term.slice(ind + 1);
-      
-      let bits = [ ...parseInt(mask, 16).bits() ];
-      return cmp.split('').map((char, i) => bits[i] ? char.upper() : char.lower()).join('');
-      
-    },
+    // TODO: It's KeepBank's responsibility to make indexing and offsetting possible:
+    // - Indexing can be done by maintaining separate indices in the root `KeepBank(...).keep`
+    // - Offsetting can be done, without relying on OS-level offsetting, by splitting Recs of a
+    //   Type across multiple different nodes, e.g. "0..99", "100..199", "200..299" etc.
+    //   - Choose an arbitrary partition size? E.g. 100???
+    //   - Tricky, as Rec deletions may necessitate defragging such nodes (or, we could decide to
+    //     *never* defrag nodes? Could lead to many empty directories, e.g. all the way up to
+    //     "52100..52199")
+    
+    // TODO: Does a KeepBank still need to do its own ownership locking?? (Even if it's sitting on a
+    // Keep which has its own ownership guarantees?)
     
     init({ keep, lockTimeoutMs=500, encoding='json', sc=global.subcon('bank.keep'), ...args }) {
       
@@ -42,53 +32,44 @@ global.rooms['record.bank.KeepBank'] = async () => {
         readyPrm: null,
         sc,
         
-        // Even a Keep-based Bank occasionally requires "hot" references
-        // to Records; a "hot" reference is simply a synchronously
-        // available, in-memory reference. These are primarily used for
-        // two purposes:
-        // 1. Volatile Records are never persisted in the Keep; they are
-        //    always persisted via hot references
-        // 2. All other Records are temporarily hot until they've been
-        //    fully persisted into the Keep (this eliminates a race
-        //    condition where a Record is created very close to when it
-        //    is queried for; if there was no hot reference it may not
-        //    show up in the query, and then be created immediately
-        //    after)
+        // Even a Keep-based Bank occasionally requires "hot" references to Records; a "hot"
+        // reference is simply a synchronously available, in-memory reference. These are primarily
+        // used for two purposes:
+        // 1. Volatile Records are never persisted via Keep; only via hot references
+        // 2. All other Records are temporarily hot until they've been fully persisted into the
+        //    Keep (eliminating a race condition where Records are queried very soon after being
+        //    created; without a hot reference it would not show up in the query, and then be
+        //    created immediately after)
         hotRecs: Object.plain() // { type: { uid1: rec1, uid2: rec2, ... } }
         
       });
       
-      // TODO: This "locking" mechanism is *still* prone to race
-      // conditions. It's possible for a process to think no previous
-      // lock exists and to write its own lock, but after writing it may
-      // be the case an unexpected lock value has been written; the
-      // equivalent of a process like redis(??) is needed here
       this.readyPrm = (async () => {
         
-        let infoKeep = await this.keep.dive([ 'meta', 'info' ]);
-        let lockKeep = await this.keep.dive([ 'meta', 'lock' ]);
+        let infoKeep =   await this.keep.dive([ 'meta', 'info' ]);
+        let lockKeep =   await this.keep.dive([ 'meta', 'lock' ]);
         let accessKeep = await this.keep.dive([ 'meta', 'access' ]);
-        let nextKeep = await this.keep.dive([ 'meta', 'next' ]);
+        let nextKeep =   await this.keep.dive([ 'meta', 'next' ]);
         
-        if (!(await infoKeep.getContent(this.encoding)))  await infoKeep.setContent({ v: '0.0.1', created: Date.now() }, this.encoding);
-        if (!(await lockKeep.getContent()))               await lockKeep.setContent(this.lock, 'utf8');
-        if (!(await accessKeep.getContent()))             await accessKeep.setContent(Date.now().encodeStr(), 'utf8');
-        if (!(await nextKeep.getContent()))               await nextKeep.setContent((0).toString(16), 'utf8');
+        if (!(await infoKeep.getData('json')))   await infoKeep.setData({ v: '0.0.1', created: Date.now() }, 'json');
+        if (!(await lockKeep.getData('utf8')))   await lockKeep.setData(this.lock, 'utf8');
+        if (!(await accessKeep.getData('utf8'))) await accessKeep.setData(Date.now().encodeStr(), 'utf8');
+        if (!(await nextKeep.getData('utf8')))   await nextKeep.setData((0).toString(16), 'utf8');
         
-        let lock = await lockKeep.getContent('utf8');
+        let lock = await lockKeep.getData('utf8');
         if (lock !== this.lock) {
-          let msElapsed = Date.now() - (await accessKeep.getContent('utf8')).encodeInt();
+          let msElapsed = Date.now() - (await accessKeep.getData('utf8')).encodeInt();
           if (msElapsed < this.lockTimeoutMs) throw Error(`Can't initialize ${getFormName(this)} on Keep ${this.keep.desc()} - it's locked and was accessed ${(msElapsed / 1000).toFixed(2)}s ago`);
         }
         
         await Promise.all([
           
           // Update our "next uid"
-          nextKeep.getContent('utf8').then(uid => this.nextUid = uid.encodeInt()),
+          nextKeep.getData('utf8').then(uid => this.nextUid = uid.encodeInt()),
           
           // Mark the Keep as "locked"
-          lockKeep.setContent(this.lock, 'utf8'),
-          accessKeep.setContent(Date.now().encodeStr(), 'utf8')
+          lockKeep.setData(this.lock, 'utf8'),
+          accessKeep.setData(Date.now().encodeStr(), 'utf8')
           
         ]);
         
@@ -101,7 +82,7 @@ global.rooms['record.bank.KeepBank'] = async () => {
     
     getNextUid() {
       
-      this.keep.access([ 'meta', 'next' ]).setContent((this.nextUid + 1).encodeStr(), 'utf8');
+      this.keep.access([ 'meta', 'next' ]).setData((this.nextUid + 1).encodeStr(), 'utf8');
       this.sc(`KeepBank generated uid: ${(this.nextUid + 1).encodeStr(String.base62, 8)}`);
       return this.nextUid++;
       
@@ -132,17 +113,17 @@ global.rooms['record.bank.KeepBank'] = async () => {
       // Always hold volatile Record in memory
       if (rec.volatile) return rec.endWith(hotTmp);
       
-      let casedUid = Form.casedCmp(rec.uid);
+      let { uid } = rec;
       
       // Make `rec` retrievable by RelHandlers; need to hold `rec` in `this.volatileRecs` until it
       // gets persisted, at which point it should be immediately removed from `this.volatileRecs`
       try {
         
         // Load initially store `rec` depending on if it was seen before
-        let meta = await this.keep.access([ 'rec', casedUid, 'm' ]).getContent(this.encoding);
+        let meta = await this.keep.access([ 'rec', uid, 'm' ]).getData('json');
         if (meta) {
           
-          let val = await this.keep.access([ 'rec', casedUid, 'v' ]).getContent(this.encoding);
+          let val = await this.keep.access([ 'rec', uid, 'v' ]).getData('json');
           this.sc(`${rec.desc()} has a preexisting value`, val);
           rec.setValue(val);
           
@@ -151,11 +132,11 @@ global.rooms['record.bank.KeepBank'] = async () => {
           this.sc(`${rec.desc()} is being synced from scratch...`);
           
           // Store metadata
-          await this.keep.access([ 'rec', casedUid, 'm' ]).setContent({
+          await this.keep.access([ 'rec', uid, 'm' ]).setData({
             type: rec.type.name,
             uid: rec.uid,
             mems: rec.group.mems.map(mem => mem.uid),
-          }, this.encoding);
+          }, 'json');
           
         }
         
@@ -164,24 +145,24 @@ global.rooms['record.bank.KeepBank'] = async () => {
       // Reflect any changes to `rec`'s value in the Keep
       rec.valueSrc.route(delta => {
         let value = rec.getValue();
-        this.keep.access([ 'rec', casedUid, 'v' ]).setContent(value, this.encoding);
+        this.keep.access([ 'rec', uid, 'v' ]).setData(value, 'json');
         this.sc(`Synced ${rec.desc()}.getValue():`, value);
       }, 'prm');
       
       rec.endWith(() => {
-        rec.endedPrm = this.keep.access([ 'rec', casedUid ]).rem();
+        rec.endedPrm = this.keep.access([ 'rec', uid ]).rem();
         this.sc(`Removed ${rec.desc()}`);
       }, 'prm');
       
     },
     async selectUid(uid) {
       
-      let childKeep = this.keep.seek('rec', Form.casedCmp(uid));
+      let childKeep = this.keep.seek('rec', uid);
       let metaKeep = childKeep.access('m');
-      let meta = await metaKeep.getContent(this.encoding);
+      let meta = await metaKeep.getData('json');
       if (!meta) return null;
       
-      return { rec: null, ...meta, getValue: () => childKeep.access('v').getContent(this.encoding) };
+      return { rec: null, ...meta, getValue: () => childKeep.access('v').getData('json') };
       
     },
     
@@ -212,18 +193,17 @@ global.rooms['record.bank.KeepBank'] = async () => {
       
       if (activeSignal.onn()) {
         
-        let keeps = await this.keep.dive('rec').iterateChildren();
-        try { for await (let [ casedCmp, childKeep ] of keeps) {
+        let keeps = await this.keep.dive('rec').getKids();
+        try { for await (let [ uid, childKeep ] of keeps) {
           
           if (activeSignal.off()) break;
           
           // It's possible the Record is Banked but also Hot, and would
           // have already been yielded earlier - don't yield it again!
-          let uid = Form.uncasedCmp(casedCmp);
           if (seen.has(uid)) continue;
           
           // Don't return children with `null` "m" ("meta") content
-          let meta = await childKeep.access('m').getContent(this.encoding);
+          let meta = await childKeep.access('m').getData(this.encoding);
           if (!meta) continue; // `meta` may be `null` if it was deleted recently
           
           // Filter out any Records whose Type doesn't match
@@ -238,10 +218,10 @@ global.rooms['record.bank.KeepBank'] = async () => {
             uid,
             type: meta.type,
             mems: meta.mems,
-            getValue: () => childKeep.access('v').getContent(this.encoding)
+            getValue: () => childKeep.access('v').getData(this.encoding)
           };
           
-        }} finally { keeps.close(); }
+        }} finally { keeps.end?.(); }
         
       }
       

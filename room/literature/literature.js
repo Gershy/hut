@@ -72,10 +72,10 @@ global.rooms['literature'] = async () => {
       });
     },
     
-    async setContent(chain) {
+    async setData(chain) {
       
       /// {DEBUG=
-      if (!this.scribe) throw Error('Api: called setContent before activateBelow');
+      if (!this.scribe) throw Error('Api: called setData before activateBelow');
       /// =DEBUG}
       
       // TODO: This approach makes it impossible to have shared experiences within the Literature
@@ -120,7 +120,7 @@ global.rooms['literature'] = async () => {
         if (newContentChain === contentChain) return;
         contentChain = newContentChain;
         
-        this.setContent(diveToken);
+        this.setData(diveToken);
         
       });
       tmp.endWith(locusLoadRoute);

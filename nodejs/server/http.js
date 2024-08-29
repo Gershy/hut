@@ -381,7 +381,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
             let keepHeaders = { 'Content-Disposition': 'inline', ...resHeaders };
             this.res.writeHead(200, keepHeaders);
             
-            let pipe = await keep.getTailStream();
+            let pipe = await keep.getDataTailStream();
             if (encode) {
               
               let err = Error('trace');
