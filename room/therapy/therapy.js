@@ -34,18 +34,27 @@ global.rooms['therapy'] = async (roomName, therapyKeep) => {
         
         let loft = lofter.m('loft');
         
+        dep(experience.real.addReal('title', {
+          Geom: { w: '100%' },
+          Text: { text: 'Therapy', align: 'mid', size: '180%' }
+        }));
+        
         dep.scp(loft, 'therapyLoft', (therapyLoft, dep) => {
           
           let therapy = therapyLoft.m('therapy');
           dep.scp(therapy, 'stream', (stream, dep) => {
             
+            // THERAPYWTF
+            console.log('STREAM START', stream);
+            dep(() => console.log('STREAM END', stream));
+            
             let streamReal = experience.real.addReal('stream', {
-              Geom: { w: '100%', h: '80vh' },
+              Geom: { w: '100%' },
               Axis1d: { axis: 'y', mode: 'stack' },
-              Decal: { border: { ext: '3px', colour: '#000' } }
+              Decal: { border: { ext: '1px', colour: '#000' } }
             });
             streamReal.addReal('title', {
-              Text: { size: '150%', text: stream.getValue('term'), spacing: { v: '10px' } }
+              Text: { text: stream.getValue('term'), size: '150%', spacing: { v: '10px' } }
             });
             
             let notionsReal = streamReal.addReal('notions', {

@@ -3,8 +3,6 @@
 require('../room/setup/clearing/clearing.js');
 let nodejs = [ 'path', 'fs' ].toObj(t => [ t, require(`node:${t}`) ]);
 
-let getUid = () => (Number.int32 * Math.random()).encodeStr(String.base32, 7);
-
 let fs = (fs => ({
   ...fs.promises,
   ...fs.slice([ 'createReadStream', 'createWriteStream' ])
@@ -124,7 +122,7 @@ let FilesysTransaction = form({ name: 'FilesysTransaction', has: { Tmp }, props:
     throw Error('Api: unexpected filesystem entity').mod({ stat });
     
   },
-  async xSwapLeafToNode(fp, { tmpCmp=`~${getUid()}` }={}) {
+  async xSwapLeafToNode(fp, { tmpCmp=`~${String.id()}` }={}) {
     
     // We want a dir to replace an existing file (without reads on
     // that previously existing file to fail) - so we replace the

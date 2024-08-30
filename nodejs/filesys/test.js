@@ -35,7 +35,7 @@ let shouldFail = fn => {
   return err;
   
 };
-let inTmpDir = async (fn, { tmpUid=Math.random().toString(36).slice(2, 8) }={}) => {
+let inTmpDir = async (fn, { tmpUid=String.id(6) }={}) => {
   
   let { path, fs } = nodejs;
   
@@ -760,12 +760,8 @@ let tests = [
     let { fs, path, os } = nodejs;
     
     let fp = path.join('C:/dev/proj/lmao.txt');
-    let rand = () => Math.random().toString(36).slice(2);
     let doWrite = async () => {
-      //let tmpFp = path.join(os.tmpdir(), rand());
-      //await fs.writeFile(tmpFp, valToJson({ a: rand(), b: rand(), c: rand() }));
-      //await fs.rename(tmpFp, fp);
-      await fs.atomicWrite(fp, valToJson({ a: rand(), b: rand(), c: rand() }));
+      await fs.atomicWrite(fp, valToJson({ a: String.id(), b: String.id(), c: String.id() }));
     };
     let doRead = () => fs.readFile(fp).then(val => ({ result: true, ...jsonToVal(val) })).catch(err => ({ result: false, err }));
     

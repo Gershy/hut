@@ -840,8 +840,6 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
           
           /// {BELOW=
           
-          let dbg = (Math.random() < 0.1) ? gsc : ()=>{};
-          
           let pieceReal = dep(boardReal.addReal('piece', {
             
             Geom: { anchor: 'tl', shape: 'oval', w: tileVal(1), h: tileVal(1) },

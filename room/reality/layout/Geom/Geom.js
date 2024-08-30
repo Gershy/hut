@@ -3,13 +3,11 @@ global.rooms['reality.layout.Geom'] = async () => {
   let { Layout } = await getRoom('reality.real.Real');
   return form({ name: 'Geom', has: { Layout }, props: (forms, Form) => ({
     
-    // Note that an explicit concept of "Ghost" Reals is needed; Geom
-    // will fail to work for absolute positioned stuff! May need to
-    // check (EW!!) if the Real is already absolutely positioned, and
-    // apply positioning differently if it isssss
-    // BTW, how do Ghosts interact with Axis1d (or anything that adds
-    // child layouts)?? The Ghostly Real will have Axis1d$Item applied
-    // and that is *no good*
+    // Note that an explicit concept of "Ghost" Reals is needed; Geom will fail to work for
+    // absolute positioned stuff! May need to check (EW!!) if the Real is already absolutely
+    // positioned, and apply positioning differently if it isssss...
+    // BTW, how do Ghosts interact with Axis1d (or anything that adds child layouts)?? The Ghostly
+    // Real will have Axis1d$Item applied and that is *no good*
     
     $props: 'shape,w,h,anchor,x,y,z'.split(','),
     

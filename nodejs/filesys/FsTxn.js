@@ -82,7 +82,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     throw Error('Api: unexpected filesystem entity').mod({ stat });
     
   },
-  $xSwapLeafToNode: async (fk, { tmpCmp=`~${(Number.int32 * Math.random()).encodeStr(String.base32, 7)}` }={}) => {
+  $xSwapLeafToNode: async (fk, { tmpCmp=`~${String.id()}` }={}) => {
     
     // We want a dir to replace an existing file (without reads on that previously existing file to
     // fail) - so we replace the file with a directory containing a "default value file"
@@ -302,7 +302,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
   
   $initCfg: async cfg => {
     
-    let ownerId = Math.random().toString(36).slice(2).padHead('0', 11);
+    let ownerId = String.id();
     
     let hutFsNode = cfg.rootFk.kid([ '.hutfs' ]);
     let ownershipFk = hutFsNode.kid([ 'owner' ]);
@@ -435,10 +435,6 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
   init({ cfg, fk=FsKeep([]) }={ cfg: { /* ownershipTimeoutMs: 2000, throttler: fn => fn() */ } }) {
     
     if (!isForm(fk, FsKeep)) throw Error('Api: must provide fk');
-    
-    // TODO: HEEERE `rootFk` -> `fk`, `FsKeep(...).access(...)` uses kidFromFp, FsTxn root fks
-    // should *not go in the filesystem root* - they should go under "mill", overall try to get
-    // `node hut.js` working! I think it's almost there!!
     
     // Note that even for the "holder" FsTxn (the one whose creation initiates ownership), there
     // may be a difference between:

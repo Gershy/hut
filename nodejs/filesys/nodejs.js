@@ -48,7 +48,7 @@ module.exports = (() => {
   };
   let fsAtomicWrite = async (fp, data, opts={}) => {
     
-    let tmpFp = path.join(os.tmpdir(), Math.random().toString(36).slice(2));
+    let tmpFp = path.join(os.tmpdir(), String.id());
     await fs.promises.writeFile(tmpFp, data, opts);
     await fsRename(tmpFp, fp, opts);
     

@@ -269,7 +269,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
       reply(String.multiline(`
         let { worker } = Object.assign(self, { global: self, worker: self, rooms: Object.create(null) });
         
-        let shwUid = Math.random().toString(36).slice(2);
+        let shwUid = String.id(10);
         global.confPrm = new Promise(r => global.resolveConf = r);
         worker.bufferedTabs = [];
         worker.bufferedEvts = [];
@@ -285,7 +285,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
           // ---------------------------------------------------------------------------
           // The rest is pure debug
           
-          let tabUid = Math.random().toString(36).slice(2);
+          let tabUid = String.id(10);
           gsc('Hi its the Worker. A new tab connected to me', { tabUid, tab });
           
           tab.ports.each(port => {

@@ -269,6 +269,7 @@ Object.assign(global, {
         }
       };
     },
+    $id: (size=10, n=Math.random()) => n.toString(36).slice(2, 2 + size).padHead(size, '0'), // Default settings: 36 ^ 10 = 3656158440062976 possibilities
     $base32: '0123456789abcdefghijklmnopqrstuv',
     $base36: '0123456789abcdefghijklmnopqrstuvwxyz',
     $base62: '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ',
@@ -328,6 +329,7 @@ Object.assign(global, {
     
     $int32: Math.pow(2, 32),
     $int64: Math.pow(2, 64),
+    $floatPrecision: Math.pow(2, 53) - 1,
     
     char() { return String.fromCharCode(this); },
     each(fn) { for (let i = 0; i < this; i++) fn(i); },
@@ -992,7 +994,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
       
       // In "dev" use a random version to dodge the cache
       case 'dev':
-        return uriRaw({ path, query, cacheBust: (Number.int32 * Math.random()).encodeStr(String.base32, 7) });
+        return uriRaw({ path, query, cacheBust: String.id(8) });
       
         // In "beta" use process uid (refreshes once when Above restarts)
       case 'beta':

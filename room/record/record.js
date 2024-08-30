@@ -1096,7 +1096,7 @@ global.rooms['record'] = async () => {
       // Type, but distinct Term)
       let key = fixed
         ? `${type.name}/${term}/${offset}:${limit}`
-        : `${type.name}/${term}/u:${Math.random().toString(16).slice(2)}`;
+        : `${type.name}/${term}/u:${String.id(10)}`;
       
       if (!this.relHandlers[key]) {
         

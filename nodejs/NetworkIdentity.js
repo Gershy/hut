@@ -17,13 +17,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
   }),
   
-  $subcon: Object.plain({
-    server: subcon('netIden.server'),
-    sign: subcon('netIden.sign'),
-    acme: subcon('netIden.acme')
-  }),
-  
-  $tmpFp: () => nodejs.path.join(require('os').tmpdir(), Math.random().toString('16').slice(2)),
+  $tmpFp: () => nodejs.path.join(require('os').tmpdir(), String.id(10)),
   $setFp: (...args /* fp, data */) => {
     let [ fp, data=null ] = (args.length === 2) ? args : [ Form.tmpFp(), args[0] ];
     return nodejs.fs.promises.writeFile(fp, data).then(() => fp);
@@ -217,7 +211,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       redirectHttp80,
       
       // Misc
-      sc: sc.kid([], { $: { netIden: name } }),
+      sc: sc.kid('netIden', { $: { name } }),
       
       // Servers managed under this NetworkIdentity
       servers: []
@@ -316,7 +310,6 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   runInShell(args, opts={}) {
     
     if (hasForm(opts, Function)) opts = { onInput: opts };
-    let { sc=this.sc.kid('shell') } = opts;
     
     // Note that `timeoutMs` counts since the most recent chunk
     let { onInput=null, timeoutMs=2000 } = opts;
@@ -340,7 +333,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     }
     
     let rawShellStr = `${shellName} ${shellArgs.join(' ')}`;
-    sc({ shellCmd: rawShellStr }, ...(opts.scParams ? [ opts.scParams ] : []));
+    this.sc.kid('shell')({ shellCmd: rawShellStr }, ...(opts.scParams ? [ opts.scParams ] : []));
     
     let proc = require('child_process').spawn(shellName, shellArgs, {
       cwd: '/',
@@ -630,12 +623,11 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
     let keep = this.keep.dive(diveToken);
     
-    let json = encoding === 'json';
-    let val = await keep.getData(json ? null : encoding);
-    if (val) return json ? jsonToVal(val) : val;
+    let val = await keep.getData(encoding);
+    if (val) return val;
     
     val = await fn();
-    await keep.setData(json ? valToSer(val) : val);
+    await keep.setData(val, encoding);
     
     return val;
     
@@ -664,7 +656,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       //    |   validity: { msElapsed, msRemaining, expiryMs }
       //    | }
       
-      let sc = this.sc.kid('sgn', { $: { netIdenSgn: Math.random().toString(36).slice(2, 6) } });
+      let sc = this.sc.kid('sgn', { $: { sgn: String.id(4) } });
       
       sc({ msg: 'init acquiring sgn' });
       

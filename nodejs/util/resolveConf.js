@@ -104,7 +104,7 @@ let confyRoot = (() => {
   // - "host": hosting info for this deployment
   let confyDeployKids = confyDeploy.confy.all.kids;
   confyDeployKids.enabled = ConfyVal({ settle: 'bln', def: true });
-  confyDeployKids.uid = ConfyVal({ settle: 'str', def: () => Math.random().toString(36).slice(2, 8), fn: uid => {
+  confyDeployKids.uid = ConfyVal({ settle: 'str', def: () => String.id(6), fn: uid => {
     if (!/^[a-zA-Z0-9]+$/.test(uid)) throw Error('requires alphanumeric string').mod({ value: uid });
     return uid;
   }});

@@ -22,10 +22,9 @@ global.rooms['record.bank.KeepBank'] = async () => {
         keep,
         encoding,
         
-        // Note intentional use of `Math.random()` instead of an
-        // instantiated Random Form; this "lock" value is hopefully as
-        // non-deterministic as possible!
-        lock: (Number.MAX_SAFE_INTEGER * Math.random()).encodeStr(),
+        // Note intentional use of `Math.random()` (backing `String.id`) instead of an instantiated
+        // Random Form; this "lock" value is hopefully as non-deterministic as possible!
+        lock: String.id(10),
         lockTimeoutMs,
         
         nextUid: null,

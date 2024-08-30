@@ -413,6 +413,7 @@ global.rooms['setup.hut'] = async () => {
         if (hid && global.conf('global.maturity') !== 'dev') hid = null;
         
         // Supply a default hid if the client didn't supply one
+        // Note we avoid `String.id` as its space is smaller and this is a security-related value
         // TODO: Use a random instance?
         if (!hid) hid = [ this.childUidCnt++, Math.floor(Math.random() * 62 ** 8) ]
           .map(v => v.encodeStr(String.base62, 8))
@@ -605,7 +606,7 @@ global.rooms['setup.hut'] = async () => {
           
           // Duplicated syncs occurs when Above restarts - the new Above doesn't remember it synced
           // us - this is a good way to detect when a reload is needed!
-          // TODO: HEEERE looks like Therapy rapidly reloads and then fails in a loop here:
+          // THERAPYWTF
           if (cause.message.startsWith('Api: Duplicated sync')) window.location.reload();
           
           throw err.mod({ msg: 'Error syncing - did the AboveHut stop unexpectedly?', cause });
@@ -814,9 +815,10 @@ global.rooms['setup.hut'] = async () => {
         if (rec === this) return skip;          // Don't follow ourself
         if (rec === this.aboveHut) return skip; // Don't follow our AboveHut
         
+        // UNCHANGINGRECWTF
         // let { schema } = rec.type;
         // let unchanging = !schema.mod && !schema.rem; // We can make several optimizations to "unchanging" Records
-        // if (unchanging) return; // TODO: HEEERE how dare you! Test thisss!!!! (AND WHY IS THERAPY FAILING??)
+        // if (unchanging) return; // TODO: How dare you! This doesn't seem safe AT ALL!!! TEST THISSS!!!!!!!
         
         // Ref a pre-existing Follow again; Note Records can be followed via multiple independent
         // Scope chains - just because a single Scope chain ends and `end` is called on its Follow

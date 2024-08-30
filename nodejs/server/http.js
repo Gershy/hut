@@ -67,7 +67,6 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       await Promise((rsv, rjc) => {
         server.once('listening', rsv);
         server.once('error', cause => rjc(err.mod({ msg: 'Failed to open server', cause }).suppress()));
-        
         server.listen(this.port, this.netAddr);
       });
       
@@ -129,11 +128,11 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       
       // STRIKE: `msg.command` doesn't look like `/^[a-z]+[:][a-zA-Z0-9]+$/`
       
-      subcon('roadAuth.http')(() => ({
-        belowNetAddr,
-        incoming: { path, hutCookie, query, body },
-        resolved: msg
-      }));
+      this.sc.kid('incoming')({
+        netGate: this.getNetGate(),
+        belowNetAddr, path, hutCookie, query, body,
+        command: msg
+      });
       
       // These can't be confined to DEBUG blocks - must always detect malformatted remote queries!
       let { hid=null, trn } = msg;
@@ -217,7 +216,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
           roadAuth, sc: roadAuth.sc, ms, req, res,
           belowNetAddr: req.connection.remoteAddress,
           context: {
-            id: Math.random().toString(36).slice(2),
+            id: String.id(10),
             belowNetAddr: req.connection.remoteAddress,
             url: req.url,
             method: req.method.lower(),
@@ -234,7 +233,10 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         
         // Note that the `return` value from `Promise(...).finally` is ignored; the return value
         // can't be intercepted using `finally` - that's what we desire here!
-        this.resultPrm = this.processAndPopulate().finally(() => this.sc({ event: 'hear', ...this.context }));
+        this.resultPrm = this.processAndPopulate()
+          // `finally` is useful as `this.context` is gradually built, and we're certain to log it
+          // even if `this.processAndPopulate` unexpectedly errors
+          .finally(() => this.sc({ event: 'hear', ...this.context }));
         
       },
       
@@ -429,7 +431,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       
       async processAndPopulate() {
         
-        let { req, res } = this;
+        let { req /*, res */ } = this;
         
         // STEP 1: BODY
         

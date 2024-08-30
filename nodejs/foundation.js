@@ -677,7 +677,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         let netIdenDeployConf = netIdenMap.get(key);
         if (!netIdenDeployConf) netIdenMap.set(key, netIdenDeployConf = {
           // This non-stub subcon won't cause therapy loops!
-          netIden: NetworkIdentity({ ...netIdenConf, sc: subcon('netIden') }),
+          netIden: NetworkIdentity({ ...netIdenConf, sc: subcon([]) }),
           deployConfs: []
         });
         netIdenDeployConf.deployConfs.push(deployConf);

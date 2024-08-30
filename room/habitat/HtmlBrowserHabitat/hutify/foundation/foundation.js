@@ -293,7 +293,7 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
     
     // Set our view under the hid; end this Foundation if the value ever
     // changes (indicating another Foundation has taken over)
-    let viewId = (Number.int32 * Math.random()).encodeStr(String.base32, 7);
+    let viewId = String.id(8);
     let hutKey = `view/${belowHid}`;
     storage.setItem(hutKey, `${viewId}/${Date.now().toString(32)}`);
     

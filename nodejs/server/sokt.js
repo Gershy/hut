@@ -215,7 +215,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         forms.Road.init.call(this, args);
         Object.assign(this, {
           sc: this.roadAuth.sc,
-          id: Math.random().toString(36).slice(2),
+          id: String.id(10),
           socket,
           frames: [],
           size: 0,

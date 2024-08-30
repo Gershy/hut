@@ -36,6 +36,7 @@ global.rooms['setup.hut.hinterland.RoadAuthority'] = async () => form({ name: 'R
   getBaseProtocol() { return this.protocol; },                                 // The same regardless of security; no extra "s" char
   getProtocol() { return this.secure ? this.protocol + 's' : this.protocol; }, // Append "s" if secure!
   getNetAddr() { return this.netProc.cut(':')[0]; },
+  getNetGate() { return `${this.getProtocol()}://${this.netProc}`; },
   getPort() { return this.netProc.cut(':')[1]; },
   desc() { return `${this.getProtocol()}://${this.netProc}`; },
   

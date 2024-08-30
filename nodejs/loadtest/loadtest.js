@@ -151,7 +151,7 @@ module.exports = async ({ aboveHut, netIden, instancesKeep, getServerSessionKey,
       let spawnInstance = () => {
         
         let lifetimeSc = sc.kid('subproc.lifetime');
-        let name = Math.random().toString(36).slice(2, 10);
+        let name = String.id(8);
         let belowKeep = instancesKeep.access(name);
         let inst = InsulatedInstance({
           name,
