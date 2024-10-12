@@ -39,7 +39,7 @@ let inTmpDir = async (fn, { tmpUid=String.id(6) }={}) => {
   
   let { path, fs } = nodejs;
   
-  let testFk = FsKeep.fromFp(path.join(__dirname, '..', 'mill', 'mud', tmpUid));
+  let testFk = FsKeep.fromFp(path.join(__dirname, '..', '..', 'mill', 'mud', tmpUid));
   
   try {
     await FsTxn.xEnsureLineage(testFk.par().lineage());
