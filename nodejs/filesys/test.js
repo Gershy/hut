@@ -174,11 +174,12 @@ let tests = [
     if (!err.message.hasHead('Api: invalid arg combination')) throw Error('Failed').mod({ cause: err });
     
   },
-  async () => { // FsKeep(...).kid(...) strong mode cannot combine with { sg: '...' }
+  async () => { // FsKeep(...).kid(...) strong may combine with { sg: '...' }
     
     let keep = FsKeep.fromFp('/test', { path: nodejs.path.win32 });
-    let err = shouldFail(() => keep.kid({ mode: 'strong' }, [ { sg: '^^' } ]));
-    if (!err.message.hasHead('Api: all Cmps must be Strings using "strong" mode')) throw Error('Failed').mod({ cause: err });
+    let kid = keep.kid({ mode: 'strong' }, [ { sg: '^^..<<' } ]);
+    
+    if (kid.fp !== 'C:/test/ir3ri2~l1') throw Error('failed');
     
   },
   async () => { // FsKeep(...).kid({ mode: 'strong' }, cmps) works

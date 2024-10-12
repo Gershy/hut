@@ -13,8 +13,8 @@ global.rooms['Hinterland'] = async () => {
   
   return form({ name: 'Hinterland', props: (forms, Form) => ({
     
-    // Hinterland is the space where BelowHuts come into being, and interact, under certain rules
-    // Use Hinterland to describe what rules an AboveHut will impose on its BelowHuts
+    // Hinterland is the space where BelowHuts come into being, and interact; use Hinterland to
+    // describe what rules an AboveHut imposes on its BelowHuts!
     // 
     // The AboveHut provided to `Hinterland(...).open({ aboveHut })` must already be appropriately
     // exposed on the network; Hinterland is unaware of any networking, it's only used to define
@@ -29,6 +29,8 @@ global.rooms['Hinterland'] = async () => {
     
     $prefixer: (pfx, term, delim='.') => term.hasHead(`${pfx}${delim}`) ? term : `${pfx}${delim}${term}`, // Note that (only) CommandHandlers use ":" as `delim` instead of "."
     $makeExperience: (prefix, hut, recMan, pfx=Form.prefixer.bound(prefix)) => ({
+      
+      hut,
       
       // The Loft defined by `this.above` and `this.below` should be able to omit prefixes for most
       // operations. For many operations this is handled be the "root" Record and Real which get

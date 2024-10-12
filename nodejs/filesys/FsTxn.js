@@ -178,7 +178,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     return fds.toObj(fd => {
       if (fd === '~')      return skip;
       if (fd === '.hutfs') return skip;
-      return [ fd, fk.kid([ fd ]) ];
+      return [ fk.mode === 'strong' ? FsKeep.nativeToStrong(fd) : fd, fk.kid([ { nt: fd } ]) ];
     });
     
   },

@@ -99,7 +99,8 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
     cmd('hut:hutify', async ({ src, reply, msg }) => {
       
       // TODO: Useragent detection at this point could theoretically replace the following content
-      // with a different html body that requests, e.g., IE9-compatible resources
+      // with a different html body that requests, e.g., IE9-compatible resources (would probably
+      // need to use a utility like Babel for this...)
       
       // The AfarHut immediately has its state reset, requiring a full sync to update. Then this
       // full sync is consumed here, to be included within the html response (the initial html and

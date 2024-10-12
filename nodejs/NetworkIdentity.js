@@ -211,12 +211,14 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       redirectHttp80,
       
       // Misc
-      sc: sc.kid('netIden', { $: { name } }),
+      sc: sc.focus('netIden'),
       
       // Servers managed under this NetworkIdentity
       servers: []
       
     });
+    
+    this.sc.head('initialize', { name });
     
     this.readyPrm = Promise.all([
       
@@ -289,10 +291,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       
     ]);
     
-    this.readyPrm.then(() => this.sc.kid('init')({
-      msg: 'resolved details',
-      ...{ ...this }.slice([ 'simpleDetails', 'keep', 'certificateType', 'secureBits' ])
-    }));
+    this.readyPrm.then(() => this.sc.tail('resolve-config', { ...this }.slice([ 'simpleDetails', 'keep', 'certificateType', 'secureBits' ])));
     
   },
   desc() {
@@ -333,7 +332,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     }
     
     let rawShellStr = `${shellName} ${shellArgs.join(' ')}`;
-    this.sc.kid('shell')({ shellCmd: rawShellStr }, ...(opts.scParams ? [ opts.scParams ] : []));
+    this.sc.kid('shell').note('execute-shell-command', { shellCmd: rawShellStr }, ...(opts.scParams ? [ opts.scParams ] : []));
     
     let proc = require('child_process').spawn(shellName, shellArgs, {
       cwd: '/',
@@ -571,7 +570,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   },
   async getOsslDetails({ csr, crt }) {
     
-    if (csr && crt) throw Error('Provide only one of "csr" and "crt"!');
+    if (csr && crt) throw Error('Provide only one of "csr" and "crt"!').mod({ csr, crt });
     
     let pemFp = await Form.setFp(csr || crt);
     
@@ -648,27 +647,26 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
     let getSgn = async () => {
       
-      // A SGN includes everything needed to manage a server with  a certified identity; it's more
-      // than just PRV + CSR + CRT as it includes some management functionality:
+      // A SGN includes everything needed to manage a server with a certified identity; think of
+      // it as PRV + CSR + CRT, coupled to some management functionality:
       //    | {
       //    |   prv, csr, crt,
       //    |   invalidate: () => { /* ... */ },
       //    |   validity: { msElapsed, msRemaining, expiryMs }
       //    | }
       
-      let sc = this.sc.kid('sgn', { $: { sgn: String.id(4) } });
+      let sc = this.sc.focus('sgn');
       
-      sc({ msg: 'init acquiring sgn' });
-      
+      sc.head('sgn-acquisition');
       let sgn = null; // Will look like `{ prv, csr, crt, invalidate }`
       if      (this.certificateType === 'selfSign')   sgn = await this.getSgnSelfSigned({ sc });
-      else if (this.certificateType.hasHead('acme/')) sgn = await this.getSgnAcme({ sc: sc.kid('acme') });
+      else if (this.certificateType.hasHead('acme/')) sgn = await this.getSgnAcme({ sc });
       else                                            throw Error(`Unknown crt acquisition method: "${this.certificateType}"`);
+      sc.tail('sgn-acquisition', { crt: sgn.crt });
       
-      sc({ msg: 'acquired sgn crt', crt: sgn.crt });
-      
+      sc.head('sgn-crt-details');
       let crtDetails = await this.getOsslDetails({ crt: sgn.crt });
-      sc({ msg: 'acquired sgn crt details', crtDetails });
+      sc.tail('sgn-crt-details', { crtDetails });
       
       let validity = null
         ?? crtDetails.data?.validity
@@ -706,30 +704,31 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     return { sgn, refresh };
     
   },
-  async getSgnSelfSigned({ sc=this.sc.kid('getSgn') }={}) {
+  async getSgnSelfSigned({ sc }={}) {
     
-    sc({ msg: 'acquiring selfSign prv' });
+    sc = sc.focus('selfSign');
+    
+    sc.head('acquire-prv');
     let prv = await this.retrieveOrCompute('selfSign.prv', 'utf8', () => {
       return this.getOsslPrv({ alg: 'rsa', bits: this.secureBits });
     });
-    sc({ msg: 'acquired selfSign prv', prv });
+    sc.tail('acquire-prv', { prv });
     
-    sc({ msg: 'acquiring selfSign csr cfg' });
+    sc.head('acquire-ossl-config');
     let cfg = this.getOsslConfigFileContent()
-    sc({ msg: 'acquired selfSign csr cfg', cfg });
+    sc.tail('acquire-ossl-config', { cfg });
     
-    
-    sc({ msg: 'acquiring selfSign csr' });
+    sc.head('acquire-csr');
     let csr = await this.retrieveOrCompute('selfSign.csr', 'utf8', () => {
       return this.getOsslCsr({ prv });
     });
-    sc({ msg: 'acquired selfSign csr', csr });
+    sc.tail('acquire-csr', { csr });
     
-    sc({ msg: 'acquiring selfSign crt' });
+    sc.head('acquire-crt');
     let crt = await this.retrieveOrCompute('selfSign.crt', 'utf8', () => {
       return this.getOsslCrt({ prv, csr });
     });
-    sc({ msg: 'acquired selfSign crt', crt });
+    sc.tail('acquire-crt', { crt });
     
     return { prv, csr, crt, invalidate: async () => {
       
@@ -750,11 +749,13 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     }};
     
   },
-  async getSgnAcme({ sc=this.sc.kid('acme') }={}) {
+  async getSgnAcme({ sc } = {}) {
     
     // Returns a certificate certifying this NetworkIdentity's ownership
     // of the NetworkAddresses listed in its details, potentially using
     // acme protocol to obtain such a certificate
+    
+    sc = sc.focus('acme');
     
     let [ acquireMethod, type ] = this.certificateType.split('/');
     if (acquireMethod !== 'acme') throw Error(`Not an acme method: "${this.certificateType}"`);
@@ -785,45 +786,56 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       
       let networkAddresses = this.getNetworkAddresses();
       
-      sc('Retrieving account...');
+      sc.head('retrieve-account-url');
       let accountRes = await this.retrieveOrCompute(`acme.${type}.account`, 'json', async () => {
         
-        sc('Creating account...');
+        sc.head('create-account');
         let res = await client.makeAccount({ email: this.details.email });
         if (res.code !== 201) throw Error(`Failed to create ${type} account for email "${this.details.email}"`).mod({ res });
+        sc.tail('create-account');
         return res;
         
       });
       let accountUrl = accountRes.headers.location;
-      let account = client.account(accountUrl);
+      sc.tail('retrieve-account-url', { accountUrl });
       
-      sc(`Verify account (${accountUrl}) exists...`);
-      let verifyAccountRes = await account.query({ addr: accountUrl });
+      let accountClient = client.account(accountUrl);
+      sc.note('account-client', { accountClient });
+      
+      sc.head('verify-account', { accountUrl });
+      let verifyAccountRes = await accountClient.query({ addr: accountUrl });
       if (verifyAccountRes.code !== 200) throw Error(`Couldn't find ${type} account with url "${accountUrl}"`);
+      sc.tail('verify-account', { accountUrl, verifyAccountRes });
       
-      sc('Creating a new Order...');
-      let orderRes = await account.query({
+      sc.head('create-order');
+      let orderRes = await accountClient.query({
         addr: '!newOrder',
         body: { identifiers: networkAddresses.map(value => ({ type: 'dns', value })) }
       });
       if (orderRes.code !== 201) throw Error(`Couldn't create ${type} order`).mod({ res: orderRes });
+      sc.tail('create-order', { orderRes });
       
-      sc(`Initiated order for [ ${networkAddresses.join(', ')} ], with status "${orderRes.body.status}"`);
+      sc.head('initialize-order', { networkAddresses });
       if (orderRes.body.status !== 'valid') {
         
-        sc(`Order needs to go from "${orderRes.body.status}" -> "valid"; we'll complete all Authorizations (one for each NetworkAddress)`);
+        // We need our order to become valid; if it isn't valid, we probably need to complete
+        // authorizations (one for each NetworkAddress)
         
+        sc.note('await-order-valid');
+        
+        sc.head('acquire-order-auths');
         let orderUrl = orderRes.headers.location;
         let orderAuths = orderRes.body.authorizations; // Note `orderRes.body.authorizations.length === this.getNetworkAddresses().length` (unless some addresses have already been certified!)
         let auths = await Promise.all(orderAuths.map(async authUrl => {
-          let res = await account.query({ addr: authUrl });
+          let res = await accountClient.query({ addr: authUrl });
           if (res.code !== 200) throw Error(`Couldn't initialize ${type} authorization @ ${authUrl}`).mod({ res });
           return { ...res, url: authUrl };
         }));
-        sc('Authorizations for our order:\n' + auths.map(auth => {
-          let { body: { identifier: { type, value } } } = auth;
-          return `${type} / ${value} (${auth.url})`;
-        }).join('\n').indent(2));
+        sc.tail('acquire-order-auths', { auths: auths.categorize(auth => auth.url)
+          .map(urlAuths => urlAuths
+            .map(({ body: { identifier: { type, value } } }) => ({ type, value }))
+          )
+        });
         
         let getValidAuthResByPolling = async (auth, retryWaitMs=1500, maxAttempts=10) => {
           
@@ -844,8 +856,9 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
           let attempts = 0;
           while (true) {
             
-            let authRes = await account.query({ addr: auth.url });
-            sc(`Polled ${auth.url} to check if the authorization succeeded`, authRes);
+            sc.head('poll-auth-success');
+            let authRes = await accountClient.query({ addr: auth.url });
+            sc.tail('poll-auth-success', { url: auth.url, authRes });
             
             // Simply return valid Authorizations
             if (authRes.body.status === 'valid') return authRes;
@@ -875,9 +888,8 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
           
           'http-01': async (auth, challenge) => {
             
-            // `auth.body.identifier.value` is the NetworkAddress to
-            // verify, corresponding exactly to the NetworkAddress used
-            // when initiating the Order
+            // `auth.body.identifier.value` is the NetworkAddress to verify, corresponding exactly
+            // to the NetworkAddress used when initiating the Order
             let addr = auth.body.identifier.value;
             
             let hash = require('crypto').createHash('sha256').update(JSON.stringify(client.jwk));
@@ -891,19 +903,23 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
             // other requests
             let tryAcmeHttp01ChallengeReply = (req, res) => {
               
-              sc('CHALLENGE SERVER GOT:', {
+              let expectedUrl = `/.well-known/acme-challenge/${challenge.token}`;
+              sc.head('challenge-server-reply', {
                 version: req.httpVersion,
-                method: req.method,
-                url: req.url,
-                headers: req.headers.map(vals => isForm(vals, Array) ? vals : [ vals ])
+                headers: req.headers.map(vals => isForm(vals, Array) ? vals : [ vals ]),
+                providedMethod: req.method.lower(),
+                expectedMethod: 'get',
+                providedUrl: req.url,
+                expectedUrl
               });
               
-              if (req.method !== 'GET') return false;
-              if (req.url !== `/.well-known/acme-challenge/${challenge.token}`) return false;
+              if (req.method.lower() !== 'get') return false;
+              if (req.url !== expectedUrl)      return false;
               
-              sc('WOW ITS THE ACME CHALLENGE! Responding to challenge...', { keyAuth });
               res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
               res.end(keyAuth);
+              
+              sc.tail('challenge-server-reply', { keyAuth });
               
               return true;
               
@@ -928,7 +944,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
               // Ensure a Server is ready to serve http on port 80
               if (activeInsecureHttpPort80Server) {
                 
-                sc('Using a pre-existing http port 80 server!', activeInsecureHttpPort80Server);
+                sc.note('preexisting-insecure-http-server', { activeInsecureHttpPort80Server });
                 let intercept = (req, res) => {
                   let result = tryAcmeHttp01ChallengeReply(req, res);
                   if (result) challengePrm.resolve({ req, res });
@@ -943,12 +959,12 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
                 
               } else {
                 
-                sc('Using a one-off http port 80 server!');
+                sc.note('create-insecure-http-server');
                 let err = Error('');
                 let server = require('http').createServer((req, res) => {
                   if (tryAcmeHttp01ChallengeReply(req, res)) return challengePrm.resolve();
                   res.writeHead(400);
-                  res.end('Thats not what we expect :D ' + addr);
+                  res.end(`Thats not what we expect :D (${addr})`);
                 });
                 await Promise((rsv, rjc) => {
                   server.on('listening', rsv);
@@ -956,7 +972,13 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
                   server.listen(80, addr); // TODO: Listen on 0.0.0.0? Or on `addr`? (Can we get more specific about where the acme server will get in touch with us?)
                 });
                 tmp.endWith(() => {
-                  server.close(err => err && sc('Failed to close Server used for acme http-01 challenge :(', err));
+                  server.close(err => {
+                    if (!err) return;
+                    sc.note('close-server-failure', {
+                      server, err,
+                      desc: 'A server created for the acme http-01 challenge could not be closed after the challenge was completed'
+                    });
+                  })
                 });
                 
               }
@@ -964,37 +986,40 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
               // At this point we have a server listening on non-secure
               // http port 80, with the correct NetworkAddress; tell the
               // acme server we're ready to respond to its challenge:
-              let readyForChallengeRes = await account.query({ addr: challenge.url, body: {} });
+              sc.head('inform-ready-for-challenge');
+              let readyForChallengeRes = await accountClient.query({ addr: challenge.url, body: {} });
               if (readyForChallengeRes.code >= 400) throw Error(`Acme server won't verify ability to complete challenge`).mod({ res: readyForChallengeRes });
-              sc('INFORMED ACME SERVER WE\'RE READY TO RESPOND TO ITS CHALLENGE...', readyForChallengeRes);
+              sc.tail('inform-ready-for-challenge', { readyForChallengeRes });
               
               // We can't allow the server an infinite amount of time to
               // verify our ability to respond to its challenge
               let waitMs = 120 * 1000;
-              sc(`Acme server has ${Math.round(waitMs / 1000)} seconds to verify our ownership of ${addr}...`);
+              sc.head('await-challenge', { addr, waitMs });
               let timeout = setTimeout(() => challengePrm.reject(Error('Timeout')), waitMs);
               tmp.endWith(() => clearTimeout(timeout));
               
-              // Wait for our http-01 challenge server to get hit (but
-              // note true challenge-completion-verification can only
-              // result from polling the Authorization - even sending a
-              // successful response from our challenge server isn't
-              // sufficient; the ca might perform multiple challenge
-              // requests - so we can't stop serving the challenge until
-              // we've polled the Authorization to be valid!)
-              sc('Waiting to respond to challenge...');
+              // Wait for our http-01 challenge server to get hit (but note true
+              // challenge-completion-verification can only result from polling the Authorization;
+              // even sending a successful response from our challenge server isn't sufficient; the
+              // ca might perform multiple challenge requests - so we can't stop serving the
+              // challenge until we've polled the Authorization to be valid!)
               await challengePrm;
+              sc.tail('await-challenge');
               
-              sc('Responded to challenge! Waiting for Authorization to become "valid"');
-              return await getValidAuthResByPolling(auth);
+              let result = await getValidAuthResByPolling(auth);
+              sc.note('respond-challenge', { auth, result });
+              
+              // TODO: HEEERE setting a good example of sc output! ("sc-out"?)
+              // WHOA... our challenge server was queried successfully! (But we can only confirm
+              // the server has validated our ownership of ${addr} by polling to see that the
+              // challenge has turned "valid")
+              return result;
               
             } finally {
               
               tmp.end();
               
             }
-            
-            sc(`WHOA... our challenge server was queried successfully! (But we can only confirm the server has validated our ownership of ${addr} by polling to see that the challenge has turned "valid")`);
             
           }
           
@@ -1013,21 +1038,20 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
           
           let challenge = auth.body.challenges.seek(chall => chall.type === challType).val;
           
-          sc(`DO CHALLENGE ${challenge.type} FOR ${auth.body.identifier.value}`);
+          sc.head('do-challenge', { type: challenge.type, subject: auth.body.identifier.value });
           let authRes = await challOptions[challType](auth, challenge);
-          sc(`CRIKEY - the "${challType}" challenge function is complete!!`, authRes);
+          sc.tail('do-challenge', { authRes });
           
           if (!authRes || authRes.body.status === 'pending') authRes = await getValidAuthResByPolling(auth);
           if (authRes.body.status !== 'valid') throw Error(`Couldn't get an Authorization with "valid" status`).mod({ authRes });
           
-          sc(`OMG we defff proved we own ${auth.body.identifier.value} (${type})!!`, authRes);
+          sc.tail('prove-ownership', { type, subject: auth.body.identifier.value, authRes });
           
         }));
-        
-        sc(`SWEET all authorizations are complete: [ ${auths.map(auth => auth.url).join(', ')} ]`);
+        sc.tail('await-order-valid', { auths: auths.map(auth => auth.url) });
         
         // Update `orderRes`...
-        orderRes = await account.query({ addr: orderUrl });
+        orderRes = await accountClient.query({ addr: orderUrl });
         
         // Finalize any "ready" Orders
         if (orderRes.body.status === 'ready') {
@@ -1045,31 +1069,38 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
             .replace(/[/]/g, '_')
             .replace(/[=]+$/, '');
           
-          sc(`Finalizing order ${orderUrl}`, { csr });
-          let finalizeRes = await account.query({ addr: orderRes.body.finalize, body: { csr: acmeCsr }});
-          if (finalizeRes.code >= 400) throw Error('UGH failed to finalize').mod({ res: finalizeRes });
+          sc.head('finalize-order', { orderUrl, csr });
+          let finalizeRes = await accountClient.query({ addr: orderRes.body.finalize, body: { csr: acmeCsr }});
+          if (finalizeRes.code >= 400) throw Error('Api: failed to finalize').mod({ res: finalizeRes });
+          sc.tail('finalize-order', { finalizeRes });
           
-          sc('Order finalized; it is expected to process and then go valid!', { finalizeRes });
+          // We now expect the order to process, and transition to "valid"!
           orderRes.body.status = 'processing'; // Assume the Order is now processing - could also consider `orderRes = await account.query({ addr: orderUrl });`, but that involves needless(?) overhead
           
         }
         
         // Poll any "processing" Orders until they turn valid
-        while (orderRes.body.status === 'processing') {
+        while (true) {
           
-          orderRes = await account.query({ addr: orderUrl });
-          sc('Polled Order waiting for it to exit "processing" status', { orderRes });
-          await Promise(rsv => setTimeout(rsv, 1000));
+          orderRes = await accountClient.query({ addr: orderUrl });
+          sc.note('poll-order-status', { orderRes });
+          
+          let { status } = orderRes.body;
+          if (status === 'processing') await Promise(r => setTimeout(r, 1000));
+          else                         break;
           
         }
         
       }
       
       if (orderRes.body.status !== 'valid') throw Error(`Order still isn't valid :(`).mod({ orderRes });
+      sc.tail('confirm-order-valid', { orderRes });
       
-      sc('FINAL ORDER:', { orderRes });
-      sc('Getting crt...');
-      return (await account.query({ addr: orderRes.body.certificate })).body;
+      sc.head('get-order-cert');
+      let cert = (await accountClient.query({ addr: orderRes.body.certificate })).body;
+      sc.tail('get-order-cert', { cert });
+      
+      return cert;
       
     });
     
@@ -1168,7 +1199,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       this.servers.add(redirectServer);
       tmp.endWith(() => this.servers.rem(redirectServer)); // TODO: `this.servers` should be Set, not Arr?
       
-      sc({ msg: 'redirecting unsafe http port 80', head: redirectServer.desc(), tail: httpsServer.desc() });
+      sc.note('redirect-unsafe-http-port-80', { head: redirectServer.desc(), tail: httpsServer.desc() });
       
     })();
     
@@ -1257,7 +1288,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
             let msRemaining = sgn.validity.expiryMs - Date.now();
             if (msRemaining < 0) break;
             
-            sc({ msg: 'cert is valid', daysRemaining: (msRemaining / (1000 * 60 * 60 * 24)) });
+            sc.note('cert-valid', { daysRemaining: (msRemaining / (1000 * 60 * 60 * 24)) });
             
             // Wait until either the timeout elapses or `tmp` ends
             let [ route, timeout ] = [ null, null ];
@@ -1283,9 +1314,8 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
       
     }
     
-    tmp.prm.then(() => sc({ msg: 'exposed on network', portServers }));
-    
-    tmp.endWith(() => sc({ msg: 'removed from network' }));
+    tmp.prm.then(() => sc.head('expose-on-network', { portServers }));
+    tmp.endWith(() => sc.tail('expose-on-network'));
     
     return tmp;
     

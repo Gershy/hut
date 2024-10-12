@@ -41,6 +41,8 @@ module.exports = {
   },
   query: async ({ addr, proto, host, port, path, method='get', headers={}, body=null, plainBody=null, ...more }={}) => {
     
+    // TODO: What about respecting Content-Encoding header?
+    
     [ addr, proto, host, port, path ] = module.exports.resolveAddr({ addr, proto, host, port, path });
     
     // camelCase to Upper-Kebab-Case
@@ -65,7 +67,7 @@ module.exports = {
     
     await new Promise(r => res.on('end', r));
     
-    body = Buffer.concat(chunks); // Use the same var for request and response; no problem with that!
+    body = Buffer.concat(chunks); // Reusing same var for request and response
     try         { body = serToVal(body); }
     catch (err) { body = body.toString('utf8'); }
     

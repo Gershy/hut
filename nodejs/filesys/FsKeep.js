@@ -32,10 +32,12 @@ module.exports = form({ name: 'FsKeep', has: { Slots, Keep }, props: (forms, For
     svg: 'image/svg+xml'
   },
   
+  $strongToNative: v => v.encodeInt(Form.strongCmpCharset, { big: true }).encodeStr(Form.nativeCmpCharset),
+  $nativeToStrong: v => v.encodeInt(Form.nativeCmpCharset, { big: true }).encodeStr(Form.strongCmpCharset),
   $resolveCmp: (cmp, { allowWin32Drive=false, mode='native' }={}) => {
     
     if (isForm(cmp, Object)) {
-      if      (cmp.sg) { mode = 'strong'; cmp = cmp.sg.encodeInt(Form.strongCmpCharset).encodeStr(Form.nativeCmpCharset); }
+      if      (cmp.sg) { mode = 'strong'; cmp = Form.strongToNative(cmp.sg); }
       else if (cmp.nt) { mode = 'native'; cmp = cmp.nt; }
       else             throw Error('Api: failed to resolve Cmp').mod({ cmp });
     }
@@ -208,10 +210,11 @@ module.exports = form({ name: 'FsKeep', has: { Slots, Keep }, props: (forms, For
     
     let modePre = headConf.at('mode', this.mode);
     let modePost = tailConf.at('mode', modePre);
-    if (modePre === 'strong') {
-      if (cmps.some(cmp => !isForm(cmp, String))) throw Error('Api: all Cmps must be Strings using "strong" mode').mod({ cmps });
-      cmps = cmps.map(sg => ({ sg }));
-    }
+    if (modePre === 'strong') cmps = cmps.map(cmp => {
+      if (isForm(cmp, String)) return { sg: cmp };
+      if (cmp.sg)              return cmp;
+      if (cmp.nt)              return cmp;
+    });
     
     return (0, this.Form)({
       txn: this.txn,

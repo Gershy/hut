@@ -45,7 +45,8 @@ module.exports = form({ name: 'AcmeHttpClient', props: (forms, Form) => ({
   },
   account(accountUrl) {
     return {
-      query: (opts={}) => this.httpJwsQuery({ kid: accountUrl, ...opts })
+      query: (opts={}) => this.httpJwsQuery({ kid: accountUrl, ...opts }),
+      desc: () => `AcmeHttpClient.Account('${accountUrl}')`
     };
   },
   

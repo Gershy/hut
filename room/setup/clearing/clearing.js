@@ -343,9 +343,9 @@ Object.assign(global, {
       
       // Note that base-1 requires 0 to map to the empty string. This also
       // means that, for `n >= 1`:
-      //      |       (n).encodeStr(singleChr)
+      //      | (n).encodeStr(singleChr)
       // is always equivalent to
-      //      |       singleChr.repeat(n - 1)
+      //      | singleChr.repeat(n - 1)
       
       return ((this !== this) ? 0n : BigInt(Math.floor(this))).encodeStr(a1, a2);
       
@@ -941,12 +941,37 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   
   // Subcon debug
   subcon: (diveToken, pfx=[]) => {
+    
+    // TODO: temporarily cache subcon indexes, mapped by `diveToken`?
+    
     let sc = (...args) => void global.subconOutput(sc, ...sc.pfx, ...args); // Always returns `skip`!
     return Object.assign(sc, {
       // The sc "pfx" includes props to always log with every call (e.g. correlation ids)
       pfx,
       term: isForm(diveToken, String) ? diveToken : diveToken.join('.'),
       kid: (dt2, ...pfx2) => global.subcon([ ...token.dive(diveToken), ...token.dive(dt2) ], [ ...pfx, ...pfx2 ]),
+      
+      focus: (dive, ids=[]) => {
+        dive = token.dive(dive);
+        
+        if (!isForm(ids, Array))               throw Error('Api: invalid ids').mod({ ids });
+        if (ids.some(v => !isForm(v, String))) throw Error('Api: invalid ids').mod({ ids });
+        if (dive.length !== 1)                 throw Error('Api: dive must be a single component').mod({ dive });
+        return global.subcon([ ...token.dive(diveToken), dive ], [ ...pfx, { $: [ dive[0], ...ids ].toObj(v => [ v, String.id(6) ]) } ]);
+      },
+      head: (region, ...vals) => {
+        if (!/^[a-z0-9-]+$/.test(region)) throw Error('Api: invalid region').mod({ region });
+        sc({ $r: `${region}/head` }, ...vals);
+      },
+      tail: (region, ...vals) => {
+        if (!/^[a-z0-9-]+$/.test(region)) throw Error('Api: invalid region').mod({ region });
+        sc({ $r: `${region}/tail` }, ...vals);
+      },
+      note: (region, ...vals) => {
+        if (!/^[a-z0-9-]+$/.test(region)) throw Error('Api: invalid region').mod({ region });
+        sc({ $r: `${region}/note` }, ...vals);
+      },
+      
       cachedParams: null,
       params() {
         if (!sc.cachedParams) {
@@ -957,6 +982,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
       },
       desc: () => `Subcon(${sc.term})`
     });
+    
   },
   subconParams: sc => {
     

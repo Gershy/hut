@@ -721,11 +721,9 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
           
           let pfx = loftConf.prefix;
           
-          // Mark Therapy-related Record Types as very static:
-          recMan.getType(`${pfx}.therapy`)    .schema.merge({ mod: false, rem: false });
-          recMan.getType(`${pfx}.therapyLoft`).schema.merge({ mod: false, rem: false });
-          recMan.getType(`${pfx}.stream`)     .schema.merge({ mod: false, rem: false });
-          recMan.getType(`${pfx}.notion`)     .schema.merge({ mod: false, rem: false });
+          // Mark Therapy-related Record Types as "unchanging":
+          for (let t of 'therapy,therapyLoft,stream,notion'.split(','))
+            recMan.getType(`${pfx}.${t}`).schema.merge({ mod: false, rem: false });
           
           let subconWriteStdout = global.subconOutput;
           
@@ -737,6 +735,10 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
           let loftRh = aboveHut.relHandler({ type: `${pfx}.loft`, term: 'hut', limit: 1 });
           activeTmp.endWith(loftRh);
           loftRh.route(loftHrec => {
+            
+            // As soon as a Loft is produced for Therapy, attach `therapyRec` (the root Therapy Rec
+            // required for all subcon notion handling) to the Loft via a "therapyLoft" Rec. This
+            // makes Therapy room logic able to reference root Therapy data via the Loft!
             
             // Once this Record is added, Therapy data can be accessed from the loftRec with:
             //    | loftRec.rh('therapyLoft').route(hrec => {
@@ -757,16 +759,17 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
             then(subconWriteStdout(sc, ...args), scVal => {
               
               if (scVal === null) return; // The output value resolved to be nullish; ignore it!
-              let { params, args } = scVal;
+              let { params, args=[] } = scVal;
               
               let { therapy=false } = params;
               if (sc === gsc) therapy = false; // Never send `gsc` to Therapy
               
-              if (therapy && args?.count()) (async () => {
+              if (!therapy)          return;
+              if (args.length === 0) return;
+              
+              return (async () => {
                 
-                // TODO: It's important that nothing occurring within this function writes via sc,
-                // otherwise LOOP! Best way is probably to pass stub functions in place of loggers
-                // for every utility used by Therapy!
+                // Note that this function may never write via `sc` (would be an infinite loop!)
                 
                 try {
                   
@@ -787,7 +790,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
                     let notionRec = await recMan.addRecord({
                       type: `${pfx}.notion`,
                       group: [ streamRec ],
-                      value: { ms, args: args[0] }
+                      value: { ms, args: args[0] } // TODO: only `args[0]`? Not all `args`??
                     });
                     
                   })();
@@ -818,6 +821,15 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
           
           // Now stack depth for stdout subcon invocations has gotten deeper!
           subconWriteStdout.relevantTraceIndex += 1;
+          
+          // THERAPYWTF
+          // let sc = global.subcon('testeroo');
+          // setInterval(() => {
+          //   sc.note('interval', {
+          //     fixed: 'random',
+          //     dynamic: 'a'.repeat(1 + Math.floor(Math.random() * 10))
+          //   }); 
+          // }, 1000);
           
         }
         
