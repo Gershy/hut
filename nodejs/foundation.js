@@ -781,7 +781,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
                   
                   (async () => {
                     
-                    // TODO: Should have `normalizeAnyValue` in addition to `formatAnyValue`!!
+                    // TODO: Use `normalizeAnyValue`???
                     // TODO: Revisit this; don't call the value "args"; avoid sending, e.g.,
                     //   Buffers as { length: 1000, data:[100,101,102, ... ] }
                     let a = args[0];
@@ -830,21 +830,6 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
           
           // Now stack depth for stdout subcon invocations has gotten deeper!
           subconWriteStdout.relevantTraceIndex += 1;
-          
-          // THERAPYWTF
-          for (let n = 0; n < 3; n++) {
-            global.subcon('testeroo').note('interval', {
-              fixed: 'random',
-              dynamic: `zzzzzzzzzzzzzzzzzz-${String.id()}-${n}`
-            }); 
-          }
-          
-          let cnt = 0;
-          setInterval(() => {
-            global.subcon('testeroo.' + Math.floor(Math.random() * 5)).note('interval', {
-              msg: 'lmaolmao' + (cnt++)
-            });
-          }, 1000);
           
         }
         

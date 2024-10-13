@@ -59,7 +59,7 @@ global.rooms[roomName] = () => then(getRoom('setup.hut.hinterland.RoadAuthority'
           //    previously active tab; new tab doesn't init servers until
           //    old tab confirms it's disconnected
           // 3. Just implement a SharedWorker to handle networking
-          global.subcon('Socket error event', err);
+          global.subcon('error')('Socket error event', err);
           
           // TODO: This interim solution is the WORST (and could create huge congestion)
           window.location.reload();

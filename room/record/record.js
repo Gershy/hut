@@ -579,7 +579,7 @@ global.rooms['record'] = async () => {
           
           // If no "precomputed" RelHandler, process the full selection using our Bank
           
-          selection = await this.manager.bank.select({ activeSignal, relHandler: this, eee: new Error('hi') });
+          selection = await this.manager.bank.select({ activeSignal, relHandler: this });
           
         } else {
           

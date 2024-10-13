@@ -610,10 +610,13 @@ global.rooms['setup.hut'] = async () => {
           
           // Duplicated syncs occurs when Above restarts - the new Above doesn't remember it synced
           // us - this is a good way to detect when a reload is needed!
-          // THERAPYWTF
           if (cause.message.startsWith('Api: Duplicated sync')) window.location.reload();
           
-          throw err.mod(msg => ({ msg: 'error-syncing', cause }));
+          throw err.mod({
+            msg: 'error-syncing',
+            cause,
+            knownCauses: [ 'AboveHut stopped unexpectedly' ]
+          });
           
         }
         

@@ -1,11 +1,10 @@
 /// <reference path="./ts/hut.d.ts"/>
 
 //  TODO: HEEERE!!
-//  1. ctrl+alt+f for "THERAPYWTF" - Therapy is misbehaving! Ensure Therapy produces no logs??
-//  2. ctrl+alt+f for "UNCHANGINGRECWTF" - The "unchanging" concept greatly enables Therapy!
-//  3. Pontificate regarding subcon standardization
-//  4. Where are "strikes" at?? (Auto-deny offensive network clients)
-//  5. How the hell to pad Reals?? Do we like Text's "spacing"??? Surprisingly intractable...
+//  1. ctrl+alt+f for "UNCHANGINGRECWTF" - The "unchanging" concept greatly enables Therapy!
+//  2. Pontificate regarding subcon standardization
+//  3. Where are "strikes" at?? (Auto-deny offensive network clients)
+//  4. How the hell to pad Reals?? Do we like Text's "spacing"??? Surprisingly intractable...
 //     - Can a more generic nested Real do this?
 //         | 
 //         | let parWithPadding = someReal.addReal('withPadding');
@@ -19,7 +18,7 @@
 //       because it would violate the "facet ownership" principle; Resize/Pad should be able to
 //       coexist with any other Real which owns the "content" facet (e.g. Text), but intuitively
 //       Resize/Pad should own the "content" facet itself!!
-//  6. What about Real "minimum dimensions" (e.g. in Therapy a stream Real should grow taller as it
+//  5. What about Real "minimum dimensions" (e.g. in Therapy a stream Real should grow taller as it
 //     fills with elements until it reaches some "max size", at which point it gains scrolling)
 //  SUBCON STANDARDIZATION:
 //  - When to use "term" vs { $: { domain: 'abc' } }? The "term" is already the domain - no??

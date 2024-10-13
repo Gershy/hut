@@ -168,7 +168,7 @@ global.rooms['record.bank.KeepBank'] = async () => {
       
     },
     
-    async* select({ activeSignal, relHandler, eee }) {
+    async* select({ activeSignal, relHandler }) {
       
       // Note the terminology here calls the source Rec the "heldRec", because we are searching for
       // Recs which hold it; such candidate Recs are called "holderRecs" here.
@@ -212,7 +212,8 @@ global.rooms['record.bank.KeepBank'] = async () => {
           if (seen.has(holderUid)) continue;
           
           // Don't return children with `null` "m" ("meta") content
-          let holderMeta = await holderKeep.access('m').getData('json'); // Can't be nullish because the filesys transaction is sustained by `holderKeeps`
+          let holderMeta = await holderKeep.access('m').getData('json');
+          if (!holderMeta) continue; // Maybe `getKids` should lock all children until it completes? If it doesn't, kids which appear in `getKids` may later be nullish when their contents are read
           
           // If the BankedRec has no member under "term", ignore it
           if (!holderMeta.mems[heldTerm]) continue;

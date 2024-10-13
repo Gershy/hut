@@ -26,7 +26,7 @@ let bolded = Map();
 let bold = (str, b = bolded.get(str)) => b || (bolded.set(str, b = ansi(str, 'bold')), b);
 
 let normalize = (val, opts={}, seen=Map()) => {
-  
+  // TODO: "normalizeAnyValue" behaviour should exist and be globally available
 };
 
 // Define `global.formatAnyValue`
