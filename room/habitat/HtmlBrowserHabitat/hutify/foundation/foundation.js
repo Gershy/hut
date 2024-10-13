@@ -91,17 +91,41 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   global.conf = (diveToken, def=null) => token.diveOn(diveToken, global.rawConf, def).val;
   global.subconOutput = (sc, ...args) => {
     
-    if (!global.subconParams(sc).chatter) return;
+    let { chatter } = global.subconParams(sc).chatter;
+    if (!chatter && ![ 'gsc', 'error' ].has(sc.term)) return;
     
-    args = args.map(arg => isForm(arg, Function) ? arg() : arg).sift();
+    args = args.map(arg => isForm(arg, Function) ? arg() : arg).filter(Boolean);
     if (!args.length) return;
     
-    args = args.map(a => isForm(a?.desc, Function) ? a.desc() : a);
+    let processArg = (arg, seen=Map()) => {
+      if (arg == null) return getFormName(arg);
+      
+      if (seen.has(arg)) return seen.get(arg);
+      
+      if (isForm(arg?.desc, Function)) {
+        let result = arg.desc();
+        seen.set(arg, result);
+        return result;
+      }
+      if (isForm(arg, Array)) {
+        let result = [];
+        seen.set(arg, result);
+        return result.gain(arg.map(a => processArg(a, seen)));
+      }
+      if (isForm(arg, Object)) {
+        let result = {};
+        seen.set(arg, result);
+        return result.gain(arg.map(a => processArg(a, seen)));
+      }
+      
+      return arg;
+    };
+    
     console.log(
       `%c${getDate().padTail(60, ' ')}\n${('[' + sc.term + ']').padTail(60, ' ')}`,
       'background-color: #dadada;font-weight: bold;',
     );
-    console.log(...args);
+    console.log(...processArg(args));
     
   };
   global.getRooms = (names, { shorten=true, ...opts }={}) => {

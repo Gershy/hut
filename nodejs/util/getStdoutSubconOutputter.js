@@ -63,7 +63,7 @@ module.exports = (cfg={}) => {
       
       // Note that setting { chatter: false } disables any subcon except "gsc" and "warn"
       // This could short-circuit earlier if we don't need to return a value here
-      if (!chatter && ![ 'gsc', 'warn' ].has(sc.term)) return { params, args };
+      if (!chatter && ![ 'gsc', 'error' ].has(sc.term)) return { params, args };
       
       let leftLns = [ `[${sc.term.slice(-leftColW)}]`, now ];
       let rightLns = args

@@ -25,6 +25,10 @@ let remAnsi = (str) => str.replace(/\u{1b}\[[^a-zA-Z]+[a-zA-Z]/ug, '');
 let bolded = Map();
 let bold = (str, b = bolded.get(str)) => b || (bolded.set(str, b = ansi(str, 'bold')), b);
 
+let normalize = (val, opts={}, seen=Map()) => {
+  
+};
+
 // Define `global.formatAnyValue`
 let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
   
@@ -34,14 +38,15 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
   // `pfx` is the string which will precede the first line of any output from this `format`
   // call; it should be considered in order to break excessively long lines
   
+  let { ansiFn=ansi } = opts;
   let pfxLen = pfx.length;
   
-  if (val === undefined) return ansi('undefined', 'green');
-  if (val === null) return ansi('null', 'green');
+  if (val === undefined) return ansiFn('undefined', 'green');
+  if (val === null) return ansiFn('null', 'green');
   
-  if (isForm(val, Number)) return ansi(`${val}`, 'green');
-  if (isForm(val, Boolean)) return ansi(val ? 'T' : 'F', 'green');
-  if (isForm(val, Buffer)) return ansi(`Buffer { length: ${val.length} }`, 'green');
+  if (isForm(val, Number)) return ansiFn(`${val}`, 'green');
+  if (isForm(val, Boolean)) return ansiFn(val ? 'T' : 'F', 'green');
+  if (isForm(val, Buffer)) return ansiFn(`Buffer { length: ${val.length} }`, 'green');
   
   if (isForm(val, String)) {
     
@@ -53,11 +58,11 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
     let formatted = val.replaceAll(/[\u0007-\u000f]/g, '').replaceAll('\n', '\\n');
     if (formatted.length > maxW) formatted = formatted.slice(0, maxW - 1) + '\u2026';
     
-    return ansi(`'${formatted}'`, 'green');
+    return ansiFn(`'${formatted}'`, 'green');
     
   }
   
-  if (d > opts.d) return ansi('<limit>', 'red');
+  if (d > opts.d) return ansiFn('<limit>', 'red');
   
   if (seen.has(val)) return seen.get(val);
   
@@ -73,7 +78,7 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
   if (isForm(val?.desc, Function)) {
     
     //try {
-      let str = ansi(val.desc(), 'blue');
+      let str = ansiFn(val.desc(), 'blue');
       seen.set(val, str);
       return str;
     //} catch (err) {
@@ -91,7 +96,7 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
     let maxW = Math.max(8, opts.w - pfxLen - d * 4 - 1); // Subtract 1 for the trailing ","
     if (str.length > maxW) str = str.slice(0, maxW - 1) + '\u2026';
     
-    str = ansi(str, 'blue');
+    str = ansiFn(str, 'blue');
     
     seen.set(val, str);
     return str;
@@ -141,7 +146,7 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
         let padding = '';
         if (paddingAmt) padding += ' ';
         padding += '-'.repeat(Math.max(paddingAmt - 1, 0));
-        let paddedKey = k + ansi(padding, 'subtle');
+        let paddedKey = k + ansiFn(padding, 'subtle');
         return `${paddedKey}${bold(':')} ${v}`;
         
       });
@@ -158,7 +163,7 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
         
         return numChars * 1 + numLines * 7;
       })
-        .map(v => v.indent(ansi('\u00a6', 'subtle') + '   '))
+        .map(v => v.indent(ansiFn('\u00a6', 'subtle') + '   '))
         .join(bold(',') + '\n')
       
       return `${bold('{')}\n${multiLine}\n${bold('}')}`;
@@ -186,7 +191,7 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
         && remAnsi(oneLine).length < (opts.w - d * 4);
       if (canOneLine) return oneLine;
       
-      let multiLine = formatted.map(v => v.indent(ansi('\u00a6', 'subtle') + '   ')).join(bold(',') + '\n');
+      let multiLine = formatted.map(v => v.indent(ansiFn('\u00a6', 'subtle') + '   ')).join(bold(',') + '\n');
       return `${bold('[')}\n${multiLine}\n${bold(']')}`;
       
     })();
@@ -198,7 +203,7 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
   
   let formName = getFormName(val);
   seen.set(val, `<cyc> ${formName}(...)`);
-  let str = `${ansi(formName, 'blue')} ${format({ ...val }, opts, d, `${formName} `, seen)}`;
+  let str = `${ansiFn(formName, 'blue')} ${format({ ...val }, opts, d, `${formName} `, seen)}`;
   seen.set(val, str);
   return str;
   

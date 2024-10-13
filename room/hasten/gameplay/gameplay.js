@@ -214,7 +214,7 @@ global.rooms['hasten.gameplay'] = foundation => hut => {
         let laster = ws.addEntity(Laster({ ws, ctrlUid: uid, x: 0, y: 0, rot: 0 }));
         
         this.lasterControllers[uid] = laster;
-        ws.undos.add( () => { delete this.lasterControllers[laster.uid]; console.log('DELETE!!'); } );
+        ws.undos.add( () => { delete this.lasterControllers[laster.uid]; } );
         
       }
       

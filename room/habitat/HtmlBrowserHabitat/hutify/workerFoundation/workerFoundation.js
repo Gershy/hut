@@ -105,7 +105,7 @@ global.rooms[`${hutifyPath}.workerFoundation`] = () => ({ init: async evt => {
     
     if (!global.subconParams(sc).chatter) return;
     
-    args = args.map(arg => isForm(arg, Function) ? arg() : arg).sift();
+    args = args.map(arg => isForm(arg, Function) ? arg() : arg).filter(Boolean);
     if (!args.length) return;
     
     args = args.map(a => isForm(a?.desc, Function) ? a.desc() : a);

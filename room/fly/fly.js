@@ -452,7 +452,6 @@ global.rooms['fly'] = async foundation => {
               /// {ABOVE=
               let levelName = levels.seek(v => v.password === password).key;
               if (!levelName) throw Error('Api: invalid password');
-              console.log(`Lobby ${myLobby.desc()} set to ${levelName}`);
               myLobby.setValue({ levelMetadata: getLevelMetadata(levelName) });
               /// =ABOVE}
               

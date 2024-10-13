@@ -234,7 +234,5 @@ let makeIpcServer = ({ aboveHut, belowHut, procConnectedToAbove }) => {
   process.send({ scope: 'foundation', msg: 'ready' });
   
 })()
-  .catch(err => {
-    console.log('FATAL', err);
-  });
+  .catch(err => console.log('FATAL', err));
 

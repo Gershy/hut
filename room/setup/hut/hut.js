@@ -197,8 +197,7 @@ global.rooms['setup.hut'] = async () => {
         
         // Errors can occur when processing Comms from other Huts; when this happens we ideally
         // inform the other Hut of the Error, and if this isn't possible we send the Error to subcon
-        
-        gsc.kid('error')('Failed handling Comm', { err });
+        global.subcon('error')('run-command-handler-failure', err);
         
         /// {ABOVE=
         // Above should inform Below of the Error
@@ -404,7 +403,7 @@ global.rooms['setup.hut'] = async () => {
         // TODO: Is the hid-refresh redirect necessary? What if the hid for the initial html
         // request is simply ignored??
         
-        if (hid && this.belowHuts.has(hid)) return this.belowHuts.get(hid);
+        if (this.belowHuts.has(hid)) return this.belowHuts.get(hid);
         
         /// {ABOVE=
         // Reject an explicit `hid` outside "dev" maturity - note that
@@ -418,25 +417,30 @@ global.rooms['setup.hut'] = async () => {
         if (!hid) hid = [ this.childUidCnt++, Math.floor(Math.random() * 62 ** 8) ]
           .map(v => v.encodeStr(String.base62, 8))
           .join('');
-        /// =ABOVE} {BELOW=
+        /// =ABOVE}
         
-        /// {DEBUG=
+        /// {ASSERT=
         if (!hid) throw Error('Api: must be able to resolve a BelowHut hid BELOW');
-        /// =DEBUG}
-        
-        /// =BELOW}
+        /// =ASSERT}
         
         // Actually initialize the BelowHut
         let { manager } = this.type;
-        let type = manager.getType('hut.below');
         let group = manager.getGroup([]);
         let bh = BelowHut({
-          aboveHut: this, isHere: !this.isHere,
-          type, group, hid,
+          aboveHut: this,
+          isHere: !this.isHere,
+          type: manager.getType('hut.below'),
+          hid,
+          group,
           heartbeatMs: this.heartbeatMs,
-          sc: this.sc.kid('below')
+          sc: this.sc.kid('below') // TODO: Fix `sc` style
         });
-        manager.addRecord('hut.owned', { above: this, below: bh }, { ms: getMs() });
+        manager.addRecord({
+          type: 'hut.owned',
+          uid: `owned(${bh.uid})`,
+          group: { above: this, below: bh },
+          value: { ms: getMs() }
+        });
         
         this.belowHuts.add(hid, bh);
         bh.endWith(() => this.belowHuts.rem(hid));
@@ -609,7 +613,7 @@ global.rooms['setup.hut'] = async () => {
           // THERAPYWTF
           if (cause.message.startsWith('Api: Duplicated sync')) window.location.reload();
           
-          throw err.mod({ msg: 'Error syncing - did the AboveHut stop unexpectedly?', cause });
+          throw err.mod(msg => ({ msg: 'error-syncing', cause }));
           
         }
         

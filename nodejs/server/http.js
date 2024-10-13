@@ -158,7 +158,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         // TODO: Errors due to client socket disconnection should not block the `reply` callback
         // from being called
         let syncTimeout = setTimeout(() => {
-          gsc.kid('error')(`Reply timed out... that's not good!`, { msg, roadAuth: this });
+          global.subcon('error')(`Reply timed out... that's not good!`, { msg, roadAuth: this });
           comm.kill({ code: 500, msg: 'Api: sorry - experiencing issues' });
         }, 15 * 1000);
         /// =DEBUG}
@@ -370,7 +370,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         };
         
         let timeout = setTimeout(() => {
-          gsc.kid('error')('Stream timed out before reply');
+          global.subcon('error')('Stream timed out before reply');
           this.kill({ code: 500, msg: 'Api: sorry - experiencing issues' });
         }, 5000); // Stream needs to complete in 5000ms
         

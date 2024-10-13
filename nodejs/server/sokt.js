@@ -242,7 +242,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         socket.on('close', closeFn = () => this.end());
         socket.on('error', errorFn = err => {
           
-          gsc.kid('error')(err.mod(msg => `Socket error: ${msg}`));
+          global.subcon(err.mod(msg => `Socket error: ${msg}`));
           this.end();
           
         });
@@ -274,7 +274,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
           
           this.socket.write(Form.wsEncode(opts), cause => {
             if (cause) {
-              gsc.kid('error')(err.mod( msg => ({ cause, msg: `Error writing to websocket: ${msg}` }) ).suppress());
+              global.subcon(err.mod( msg => ({ cause, msg: `Error writing to websocket: ${msg}` }) ).suppress());
               this.end();
             }
             rsv();

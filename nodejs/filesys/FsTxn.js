@@ -763,13 +763,13 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
   
   getContent(...args) { // DEPRECATED
     
-    subcon('warn')(Error('Deprecated "getContent" method (use "getData" instead)'));
+    subcon('error')(Error('Deprecated "getContent" method (use "getData" instead)'));
     return this.getData(...args);
     
   },
   setContent(...args) { // DEPRECATED
     
-    subcon('warn')(Error('Deprecated "setContent" method (use "setData" instead)'));
+    subcon('error')(Error('Deprecated "setContent" method (use "setData" instead)'));
     return this.setData(...args);
     
   },
@@ -796,6 +796,50 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
   getKids(fk) {
     
     // Note this method returns an Enumerable; not necessarily an Array! (TODO: use streaming?)
+    
+    /* BUGGY STREAMING IMPLEMENTATION:
+    
+    this.checkFk(fk);
+    
+    // TODO: Switch to "family.get" lock; implement "family.get" in `lockCollisionResolvers`
+    let locks = [ Form.lock('subtree.get', fk) ];
+    
+    let kidIteratorPrm = Promise.later();
+    
+    let prm = this.processOp({
+      name: 'getKids',
+      locks,
+      fn: async () => {
+        
+        let type = await Form.xGetType(fk);
+        if (type === null)   return {};
+        if (type === 'leaf') return {};
+        
+        let ended = false;
+        let iterationCompletePrm = Promise.later();
+        
+        // Create an iterator with an "end" method
+        let iterator = async function*() {
+          for (const kid of await Form.xGetKids(fk)) {
+            if (ended) break;
+            yield kid;
+          }
+          iterationCompletePrm.resolve();
+        };
+        Object.assign(iterator, { end: () => { ended = true; iterationCompletePrm.resolve(); } });
+        
+        // Expose this iterator to the consumer
+        kidIteratorPrm.resolve(iterator);
+        
+        // Wait for the consumer to finish iterating (TODO: timeout??)
+        await iterationCompletePrm;
+        
+      }
+    });
+    
+    return kidIteratorPrm.then(kidIterator => Object.assign(kidIterator, { prm }));
+    
+    */
     
     this.checkFk(fk);
     

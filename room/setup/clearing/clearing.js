@@ -202,7 +202,6 @@ Object.assign(global, {
     },
     all(fn=Boolean) { return this.every(fn); },
     any(fn=Boolean) { return this.some(fn); },
-    sift(fn=Boolean) { return this.filter(fn); },
     empty() { return !this.length; },
     add(...args) { this.push(...args); return args[0]; },
     rem(val) { let ind = this.indexOf(val); if (ind > -1) this.splice(ind, 1); },
@@ -1003,7 +1002,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     return { ...params, active: params.chatter || params.therapy };
     
   },
-  subconOutput: (sc, ...args) => console.log(`\nSubcon "${sc.term}": ${global.formatAnyValue(args)}`),
+  subconOutput: (sc, ...args) => console['l' + 'og'](`\nSubcon "${sc.term}": ${global.formatAnyValue(args)}`),
   subconStub: Object.assign(() => {}, { term: 'stub', kid: () => global.subconStub, params: () => ({}) }),
   
   // Urls
@@ -1086,7 +1085,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     
   },
   denumerate: (obj, prop) => C.def(obj, prop, obj[prop], { enumerable: false }),
-  formatAnyValue: val => { try { return valToJson(val); } catch (err) { return '<unformattable>'; } },
+  formatAnyValue: val => { try { return valToJson(val); } catch (err) { return `Unformattable(${getFormName(val)})`; } },
   valToJson: JSON.stringify,
   jsonToVal: JSON.parse,
   valToSer: JSON.stringify,

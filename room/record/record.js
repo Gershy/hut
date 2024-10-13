@@ -75,7 +75,7 @@ global.rooms['record'] = async () => {
       return { type, group, value, uid, volatile };
       
     },
-    addRecord(...args /* type, group, value, uid, volatile | { type, group, value, uid, volatile } */) {
+    addRecord(...args /* type, group, value, uid, volatile | { type, uid, group, value, volatile } */) {
       
       // Note: `Manager(...).addRecord` is basically `Manager.getRecord(...)` but with mandatory
       // `group` and `value`, and optional `uid`
@@ -198,9 +198,8 @@ global.rooms['record'] = async () => {
           if (rec.uid !== uid) throw Error(`Promised uid "${uid}" but RecordPlan delivered "${rec.uid}"`);
           /// =DEBUG}
           
-          // We only want to uncache `uid` after the Plan resolves to a
-          // Record AND the Record's `bankedPrm` resolves! This avoids a
-          // sequence like:
+          // We only want to uncache `uid` after the Plan resolves to a Record AND the Record's
+          // `bankedPrm` resolves! This avoids a sequence like:
           // 1. `uid` set in cache
           // 2. `recPlan()` resolves to some `rec`
           //    - But `rec` isn't Banked yet
@@ -210,19 +209,17 @@ global.rooms['record'] = async () => {
           // 4. A new `getRecordFromCacheOrPlan` request for the same
           //    uid comes in
           //    - It doesn't see `uid` in the cache
-          //    - It can't find `uid` in-memory, because `rec` hasn't
-          //      finished Banking (and hasn't informed its Holders)
+          //    - It can't find `uid` in-memory, because `rec` hasn't finished Banking (and hasn't
+          //      informed its Holders)
           // 5. This 2nd `getRecordFromCacheOrPlan` call creates another
           //    duplicate instance to `rec`! (OH NO!!)
           // 6. The original `rec` finishes Banking, and realizes it's a
           //    duplicate. OWWWWW!!
           // 
-          // The trick is to wait for `rec.bankedPrm` to resolve in
-          // between steps #2 and #3! That way there is never a moment
-          // where `rec` is in neither the cache nor memory!
+          // The trick is to wait for `rec.bankedPrm` to resolve in between steps #2 and #3; That
+          // way there is never a moment where `rec` is in neither the cache nor memory!
           
-          // After the Plan completes AND `rec` is Banked, set a timeout
-          // to uncache `uid`
+          // After the Plan completes AND `rec` is Banked, set a timeout to uncache `uid`
           rec.bankedPrm.then(() => this.renewRecordCacheTimeout(uid));
           rec.route(() => {
             clearTimeout(this.recPrmTimeouts[uid]);
@@ -430,6 +427,7 @@ global.rooms['record'] = async () => {
       // Make sure there's no mixing of Managers
       let managers = Set();
       if (manager) managers.add(manager);
+      
       for (let [ k, rec ] of mems) rec.type.manager && managers.add(rec.type.manager);
       if (managers.count() !== 1) throw Error(`Exactly 1 unique Manager is required; got ${managers.count()}`);
       
@@ -449,6 +447,9 @@ global.rooms['record'] = async () => {
   })});
   
   let RelHandler = form({ name: 'RelHandler', has: { Endable, Src }, props: (forms, Form) => ({
+    
+    // Handles a relationship between a specific `rec` Record, and Records which Hold `rec` via a
+    // specific `term`
     
     $AuditSrc: form({ name: 'RelHandler.AuditSrc', has: { Src }, props: (forms, Form) => ({
       
@@ -492,10 +493,9 @@ global.rooms['record'] = async () => {
       
       /// {BELOW=
       
-      // Below receives a pre-processed list of Hrecs; there's never a
-      // need for Below to do more filtering! Below should always simply
-      // collect all possible Hrecs (TODO: Can remove any logic related
-      // to unfixed RelHandlers from Below??)
+      // Below receives a pre-processed list of Hrecs; there's never a need for Below to do more
+      // filtering! Below should always simply collect all possible Hrecs (TODO: Can remove any
+      // logic related to unfixed RelHandlers from Below??)
       
       [ offset, limit, filter, fixed ] = [ 0, Infinity, null, true ];
       
@@ -544,8 +544,9 @@ global.rooms['record'] = async () => {
     },
     async mod({ filter=null, offset, limit }) {
       
-      // Change the parameterization for this RelHandler - this means that any previous Hrecs may
-      // be ended due to changed filters/limits/offsets
+      // Change the parameterization for this RelHandler - the relationship remains the same, but
+      // the range of Records that meet the relationship criteria which get produced may change.
+      // Any previous Hrecs may be ended due to changed filters/limits/offsets!
       
       /// {DEBUG=
       if (filter && !hasForm(filter, Function)) throw Error(`Api: "filter" must be a Function (got ${getFormName(filter)})`);
@@ -557,7 +558,7 @@ global.rooms['record'] = async () => {
       this.activeSignal.end();
       let activeSignal = this.activeSignal = Tmp();
       
-      let hrecs = this.hrecs;
+      let { hrecs } = this;
       let newHrecPrms = [];
       
       Object.assign(this, { filter, offset, limit });
@@ -571,28 +572,27 @@ global.rooms['record'] = async () => {
         // already computed an exhaustive list of relevant Records! Note
         // there's a good chance that `this` is the Infinite RelHandler
         let precompRh = this.rec.relHandlers[`${this.type.name}/${this.term}/0:Infinity`] ?? null;
-        if (precompRh && precompRh.off()) precompRh = null;              // Can't use it if it's off
-        if (precompRh && precompRh.activeSignal.onn()) precompRh = null; // Can't use it if it's mid-selection
+        if (precompRh?.off())              precompRh = null; // Can't use it if it's off
+        if (precompRh?.activeSignal.onn()) precompRh = null; // Can't use it if it's mid-selection
         
         if (!precompRh) {
           
-          // If no "precomputed" RelHandler already exists we need to
-          // process the full selection using our Bank
+          // If no "precomputed" RelHandler, process the full selection using our Bank
           
-          selection = await this.manager.bank.select({ activeSignal, relHandler: this });
+          selection = await this.manager.bank.select({ activeSignal, relHandler: this, eee: new Error('hi') });
           
         } else {
           
-          // We have a precomputed RelHandler which already has refs to
-          // the exhaustive list of relevant Records
+          // We have a precomputed RelHandler which already has refs to the exhaustive list of
+          // relevant Records
           
           // Take a snapshot of these Records
           let recs = precompRh.hrecs.toArr(hrec => hrec.rec);
           
           selection = filter
-            // Need to provide full range of `selected` properties if a
-            // filter was provided, because the filter might reference
-            // those properties
+            
+            // If filter was requested, provide full range of `selected` properties, as the filter
+            // may reference any of those properties
             ? (function*() {
                 for (let rec of recs) yield {
                   rec,
@@ -603,8 +603,7 @@ global.rooms['record'] = async () => {
                 };
               })()
             
-            // If no filter was provided all we need is a "rec" property
-            // which is already conveniently set on each `hrec`!
+            // If no filter was provided all we need is a "rec"!
             : (function*() { for (let rec of recs) yield { rec }; })();
             
         }
@@ -612,6 +611,18 @@ global.rooms['record'] = async () => {
         // Skip `offset` items! (Note that filtered items don't count towards offset items)
         let count = 0;
         for await (let selected of selection) {
+          
+          // `selection` is:
+          //    | type RecUid = string;
+          //    | type RecType = string;
+          //    | 
+          //    | type Selection = AsyncIterable<{
+          //    |   rec: null | Record,
+          //    |   uid: RecUid,
+          //    |   type: RecType,
+          //    |   mems: { [key: RecType]: RecUid },
+          //    |   getValue: () => Promise<JsonValue>
+          //    | }>
           
           // Stop selecting if `activeSignal` is no longer active
           if (activeSignal.off()) return;
@@ -627,33 +638,25 @@ global.rooms['record'] = async () => {
           // Stop selecting if sufficient items have been selected
           if (count > offset + limit) break;
           
-          // Resolve `selected` to a Record - some Banks provide
-          // `selected` Objects with a "rec" property referencing the
-          // Record(...) itself - use this if available! Otherwise check
-          // to see if there is already a Promise resolving to the
-          // desired Record (mapped by uid). If there isn't, use the
-          // `manager` to ensure the Record exists (this will search the
-          // full RecordTree, and if the Record still isn't found it
-          // will initialize it based on its value in the Bank)
+          // Resolve `selected` to a Record - some Banks provide `selected` Objects with a "rec"
+          // property referencing the Record(...) itself - use this if available! Otherwise check
+          // to see if there is already a Promise resolving to the desired Record (mapped by uid).
+          // If there isn't, use `manager` to ensure the Record exists - this will search the full
+          // RecordTree; if the Record isn't found it will be initialized based on its Bank value!
           
           if (selected.rec) {
-            
-            /// {DEBUG=
-            if (hrecs.has(selected.rec.uid) && hrecs.get(selected.rec.uid).rec !== selected.rec)
-              throw Error(`OWWWWWW Bank probably incorrectly instantiated a dupicate Record`).mod({ selected });
-            /// =DEBUG}
             
             this.handleRec(selected.rec) && addedRecs.push(selected.rec);
             
           } else if (hrecs.has(selected.uid)) {
             
-            // This RelHandler is already handling the uid - do nothing!
-            // We don't even need to check if a duplicate instance was
-            // instantiated, because there's no reason to think the
-            // Bank's process of Selecting created any Record instance!
+            // This RelHandler is already handling the uid - do nothing! We don't even need to
+            // check if a duplicate instance was instantiated, because we're sure the Bank's
+            // process of Selecting never creates new Record instances!
             
           } else {
             
+            // Need to create a Record(...) instance from Banked values
             newHrecPrms.push(then(
               this.manager.ensureRecord(selected.uid, selected),
               rec => this.handleRec(rec) && addedRecs.push(rec), // TODO: What if Selection is ended early, finally block sends all
@@ -671,9 +674,10 @@ global.rooms['record'] = async () => {
         
       } finally {
         
-        // Note that an Error is probably fatal if `this.auditSrc` is
-        // set, because it will have short-circuited the `try` block
-        // before the change was sent to `this.auditSrc`!
+        // Note Errors are probably fatal if `this.auditSrc` is set, because the `try` block will
+        // have been short-circuited before the change was sent to `this.auditSrc`!
+        
+        // TODO: Maybe the Error isn't fatal, but we need to invalidate `this.auditSrc` somehow...
         
         activeSignal.end();
         
@@ -687,23 +691,19 @@ global.rooms['record'] = async () => {
       /// =ASSERT}
       
       // Ignore any Records that are Ended or already handled
-      if (rec.off()) return;
+      if (rec.off()) return null;
       if (this.hrecs.has(rec.uid)) return null;
       
       // Create `hrec` and ensure that if `rec` ends, `hrec` ends too
       let hrec = Tmp({ rec, desc: () => `HandledRecord(${rec.desc()})` });
       
-      mmm('hrecs', +1);
-      this.hrecs.add(rec.uid, hrec);
-      let recEndHrecRoute = rec.route(() => hrec.end());
-      
+      this.hrecs.add(rec.uid, hrec); mmm('hrecs', +1);
+      rec.endWith(hrec);
       hrec.endWith(() => {
         
-        // Remove the Record; inform the AuditSrc; sever the relation
-        // that `rec` ends `hrec`
+        // Remove the Record; inform the AuditSrc; remove the relation that `rec` ends `hrec`
         this.hrecs.rem(rec.uid); mmm('hrecs', -1);
         this.auditSrc && this.auditSrc.mod({ add: -1, delta: [ rec ] });
-        recEndHrecRoute.end();
         
       });
       
@@ -852,7 +852,7 @@ global.rooms['record'] = async () => {
       
       this.type.manager.recordSc(() => `INIT ${this.desc()}`);
       
-      // Apply Banking
+      // Apply Banking; `this.bankedPrm` resolves when `this` is fully persisted in its Bank
       let err = Error('');
       this.bankedPrm = (async () => {
         
@@ -880,9 +880,8 @@ global.rooms['record'] = async () => {
           
           let syncPrm = this.type.manager.bank.syncRec(this);
           
-          // Now that this Record has been Banked we can inform all
-          // Members of their new Holder, `this`. Note we only inform
-          // Members with an active RelHandler handling `this`!
+          // Now that this Record has been Banked we can inform all Members that `this` is their
+          // new Holder; note we only inform Members with an active RelHandler handling `this`!
           for (let [ term, mem ] of this.group.mems) for (let k in mem.relHandlers) {
             
             let rh = mem.relHandlers[k];
@@ -893,15 +892,12 @@ global.rooms['record'] = async () => {
             // Skip RelHandlers that are irrelevant to the Term
             if (rh.term !== term) continue;
             
-            // TODO: Right now `rec` is rejected if the RelHandler is at
-            // its capacity - but technically it's possible that Records
-            // which the RelHandler is only newly aware of outprioritize
-            // pre-existing Records; this occurs when the new Record has
-            // an earlier offset. Technically if `rec` would be ignored
-            // due to the RelHandler being full we need to check if it
-            // should be ordered ahead of any of the already-handled
-            // hrecs (could also try calling `this.mod(this)` to
-            // repopulate the RelHandler from scratch)
+            // TODO: Right now `rec` is rejected if the RelHandler is at its capacity - but it's
+            // possible Records of the RelHandler which get created later outprioritize
+            // pre-existing Records; this occurs when the new Record has an earlier offset.
+            // Technically if `rec` would be ignored due to the RelHandler being full we need to
+            // check if it should be ordered ahead of any of the already-handled hrecs (could also
+            // try calling `this.mod(this)` to repopulate the RelHandler from scratch)
             
             // Skip the RelHandler if it's already full
             if (rh.hrecs.size >= rh.limit) continue;

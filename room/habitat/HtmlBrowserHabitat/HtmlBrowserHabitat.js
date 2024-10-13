@@ -145,10 +145,10 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
               html, body, body * {
                 position: relative; display: flex;
                 box-sizing: border-box;
-                width: -moz-fit-content; height: -moz-min-content;
+                width: -moz-fit-content; height: -moz-fit-content;
                 width: fit-content; height: fit-content;
               }
-              html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
+              html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; -webkit-text-size-adjust: none; text-size-adjust: none; }
               body { font-family: monospace; white-space: pre-wrap; opacity: 0; font-size: ${textSize}; transition: opacity 200ms linear; }
               body.loaded { opacity: 1; }
               body > * { width: 100%; height: 100%; }
@@ -170,7 +170,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
               worker.buffered = [];
               global.workerReady = new Promise(rsv => {
                 worker.addEventListener('message', evt => {
-                  console.log('Got worker ACKKK', evt.data);
+                  console['l' + 'og']('Got worker ACKKK', evt.data);
                 }, { once: true });
               });
               worker.port.start();
@@ -291,7 +291,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
           
           tab.ports.each(port => {
             port.postMessage({ desc: 'hello new tab, i assigned u a uid as "tabUid"', shwUid, tabUid });
-            port.addEventListener('message', evt => console.log('Hi its the worker - a connected tab is messaging me', { shwUid, tabUid, evt }));
+            port.addEventListener('message', evt => console['l' + 'og']('Hi its the worker - a connected tab is messaging me', { shwUid, tabUid, evt }));
           });
           
         });

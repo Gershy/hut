@@ -351,9 +351,9 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
             + `'use strict';`
             
             // // Log that the room script executed
-            // + `console.log('EXECUTE ${sourceName}');`,
+            // + 'con' + `sole.log('EXECUTE ${sourceName}');`,
           
-            // Open a scope (e.g. `{ console.log('hi'); };`); requirement #1
+            // Open a scope; requirement #1
             + ('{')
             
             // Remove any previous strict-mode declaration
@@ -758,7 +758,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
             
             then(subconWriteStdout(sc, ...args), scVal => {
               
-              if (scVal === null) return; // The output value resolved to be nullish; ignore it!
+              if (scVal === null) return; // The output value resolved to be nullish - ignore it!
               let { params, args=[] } = scVal;
               
               let { therapy=false } = params;
@@ -781,6 +781,15 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
                   
                   (async () => {
                     
+                    // TODO: Should have `normalizeAnyValue` in addition to `formatAnyValue`!!
+                    // TODO: Revisit this; don't call the value "args"; avoid sending, e.g.,
+                    //   Buffers as { length: 1000, data:[100,101,102, ... ] }
+                    let a = args[0];
+                    try { valToJson(args); } catch (err) {
+                      let { $, $r, ...props } = a;
+                      a = { $, $r, val: formatAnyValue(props, { ansiFn: v => v }) };
+                    }
+                    
                     let streamRec = await recMan.addRecord({
                       uid: streamUid,
                       type: `${pfx}.stream`,
@@ -790,7 +799,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
                     let notionRec = await recMan.addRecord({
                       type: `${pfx}.notion`,
                       group: [ streamRec ],
-                      value: { ms, args: args[0] } // TODO: only `args[0]`? Not all `args`??
+                      value: { ms, args: a } // TODO: only `args[0]`? Not all `args`??
                     });
                     
                   })();
@@ -807,7 +816,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
                   //   access params
                   // - maybe other ways too??
                   
-                  let errSc = global.subcon('warn');
+                  let errSc = global.subcon('error');
                   errSc.cachedParams = { ...errSc.params(), therapy: false };
                   errSc(err.mod(msg => `Error recording therapy: ${msg}`), ...args);
                   
@@ -823,13 +832,19 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
           subconWriteStdout.relevantTraceIndex += 1;
           
           // THERAPYWTF
-          // let sc = global.subcon('testeroo');
-          // setInterval(() => {
-          //   sc.note('interval', {
-          //     fixed: 'random',
-          //     dynamic: 'a'.repeat(1 + Math.floor(Math.random() * 10))
-          //   }); 
-          // }, 1000);
+          for (let n = 0; n < 3; n++) {
+            global.subcon('testeroo').note('interval', {
+              fixed: 'random',
+              dynamic: `zzzzzzzzzzzzzzzzzz-${String.id()}-${n}`
+            }); 
+          }
+          
+          let cnt = 0;
+          setInterval(() => {
+            global.subcon('testeroo.' + Math.floor(Math.random() * 5)).note('interval', {
+              msg: 'lmaolmao' + (cnt++)
+            });
+          }, 1000);
           
         }
         

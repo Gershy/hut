@@ -39,14 +39,11 @@ global.rooms['therapy'] = async (roomName, therapyKeep) => {
           Text: { text: 'Therapy', align: 'mid', size: '180%' }
         }));
         
-        dep.scp(loft, 'therapyLoft', (therapyLoft, dep) => {
+        dep.scp(loft.relHandler('therapyLoft'), (therapyLoft, dep) => {
           
           let therapy = therapyLoft.m('therapy');
-          dep.scp(therapy, 'stream', (stream, dep) => {
-            
-            // THERAPYWTF
-            console.log('STREAM START', stream);
-            dep(() => console.log('STREAM END', stream));
+          
+          dep.scp(therapy.relHandler('stream'), (stream, dep) => {
             
             let streamReal = experience.real.addReal('stream', {
               Geom: { w: '100%' },
@@ -60,15 +57,39 @@ global.rooms['therapy'] = async (roomName, therapyKeep) => {
             let notionsReal = streamReal.addReal('notions', {
               Geom: { w: '100%' },
               Axis1d: { axis: 'y', mode: 'stack', window: 'clip' },
-              Decal: { colour: 'rgba(0, 0, 0, 0.1)' }
+              Decal: { colour: '#00000005' }
             });
             
             dep.scp(stream, 'notion', (notion, dep) => {
               
               let { ms, args } = notion.getValue();
-              let notionReal = notionsReal.addReal('notion', {
+              
+              let { $r: region, $: correlation, ...payload } = args;
+              
+              let notionReal = dep(notionsReal.addReal('notion', {
                 Geom: { w: '100%' },
-                Text: { text: valToJson(args), align: 'fwd' }
+                Axis1d: { axis: 'y', mode: 'stack' },
+                //Text: { text: `${region.upper()}\n${valToJson(correlation)}\n`, align: 'fwd' },
+                Decal: {
+                  border: { colour: '#0002', ext: '1px' }
+                }
+              }));
+              notionReal.addReal('time', {
+                Geom: { w: '100%' },
+                Text: { align: 'fwd', style: 'bold', text: getDate(ms) },
+              });
+              notionReal.addReal('region', {
+                Geom: { w: '100%' },
+                Text: { align: 'fwd', style: 'bold', text: region }
+              });
+              notionReal.addReal('correlation', {
+                Geom: { w: '100%' },
+                Text: { align: 'fwd', text: valToJson(correlation) }
+              });
+              notionReal.addReal('payload', {
+                Geom: { w: '100%' },
+                Text: { align: 'fwd', text: valToJson(payload) },
+                Decal: { text: { colour: '#0008' } }
               });
               
             });

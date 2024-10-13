@@ -4,6 +4,8 @@ global.rooms['record.bank.WeakBank'] = () => form({ name: 'WeakBank', has: { End
     forms.Endable.init.call(this);
     Object.assign(this, { recs: Map(), nextUid: 0, sc });
   },
+  desc() { return `${getFormName(this)}()`; },
+  
   getNextUid() { return this.nextUid++; },
   syncRec(rec) {
     
@@ -23,31 +25,25 @@ global.rooms['record.bank.WeakBank'] = () => form({ name: 'WeakBank', has: { End
     //   add: [
     //     { type: 'loft.myThing1', uid: '001Au2s8', mems: [], val: null },
     //     { type: 'loft.myThing2', uid: '001Au2s9', mems: [ '001Au2s8' ], val: null },
-    //     { type: 'loft.myThing1', uid: null, mems: [], val: 'proposed!' } // TODO: Implement this!
     //   ],
     //   upd: [
     //     { uid: '001Au2f1', val: 'newVal for 001Au2f1' },
     //     { uid: '001Au2f2', val: 'newVal for 001Au2f2' }
     //   ],
-    //   rem: [
-    //     '001Au2h3',
-    //     '001Au2h4',
-    //     '001Au2h5',
-    //     '001Au2h6'
-    //   ]
+    //   rem: [ '001Au2h3', '001Au2h4', '001Au2h5', '001Au2h6' ]
     // }
     
     // Process all "add" operations
-    let waiting = add;
-    while (waiting.length) {
+    let pending = add;
+    while (pending.length) {
       
-      let attempt = waiting;
-      waiting = [];
+      let attempt = pending;
+      pending = [];
       
       // Try to fulfill this attempt
       for (let addRec of attempt) {
         
-        if (this.recs.has(addRec.uid)) throw Error(`Duplicate id: ${addRec.uid}`).mod({ addRec, add, upd, rem });
+        if (this.recs.has(addRec.uid)) throw Error('duplicate-id').mod({ uid: addRec.uid, addRec, add, upd, rem });
         
         let mems = null;
         if (isForm(addRec.mems, Object)) {
@@ -74,7 +70,7 @@ global.rooms['record.bank.WeakBank'] = () => form({ name: 'WeakBank', has: { End
           
         }
         
-        if (!mems) { waiting.push(addRec); continue; } // Reattempt soon
+        if (!mems) { pending.push(addRec); continue; } // Reattempt soon
         
         // All members are available - create the Record! Note the
         // following happens *synchronously*:
@@ -85,18 +81,18 @@ global.rooms['record.bank.WeakBank'] = () => form({ name: 'WeakBank', has: { End
         let newRec = manager.addRecord({ type: addRec.type, group: mems, value: addRec.val, uid: addRec.uid });
         
         /// {ASSERT=
-        if (!this.recs.has(newRec.uid)) throw Error(`Didn't synchronously index ${newRec.desc()}`).mod({ uid: newRec.uid, recs: this.recs });
+        if (!this.recs.has(newRec.uid)) throw Error('Indexing did not occur synchronously/immediately').mod({ uid: newRec.uid, newRec, recs: this.recs });
         if (this.recs.get(newRec.uid) !== newRec) {
           this.sc(newRec, this.recs.get(newRec.uid));
-          throw Error(`Incorrectly indexed ${newRec.desc()}`);
+          throw Error('Indexing occurred incorrectly').mod({ newRec });
         }
         /// =ASSERT}
         
       }
       
       // If no item in the batch succeeded we can't make progress
-      if (waiting.length === attempt.length) {
-        throw Error(`Unresolvable Record dependencies`).mod({ add, recs: this.recs, waiting });
+      if (pending.length === attempt.length) {
+        throw Error(`Unresolvable Record dependencies`).mod({ add, recs: this.recs, waiting: pending });
       }
       
     }

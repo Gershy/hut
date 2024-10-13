@@ -14,13 +14,12 @@ global.rooms['record.bank.KeepBank'] = async () => {
     // TODO: Does a KeepBank still need to do its own ownership locking?? (Even if it's sitting on a
     // Keep which has its own ownership guarantees?)
     
-    init({ keep, lockTimeoutMs=500, encoding='json', sc=global.subcon('bank.keep'), ...args }) {
+    init({ keep, lockTimeoutMs=500, sc=global.subcon('bank.keep'), ...args }) {
       
       forms.Endable.init.call(this, args);
       Object.assign(this, {
         
         keep,
-        encoding,
         
         // Note intentional use of `Math.random()` (backing `String.id`) instead of an instantiated
         // Random Form; this "lock" value is hopefully as non-deterministic as possible!
@@ -119,11 +118,15 @@ global.rooms['record.bank.KeepBank'] = async () => {
       try {
         
         // Load initially store `rec` depending on if it was seen before
-        let meta = await this.keep.access([ 'rec', uid, 'm' ]).getData('json');
-        if (meta) {
+        
+        let recKeep = this.keep.access([ 'rec', uid ]);
+        if (await recKeep.access('m').exists()) {
           
-          let val = await this.keep.access([ 'rec', uid, 'v' ]).getData('json');
+          // TODO: All notions here need to be voided for the Therapy Loft!!! (Otherwise circular)
+          let val = await recKeep.access('v').getData('json');
+          
           this.sc(`${rec.desc()} has a preexisting value`, val);
+          
           rec.setValue(val);
           
         } else {
@@ -131,7 +134,7 @@ global.rooms['record.bank.KeepBank'] = async () => {
           this.sc(`${rec.desc()} is being synced from scratch...`);
           
           // Store metadata
-          await this.keep.access([ 'rec', uid, 'm' ]).setData({
+          await recKeep.access('m').setData({
             type: rec.type.name,
             uid: rec.uid,
             mems: rec.group.mems.map(mem => mem.uid),
@@ -165,62 +168,75 @@ global.rooms['record.bank.KeepBank'] = async () => {
       
     },
     
-    async* select({ activeSignal, relHandler }) {
+    async* select({ activeSignal, relHandler, eee }) {
       
-      let { rec: memRec, type, term } = relHandler;
+      // Note the terminology here calls the source Rec the "heldRec", because we are searching for
+      // Recs which hold it; such candidate Recs are called "holderRecs" here.
+      let { rec: heldRec, type: heldType, term: heldTerm } = relHandler;
       
-      // Find all Records which Group `memRec` under the term `term`
+      // Find all HolderRecs of `heldRec`; these reference `heldRec` via `term`. Note the resulting
+      // HolderRecs may have mixed types!
       
-      // Find any Hot Records
+      // Find any appropriate HolderRecs amongst our HotRecs
       let seen = Set();
-      for (let uid in this.hotRecs[type.name] ?? {}) {
+      for (let holderUid in this.hotRecs[heldType.name] ?? {}) {
         
         if (activeSignal.off()) break;
         
-        let rec = this.hotRecs[type.name][uid];
-        if (rec.group.mems[term] !== memRec) continue;
-        seen.add(uid);
+        let holder = this.hotRecs[heldType.name][holderUid];
+        if (holder.group.mems[heldTerm] !== heldRec) continue;
+        seen.add(holderUid);
+        
         yield {
-          rec,
-          uid,
-          type: type.name,
-          mems: rec.group.mems.map(mem => mem.uid),
-          getValue: () => rec.getValue()
+          rec: holder,
+          uid: holderUid,
+          type: holder.type.name,
+          mems: holder.group.mems.map(mem => mem.uid),
+          getValue: () => holder.getValue()
         };
         
       }
       
+      // Find any appropriate HolderRecs amongst our BankedRecs
       if (activeSignal.onn()) {
         
-        let keeps = await this.keep.dive('rec').getKids();
-        try { for await (let [ uid, childKeep ] of keeps) {
+        let holderKeeps = await this.keep.access('rec').getKids();
+        
+        try { for await (let [ holderUid, holderKeep ] of holderKeeps) {
           
           if (activeSignal.off()) break;
           
-          // It's possible the Record is Banked but also Hot, and would
-          // have already been yielded earlier - don't yield it again!
-          if (seen.has(uid)) continue;
+          // It's possible the Record is Banked but also Hot, and would have already been yielded
+          // earlier - don't yield it again! But also no need to add to `seen`, as BankedRecs can
+          // only collide with HotRecs, not other BankedRecs.
+          if (seen.has(holderUid)) continue;
           
           // Don't return children with `null` "m" ("meta") content
-          let meta = await childKeep.access('m').getData(this.encoding);
-          if (!meta) continue; // `meta` may be `null` if it was deleted recently
+          let holderMeta = await holderKeep.access('m').getData('json'); // Can't be nullish because the filesys transaction is sustained by `holderKeeps`
+          
+          // If the BankedRec has no member under "term", ignore it
+          if (!holderMeta.mems[heldTerm]) continue;
           
           // Filter out any Records whose Type doesn't match
-          if (type.name !== meta.type) continue;
+          if (holderMeta.type !== heldType.name) continue;
           
-          // Only accept Records that have `rec` as a Member under `term`,
-          // or under the default term (`rec.type.name`)
-          if (meta.mems[term] !== uid) continue;
+          // Only accept Records that have `memRec` as a Member under `term` - note `term` is often
+          // not explicitly defined by the consumer, so it defaults to `rec.type.name` (it's only
+          // mandatory to explicitly provide terms when multiple members have the same type)
+          if (holderMeta.mems[heldTerm] !== heldRec.uid) continue;
           
           yield {
             rec: null,
-            uid,
-            type: meta.type,
-            mems: meta.mems,
-            getValue: () => childKeep.access('v').getData(this.encoding)
+            uid: holderUid,
+            type: holderMeta.type,
+            mems: holderMeta.mems,
+            getValue: () => holderKeep.access('v').getData('json')
           };
           
-        }} finally { keeps.end?.(); }
+        }} finally {
+          // Explicitly end the Keep iterator if possible
+          if (isForm(holderKeeps.end, Function)) holderKeeps.end();
+        }
         
       }
       
