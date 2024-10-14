@@ -469,9 +469,8 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         if (!cmpKeep.is(mapCmpKeep).par) return { file: mapCmpKeep.desc(), row, col, context: null };
         
         // Path looks like "..../path/to/compiled/<bearing>/<roomName>"
-        let [ bearing, roomName, cmp ] = mapCmpKeep.fd.slice(cmpKeep.fd.length);
-        
-        // TODO: HEEEEEEERE suddenly we are trying to `mapCmpToSrc` rooms which haven't been inserted yet into "offsets"? (Is there a mis-mapping with casing?? New FsKeep makes everything lowercase!)
+        let [ _bearing, roomName, _cmp ] = mapCmpKeep.fd.slice(cmpKeep.fd.length);
+        console.log({ _bearing, roomName, _cmp });
         let { offsets } = global.rooms[roomName] ?? { offsets: [] };
         
         let context = {};   // Store metadata from final relevant offset
@@ -493,7 +492,6 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         
         let roomPcs = roomName.split('.');
         let roomPcLast = roomPcs.at(-1);
-        let fileFk = srcKeep.kid([ ...roomPcs, roomPcLast + '.js' ]);
         return {
           file: srcKeep.kid([ ...roomPcs, roomPcLast + '.js' ]).desc(),
           row: srcRow,
