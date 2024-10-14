@@ -469,8 +469,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         if (!cmpKeep.is(mapCmpKeep).par) return { file: mapCmpKeep.desc(), row, col, context: null };
         
         // Path looks like "..../path/to/compiled/<bearing>/<roomName>"
-        let [ _bearing, roomName, _cmp ] = mapCmpKeep.fd.slice(cmpKeep.fd.length);
-        console.log({ _bearing, roomName, _cmp });
+        let roomName = mapCmpKeep.fd[cmpKeep.fd.length + 1];
         let { offsets } = global.rooms[roomName] ?? { offsets: [] };
         
         let context = {};   // Store metadata from final relevant offset
