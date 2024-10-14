@@ -1,6 +1,5 @@
 global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.geom'] = () => {
   
-  let bigInset = '10000px';
   let numericCss = v => {
     if (v === null) return '';
     if (v.constructor === Number) return `${v}px`;

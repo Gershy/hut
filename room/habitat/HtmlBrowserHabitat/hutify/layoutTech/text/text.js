@@ -18,7 +18,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.text'] = () => ({
     // This may, however, overload the functionality of the Text Layout;
     // it could be better to define something new like RichText
     let span = real.node.querySelector(':scope > span.text');
-    span.textContent = layout.getParam(real, 'text') ?? '\u2022'.repeat(3);
+    span.textContent = layout.getParam(real, 'text') ?? '<null>';
     
     Object.assign(real.node.style, {
       

@@ -517,6 +517,13 @@ Object.assign(global, {
       if (!props.empty()) desc += '\n' + formatAnyValue(props).indent(2);
       
       if (cause) {
+        
+        let ccc = isForm(cause, Array) ? cause : isForm(cause, Object) ? cause.toArr(v => v) : [ cause ];
+        
+        if (ccc.some(v => !hasForm(v, Error))) {
+          console.log('THIS IS NOT AN ERROR', ccc, ccc.filter(v => hasForm(v, Error).map(v => v.desc())));
+        }
+        
         if (hasForm(cause, Error)) cause = cause.desc(seen);
         else                       cause = cause.map((c, n) => `Cause #${n + 1}: ` + c.desc(seen)).join('\n');
         desc += `\nCAUSE:\n${cause.indent(2)}`;

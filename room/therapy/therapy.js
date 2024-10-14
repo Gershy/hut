@@ -59,7 +59,6 @@ global.rooms['therapy'] = async (roomName, therapyKeep) => {
               Axis1d: { axis: 'y', mode: 'stack', window: 'clip' },
               Decal: { colour: '#00000005' }
             });
-            
             dep.scp(stream, 'notion', (notion, dep) => {
               
               let { ms, args } = notion.getValue();
@@ -68,27 +67,20 @@ global.rooms['therapy'] = async (roomName, therapyKeep) => {
               
               let notionReal = dep(notionsReal.addReal('notion', {
                 Geom: { w: '100%' },
-                Axis1d: { axis: 'y', mode: 'stack' },
-                //Text: { text: `${region.upper()}\n${valToJson(correlation)}\n`, align: 'fwd' },
-                Decal: {
-                  border: { colour: '#0002', ext: '1px' }
-                }
+                Axis1d: { axis: 'y', mode: 'stretch' },
+                Decal: { border: { colour: '#0002', ext: '1px' } }
               }));
               notionReal.addReal('time', {
-                Geom: { w: '100%' },
                 Text: { align: 'fwd', style: 'bold', text: getDate(ms) },
               });
               notionReal.addReal('region', {
-                Geom: { w: '100%' },
                 Text: { align: 'fwd', style: 'bold', text: region }
               });
               notionReal.addReal('correlation', {
-                Geom: { w: '100%' },
-                Text: { align: 'fwd', text: valToJson(correlation) }
+                Text: { align: 'fwd', text: valToJson(correlation ?? {}) }
               });
               notionReal.addReal('payload', {
-                Geom: { w: '100%' },
-                Text: { align: 'fwd', text: valToJson(payload) },
+                Text: { align: 'fwd', text: valToJson(payload ?? {}) },
                 Decal: { text: { colour: '#0008' } }
               });
               

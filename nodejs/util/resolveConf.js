@@ -129,7 +129,7 @@ let confyRoot = (() => {
         if (bits < 0) throw Error('requires a value >= 0');
         return bits;
       }}),
-      certificateType: ConfyVal({ settle: 'str', def: 'selfSign' }),
+      certificateType: ConfyVal({ settle: 'str', def: null }),
       details: ConfySet({
         kids: {
           geo: ConfyVal({ settle: 'str', fn: geo => {
@@ -494,11 +494,10 @@ module.exports = async ({ rootKeep, rawConf, confUpdateCb=Function.stub }) => {
       } catch (err) {
         err.propagate(msg => ({
           msg: String.baseline(`
-            | Failed reading config from Keep
-            | Error: "${msg}"
+            | Failed reading config from ${confKeep.desc()}; error:
+            ${msg.indent('| ')}
             | 
             | Is the syntax valid in your configuration Keep?
-            | Verify the contents of: ${confKeep.desc()}
           `),
           term,
           confKeep: confKeep.desc(),
@@ -519,7 +518,6 @@ module.exports = async ({ rootKeep, rawConf, confUpdateCb=Function.stub }) => {
   try { await extendConf(rawConf, { tolerateErrors: false }); } catch (err) {
     if (!err.partiallyChurnedValues) throw err.mod(msg => `Unexpected error while churning: ${msg}`);
     
-    console.log(err.cause);
     throw Error('Api: foundation rejection').mod({
       cause: err,
       feedback: [ 'Invalid configuration:', ...err.cause.map(err => `- ${err.message}`) ].join('\n')

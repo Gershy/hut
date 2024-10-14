@@ -31,7 +31,7 @@ global.rooms['reality.layout.Axis1d'] = async () => {
         let { mode, axis } = this.axis1d;
         tmp.endWith(this.holdFacet(real, 'x'));
         tmp.endWith(this.holdFacet(real, 'y'));
-        if (this.axis1d.mode === 'stretch') tmp.endWith(this.holdFacet(real, axis === 'x' ? 'w' : 'h'));
+        if (mode === 'stretch') tmp.endWith(this.holdFacet(real, axis === 'x' ? 'h' : 'w'));
         return tmp;
       }
     })})

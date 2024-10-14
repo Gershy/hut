@@ -93,18 +93,18 @@ if (process.argv[1] !== __filename) return;
 let conf = (() => { // Parse command-line conf
 
   try {
-
+    
     let { argv } = process;
     let looksLikeEval = /^[{['"]/;
-
+    
     let conf = {};
     for (let arg of argv.slice(2)) {
-
+      
       if (looksLikeEval.test(arg)) arg = eval(`(${arg})`);
       if (!arg) continue;
-
+      
       if (isForm(arg, String)) {
-
+        
         // String values without "=" are the single hoist room name;
         // those with "=" represent key-value pairs; those with ":="
         // represent key-value pairs with eval'd values

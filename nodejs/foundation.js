@@ -36,24 +36,18 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
   
   // Make `global.subconOutput` immediately available (but any log
   // invocations will only show up after configuration is complete)
-  global.subconOutput = (...args) => global.subconOutput.buffered.push(args); // Buffer everything
-  global.subconOutput.buffered = [];
+  let bufferedSc = [];
+  let subconOutput = global.subconOutput = (...args) => bufferedSc.push(args); // Buffer everything
   let subconSilenced = true;
-  let unsilenceSubcon = (unsilencedSubconOutputFn, { panic=false }={}) => {
-    let buffered;
-    if (global.subconOutput.buffered) {
-      buffered = global.subconOutput.buffered;
-      delete global.subconOutput.buffered;
-    } else {
-      buffered = [];
-    }
-    
+  let finalizeSubconOutput = (unsilencedSubconOutputFn, { panic=false }={}) => {
     global.subconOutput = unsilencedSubconOutputFn;
     subconSilenced = false;
     
-    if (panic) global.subconOutput(gsc, 'Error during initialization; panic! Dumping logs...');
-    for (let args of buffered) global.subconOutput(...args);
+    let bsc = bufferedSc;
+    bufferedSc = Array.stub;
     
+    if (panic) global.subconOutput(gsc, 'Error during initialization; panic! Dumping logs...');
+    for (let args of bsc) global.subconOutput(...args);
   };
   
   // Initial subcon log...
@@ -141,12 +135,18 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       // The index in the stack trace which is the callsite that invoked the subcon call (gets
       // overwritten later when therapy requires calling subcons from deeper stack depths)
       let leftColW = 28;
-      unsilenceSubcon(getStdoutSubcon({
+      subconOutput = getStdoutSubcon({
         debug: true,           // Results in expensive stack traces - could be based on conf??
         relevantTraceIndex: 2, // Hardcoded value; determined simply by testing
         leftColW,
         rightColW: Math.max(global.conf('global.terminal.width') - leftColW - 2, 30) // `- 2` considers the "| " divide between L/R cols
-      }));
+      });
+      
+      // If there's no therapy, finalize using the stdout-only `subconOutput` function; if therapy
+      // is enabled, the subcon will be finalized later when the `subconOutput` function is
+      // enhanced to do therapy persistence
+      const isTherapyEnabled = conf('global.therapy');
+      if (!isTherapyEnabled) finalizeSubconOutput(subconOutput);
       
       // It's tempting to show "linearized" conf, but the keys get very long and difficult to view
       //let showConf = [ ...global.conf([]).linearize() ].toObj(a => a);
@@ -659,7 +659,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         //    |   }
         //    | }
         
-        let { uid, host, loft: loftConf, keep } = deployConf;
+        let { uid, host, loft, keep } = deployConf;
         let { netIden: netIdenConf, netAddr, heartbeatMs, protocols } = host;
         let { hut, record, WeakBank=null, KeepBank=null } = await global.getRooms([
           'setup.hut',
@@ -669,10 +669,10 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         
         // Subcon for Deployment depends on whether it's Therapy - the Therapy room *must* use the
         // stub subcon - otherwise there would be horrific circular logging implications!
-        let deploySc = loftConf.name === 'therapy' ? global.subconStub : global.subcon([]); // Tempting to put a uid here, but makes it hard to configure via Conf (no single term to configure chatter for "deploy subcon")
+        let deploySc = loft.name === 'therapy' ? global.subconStub : global.subcon([]); // Tempting to put a uid here, but makes it hard to configure via Conf (no single term to configure chatter for "deploy subcon")
         
         // The same NetIden can be used across multiple deployments
-        // TODO: Is checking the json-stringified conf viable??
+        // TODO: Is using the json-stringified conf as the key reliable??
         let key = valToJson(netIdenConf);
         let netIdenDeployConf = netIdenMap.get(key);
         if (!netIdenDeployConf) netIdenMap.set(key, netIdenDeployConf = {
@@ -717,15 +717,15 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         }));
         
         let loadtest = null;
-        if (loftConf.name === 'therapy') {
+        if (loft.name === 'therapy') {
           
-          let pfx = loftConf.prefix;
+          let pfx = loft.prefix;
           
           // Mark Therapy-related Record Types as "unchanging":
           for (let t of 'therapy,therapyLoft,stream,notion'.split(','))
             recMan.getType(`${pfx}.${t}`).schema.merge({ mod: false, rem: false });
           
-          let subconWriteStdout = global.subconOutput;
+          let subconWriteStdout = subconOutput;
           
           // We know the uid of the root Therapy Record; this means if it
           // already exists we'll get a reference to it!
@@ -754,86 +754,87 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
             
           });
           
-          global.subconOutput = (sc, ...args) => { // Stdout enhanced with therapy output
+          // Stdout enhanced with therapy output
+          finalizeSubconOutput((sc, ...args) => then(subconWriteStdout(sc, ...args), scVal => {
             
-            then(subconWriteStdout(sc, ...args), scVal => {
-              
-              if (scVal === null) return; // The output value resolved to be nullish - ignore it!
-              let { params, args=[] } = scVal;
-              
-              let { therapy=false } = params;
-              if (sc === gsc) therapy = false; // Never send `gsc` to Therapy
-              
-              if (!therapy)          return;
-              if (args.length === 0) return;
-              
-              return (async () => {
-                
-                // Note that this function may never write via `sc` (would be an infinite loop!)
-                
-                try {
-                  
-                  // TODO: What exactly are our constraints on `uid` values? KeepBank will stick uids
-                  // into filenames so it's important to be certain (see realessay encoding solution)
-                  // Consumers NEED to be agnostic of filename encoding requirements!!!!!! BAD!!
-                  let ms = getMs();
-                  let streamUid = `!stream@${sc.term}`;
-                  
-                  (async () => {
-                    
-                    // TODO: Use `normalizeAnyValue`???
-                    // TODO: Revisit this; don't call the value "args"; avoid sending, e.g.,
-                    //   Buffers as { length: 1000, data:[100,101,102, ... ] }
-                    let a = args[0];
-                    try { valToJson(args); } catch (err) {
-                      let { $, $r, ...props } = a;
-                      a = { $, $r, val: formatAnyValue(props, { ansiFn: v => v }) };
-                    }
-                    
-                    let streamRec = await recMan.addRecord({
-                      uid: streamUid,
-                      type: `${pfx}.stream`,
-                      group: [ therapyRec ],
-                      value: { ms, term: sc.term }
-                    });
-                    let notionRec = await recMan.addRecord({
-                      type: `${pfx}.notion`,
-                      group: [ streamRec ],
-                      value: { ms, args: a } // TODO: only `args[0]`? Not all `args`??
-                    });
-                    
-                  })();
-                  
-                } catch (err) {
-                  
-                  // TODO: How to deal with the error? Just want to log it with subcon, but if the
-                  // error applies to all therapy logs then the log related to the error could also
-                  // fail, leading to a nasty loop; the hack for now is to use a new instance of
-                  // the "warn" subcon, and overwrite "cachedParams" (which should be a private
-                  // property) with params disabling therapy - this is brittle; it breaks if:
-                  // - `global.subcon` is refactored so it can reuses pre-existing subcons
-                  // - therapy subcon uses `global.subconParams(sc)` rather than `sc.params()` to
-                  //   access params
-                  // - maybe other ways too??
-                  
-                  let errSc = global.subcon('error');
-                  errSc.cachedParams = { ...errSc.params(), therapy: false };
-                  errSc(err.mod(msg => `Error recording therapy: ${msg}`), ...args);
-                  
-                }
-                
-              })();
-              
-            });
+            // Ignore any output which resolved as nullish
+            if (scVal === null)    return;
             
-          };
+            // Never send `gsc` to Therapy
+            if (sc.term === 'gsc') return;
+            
+            // Ignore any output which is configured as non-therapy output
+            let { params: { therapy = false }, args=[] } = scVal;
+            if (!therapy)          return;
+            
+            // Ignore if no argument exist
+            if (args.length === 0) return;
+            
+            return (async () => {
+              
+              // Note that this function may never write via `sc` (would be an infinite loop!)
+              
+              try {
+                
+                // TODO: What exactly are our constraints on `uid` values? KeepBank will stick uids
+                // into filenames so it's important to be certain (see realessay encoding solution)
+                // Consumers NEED to be agnostic of filename encoding requirements!!!!!! BAD!!
+                let ms = getMs();
+                let streamUid = `!stream@${sc.term}`;
+                
+                (async () => {
+                  
+                  // TODO: Use `normalizeAnyValue`???
+                  // TODO: Revisit this; don't call the value "args"; avoid sending, e.g.,
+                  //   Buffers as { length: 1000, data:[100,101,102, ... ] }
+                  let a = args[0];
+                  try { valToJson(args); } catch (err) {
+                    let { $, $r, ...props } = a;
+                    a = { $, $r, val: formatAnyValue(props, { ansiFn: v => v }) };
+                  }
+                  
+                  let streamRec = await recMan.addRecord({
+                    uid: streamUid,
+                    type: `${pfx}.stream`,
+                    group: [ therapyRec ],
+                    value: { ms, term: sc.term }
+                  });
+                  let notionRec = await recMan.addRecord({
+                    type: `${pfx}.notion`,
+                    group: [ streamRec ],
+                    value: { ms, args: a } // TODO: only `args[0]`? Not all `args`??
+                  });
+                  
+                })();
+                
+              } catch (err) {
+                
+                // TODO: How to deal with the error? Just want to log it with subcon, but if the
+                // error applies to all therapy logs then the log related to the error could also
+                // fail, leading to a nasty loop; the hack for now is to use a new instance of
+                // the "warn" subcon, and overwrite "cachedParams" (which should be a private
+                // property) with params disabling therapy - this is brittle; it breaks if:
+                // - `global.subcon` is refactored so it can reuses pre-existing subcons
+                // - therapy subcon uses `global.subconParams(sc)` rather than `sc.params()` to
+                //   access params
+                // - maybe other ways too??
+                
+                let errSc = global.subcon('error');
+                errSc.cachedParams = { ...errSc.params(), therapy: false };
+                errSc(err.mod(msg => `Error recording therapy: ${msg}`), ...args);
+                
+              }
+              
+            })();
+            
+          }));
           
           // Now stack depth for stdout subcon invocations has gotten deeper!
           subconWriteStdout.relevantTraceIndex += 1;
           
         }
         
-        if (conf('global.features.loadtest') && loftConf.name !== 'therapy') {
+        if (conf('global.features.loadtest') && loft.name !== 'therapy') {
           
           // TODO: Drift! loadtest's server must inherit from RoadAuthority. Basically need to test
           // loadtesting; it's going to fail in a whole bunch of ways at first...
@@ -854,14 +855,13 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         // RoadAuths are managed by the NetIden (RoadAuths connect remote sessions to the AboveHut)
         for (let server of roadAuths) netIdenDeployConf.netIden.addServer(server);
         
-        let loft = await getRoom(loftConf.name);
-        let loftTmp = await loft.open({
-          sc:      deploySc.kid(`loft.${loftConf.prefix}`),
-          prefix:  loftConf.prefix,
+        let loftTmp = await getRoom(loft.name).then(loft => loft.open({
+          sc:      deploySc.kid(`loft.${loft.prefix}`),
+          prefix:  loft.prefix,
           hereHut: aboveHut,
           rec:     aboveHut,
           netIden: netIdenDeployConf.netIden
-        });
+        }));
         activeTmp.endWith(loftTmp);
         
         // Run load-testing if configured
@@ -932,7 +932,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     
     // Make sure a visible subcon is applied before `err` propagates! If no subcon is already
     // applied, the subcon used is considered the "panic" subcon
-    if (subconSilenced) unsilenceSubcon((sc, ...args) => {
+    if (subconSilenced) finalizeSubconOutput((sc, ...args) => {
       
       // `formatArgs` won't return a Promise if we ensure non of the args are Promises, or
       // Functions returning Promises

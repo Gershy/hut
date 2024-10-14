@@ -7,14 +7,12 @@ let nodejs = [ 'fs', 'path' ].toObj(v => [ v, require(`node:${v}`) ]);
 module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   
   $crtProviders: Object.plain({
-    
     letsEncryptStaging: {
       directory: 'https://acme-staging-v02.api.letsencrypt.org/directory'
     },
     letsEncrypt: {
       directory: 'https://acme-v02.api.letsencrypt.org/directory'
     }
-    
   }),
   
   $tmpFp: () => nodejs.path.join(require('os').tmpdir(), String.id(10)),
@@ -171,10 +169,9 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
   
   init({ name, details={}, keep=null, secureBits=2048, certificateType='selfSign', getSessionKey, sc, ...more }={}) {
     
-    // TODO: For the same Keep, certain details are expected to remain
-    // consistent across runs; it's probably worth storing the initial
-    // details used in a Keep, and then checking those details on every
-    // other run to make sure they're the same!
+    // TODO: For the same Keep, certain details are expected to remain consistent across runs; it's
+    // probably worth storing the initial details used in a Keep, and then checking those details
+    // on every other run to make sure they haven't changed!
     
     /// {DEPRECATED=
     if (more.has('servers')) throw Error('Do not provide "servers"');
@@ -182,6 +179,7 @@ module.exports = form({ name: 'NetworkIdentity', props: (forms, Form) => ({
     
     if ([ String, Array ].any(F => isForm(keep, F))) keep = global.keep(keep);
     
+    if (!certificateType && secureBits) throw Error('Must use 0 secureBits for nullish certificateType');
     if (secureBits && secureBits < 512) throw Error('Use at least 512 secure bits');
     if (!isForm(name, String) || !name) throw Error('Must provide "name"');
     if (keep && !keep.Form) throw Error(`"keep" must be a Keep (got ${getFormName(keep)})`);

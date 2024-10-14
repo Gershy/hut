@@ -12,9 +12,8 @@ let Confy = form({ name: 'Confy', props: (forms, Form) => ({
     let dive = token.dive(relOrAbsDive);
     let [ cmp0, ...cmps ] = dive;
     
-    /// {DEBUG=
     if (![ '[abs]', '[rel]' ].has(cmp0)) throw Error('Api: first dive component must be "[abs]" or "[rel]"');
-    /// =DEBUG}
+    // if (cmp0 === '[rel]')                throw Error('Api: [rel] relations are not implemented').mod({ dive: relOrAbsDive });
     
     let absCmps = [];
     for (let cmp of cmp0 === '[rel]' ? [ ...relChain, ...cmps ] : cmps)
@@ -30,14 +29,11 @@ let Confy = form({ name: 'Confy', props: (forms, Form) => ({
     //    | }
     // And `relOrAbsDive` looks like:
     //    | "[abs].root.heap.netIdens.myNetIden.detail.email"
-    // (or generally any case where a mixture of dive-keys and actual
-    // references need to be traversed in order to find the value)
-    // TODO: This can be implemented more efficiently; still a search
-    // against the whole `values` Object, for each key in the current
-    // subset of `value` check if each key is a prefix of
-    // `relOrAbsDive`, and for each which is, recurse on that key!
-    // BETTER TODO: simply always store `values` in "hierchize"
-    // format????
+    // (or generally any case where a mixture of dive-keys and actual references need to be
+    // traversed in order to find the value) TODO: This can be implemented more efficiently; still
+    // a search against the whole `values` Object, for each key in the current subset of `value`
+    // check if each key is a prefix of `relOrAbsDive`, and for each which is, recurse on that key!
+    // BETTER TODO: simply always store `values` in "hierchize" format????
     values = values.hierchize(); // Creates new value (no in-place modification)
     
     let { found, val } = token.diveOn(absCmps, values);

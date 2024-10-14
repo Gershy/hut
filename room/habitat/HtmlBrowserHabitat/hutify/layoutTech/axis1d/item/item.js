@@ -8,9 +8,9 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.axis1d.item'] = () =>
     if (isForm(real.params.order, Number)) style.order = real.params.order.toString(10);
     if (axis1d.mode === 'stack') style.flexShrink = '0';
     if (axis1d.mode === 'stretch') Object.assign(style, {
+      flexShrink: '0',
       flexGrow: '1',
-      flexShrink: '1',
-      flexBasis: '0',
+      flexBasis: '1',
       [axis1d.axis === 'x' ? 'height' : 'width']: '100%'
     });
     

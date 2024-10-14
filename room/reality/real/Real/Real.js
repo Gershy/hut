@@ -89,13 +89,7 @@ global.rooms['reality.real.Real'] = () => form({ name: 'Real', has: { Tmp }, pro
       // LayoutForm and instantiate it. Note that LayoutForm may not
       // be immediately-available:
       let LayoutForm = getRoom(`reality.layout.${form}`);
-      layout = then(LayoutForm, Lay => {
-        let layout = Lay(args);
-        /// {DEBUG=
-        layout.trace = trace;
-        /// =DEBUG}
-        return layout;
-      });
+      layout = then(LayoutForm, Lay => Lay(args));
       
     } else {
       
@@ -186,8 +180,7 @@ global.rooms['reality.real.Real'] = () => form({ name: 'Real', has: { Tmp }, pro
         throw Error(`Api: facet collision`).mod({
           facet,
           real: real.desc(),
-          cause: [ holder.trace, this.trace ],
-          holder0: holder.desc(),
+          holder0: holder?.desc() ?? null,
           holder1: this.desc()
         });
         

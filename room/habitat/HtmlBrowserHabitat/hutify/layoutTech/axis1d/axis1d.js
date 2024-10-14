@@ -11,7 +11,7 @@ global.rooms['habitat.HtmlBrowserHabitat.hutify.layoutTech.axis1d'] = () => ({
       alignItems: 'center',
       justifyContent: {
         stack: 'start',
-        stretch: 'stretch',
+        stretch: 'start',
         compactCenter: 'center',
         disperseFully: 'space-between',
         dispersePadHalf: 'space-around',
