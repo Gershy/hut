@@ -38,7 +38,7 @@ let formatArgs = (sc, args, { formatFn=null }={}) => {
   
 };
 
-module.exports = (cfg={}) => {
+let getStdoutSubconOutputter = (cfg={}) => {
   
   let { formatDepth=7 } = cfg;
   
@@ -56,16 +56,17 @@ module.exports = (cfg={}) => {
     let params = sc.params();
     let { chatter=true, chatterFormat } = params;
     
+    // TODO: We re-eval the same function again and again here - maybe it should be cached?
     let chatterFn = chatterFormat ? eval(chatterFormat) : null;
     return then(formatArgs(sc, args, { formatFn: chatterFn, formatDepth, formatWidth: rightColW }), args => {
       
       if (args.empty()) return { params, args };
       
-      // Note that setting { chatter: false } disables any subcon except "gsc" and "warn"
-      // This could short-circuit earlier if we don't need to return a value here
+      // Note `{ chatter: false }` doesn't disable "gsc" and "error" - these are never silenced!
       if (!chatter && ![ 'gsc', 'error' ].has(sc.term)) return { params, args };
       
-      let leftLns = [ `[${sc.term.slice(-leftColW)}]`, now ];
+      let scTerm = sc.term.length < (leftColW - 2) ? sc.term : ('\u2026' + sc.term.slice(-(leftColW - 3)));
+      let leftLns = [ `[${scTerm}]`, now ];
       let rightLns = args
         .map(v => isForm(v, String) ? v : formatAnyValue(v, { d: formatDepth, w: rightColW }))
         .map(v => v.split(/\r?\n/)).flat();
@@ -99,4 +100,4 @@ module.exports = (cfg={}) => {
   
 };
 
-Object.assign(module.exports, { formatArgs });
+module.exports = Object.assign(getStdoutSubconOutputter, { formatArgs });

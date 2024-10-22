@@ -2,9 +2,8 @@
 
 //  TODO: HEEERE!!
 //  1. ctrl+alt+f for "UNCHANGINGRECWTF" - The "unchanging" concept greatly enables Therapy!
-//  2. Pontificate regarding subcon standardization
-//  3. Where are "strikes" at?? (Auto-deny offensive network clients)
-//  4. How the hell to pad Reals?? Do we like Text's "spacing"??? Surprisingly intractable...
+//  2. Where are "strikes" at?? (Auto-deny offensive network clients)
+//  3. How the hell to pad Reals?? Do we like Text's "spacing"??? Surprisingly intractable...
 //     - Can a more generic nested Real do this?
 //         | 
 //         | let parWithPadding = someReal.addReal('withPadding');
@@ -18,8 +17,9 @@
 //       because it would violate the "facet ownership" principle; Resize/Pad should be able to
 //       coexist with any other Real which owns the "content" facet (e.g. Text), but intuitively
 //       Resize/Pad should own the "content" facet itself!!
-//  5. What about Real "minimum dimensions" (e.g. in Therapy a stream Real should grow taller as it
+//  4. What about Real "minimum dimensions" (e.g. in Therapy a stream Real should grow taller as it
 //     fills with elements until it reaches some "max size", at which point it gains scrolling)
+//  
 //  SUBCON STANDARDIZATION:
 //  - When to use "term" vs { $: { domain: 'abc' } }? The "term" is already the domain - no??
 //  - We want a term/domain to prevent indexing conflicts between unrelated domains which use the
@@ -66,9 +66,9 @@
 //        the corresponding code region *just completed invocation* (better to output at the end by
 //        default, as at the end results can be included in the output)
 //       - To output region initialization (immediately *before* the region will be invoked) use:
-//         | sc({ region: 'create account - init' });
+//         | sc.head('createAccount');
 //         | let account = await createAccount();
-//         | sc({ region: 'create account', account });
+//         | sc.tail('createAccount', { account });
 //       - What's up with Error messages? No LogicSpace needed as stack is sufficient
 //    - Region should be space-delimited, without any variable components (LogicSpace-related)
 //    - Sc output should consist of raw data, not formatted strings (use conf.js to apply human
@@ -81,70 +81,20 @@
 
 process.stdout.write('\u001b[0m'); // Clear any ansi set by previous output (TODO: good behaviour?)
 
+// Setup stack trace enhancement
 require('./nodejs/util/installV8PrepareStackTrace.js')();
 
-// Require clearing.js - it simply modifies global state so it can  be required directly
+// Require clearing.js (it purely modifies global state!)
 Object.assign(global, { rooms: Object.create(null) });
 require('./room/setup/clearing/clearing.js');
 
 // Do nothing more if this isn't the main file
 if (process.argv[1] !== __filename) return;
 
-let conf = (() => { // Parse command-line conf
-
-  try {
-    
-    let { argv } = process;
-    let looksLikeEval = /^[{['"]/;
-    
-    let conf = {};
-    for (let arg of argv.slice(2)) {
-      
-      if (looksLikeEval.test(arg)) arg = eval(`(${arg})`);
-      if (!arg) continue;
-      
-      if (isForm(arg, String)) {
-        
-        // String values without "=" are the single hoist room name;
-        // those with "=" represent key-value pairs; those with ":="
-        // represent key-value pairs with eval'd values
-        let isEval = arg.has(':=');
-        let [k, v = null] = arg.cut(isEval ? ':=' : '=').map(v => v.trim());
-        if (v === null) [k, v] = ['deploy.0.loft.name', k];
-
-        arg = { [k]: isEval ? eval(`(${v})`) : v };
-
-      }
-
-      if (!isForm(arg, Object)) throw Error(`Failed to process argument "${arg}"`);
-
-      conf.merge(arg);
-
-    }
-
-    return conf;
-
-  } catch (err) {
-
-    gsc(String.baseline(`
-      | A commandline argument could not be processed. Note that any commandline argument beginning with "{" or quotes must represent a valid javascript value.
-      | The following value was invalid:
-      |   | 
-      |   | "${process.argv.at(-1)}"
-      |   | 
-      | Hut couldn't resolve any meaningful arguments based on this commandline input.
-      | 
-      | A more specific error description: ${err.message}
-    `));
-    process.exit(0);
-
-  }
-
-})();
-
+// Load the foundation
 Promise.resolve()
-  .then(() => require('./nodejs/foundation.js')({ hutFp: __dirname, conf }))
+  .then(() => require('./nodejs/foundation.js')({ hutFp: __dirname, argv: process.argv, sc: global.subcon.kid([]) }))
   .fail(err => {
-    gsc(err.feedback ?? err); // Errors with "feedback" properties are user-friendly
+    esc.note('foundationError', err.feedback ?? err.desc()); // Errors with "feedback" properties are user-friendly
     process.exitNow(1);
   });

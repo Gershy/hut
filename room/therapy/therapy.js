@@ -3,7 +3,7 @@ global.rooms['therapy'] = async (roomName, therapyKeep) => {
   // This room consumes a record structure representing Subconscious
   // output, and provides a UI for analyzing this output
   
-  let sc = subcon('loft.therapy');
+  let sc = global.subcon.kid('loft.therapy');
   let Chooser = await getRoom('logic.Chooser');
   
   let { Hinterland, HtmlBrowserHabitat } = await getRooms([

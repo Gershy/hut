@@ -87,7 +87,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
       catch (err) { throw Error('Api: invalid room name').mod({ room: msg.room }); }
       
       try { reply(await getCmpKeep('below', room)); } catch (err) {
-        gsc(err.mod(msg => `Failed to get compiled keep: ${msg}`));
+        gsc.say(err.mod(msg => `Failed to get compiled keep: ${msg}`));
         reply(`'use strict';global.rooms['${msg.room}']=()=>{throw Error('Api: unable to load room "${msg.room}"');}`);
       }
       
@@ -287,7 +287,7 @@ global.rooms['habitat.HtmlBrowserHabitat'] = () => form({ name: 'HtmlBrowserHabi
           // The rest is pure debug
           
           let tabUid = String.id(10);
-          gsc('Hi its the Worker. A new tab connected to me', { tabUid, tab });
+          gsc.say('Hi its the Worker. A new tab connected to me', { tabUid, tab });
           
           tab.ports.each(port => {
             port.postMessage({ desc: 'hello new tab, i assigned u a uid as "tabUid"', shwUid, tabUid });

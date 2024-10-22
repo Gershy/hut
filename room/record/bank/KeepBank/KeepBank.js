@@ -14,7 +14,9 @@ global.rooms['record.bank.KeepBank'] = async () => {
     // TODO: Does a KeepBank still need to do its own ownership locking?? (Even if it's sitting on a
     // Keep which has its own ownership guarantees?)
     
-    init({ keep, lockTimeoutMs=500, sc=global.subcon('bank.keep'), ...args }) {
+    init({ keep, lockTimeoutMs=500, sc, ...args }) {
+      
+      sc = sc.kid('keepBank');
       
       forms.Endable.init.call(this, args);
       Object.assign(this, {
@@ -80,9 +82,10 @@ global.rooms['record.bank.KeepBank'] = async () => {
     
     getNextUid() {
       
-      this.keep.access([ 'meta', 'next' ]).setData((this.nextUid + 1).encodeStr(), 'utf8');
-      this.sc(`KeepBank generated uid: ${(this.nextUid + 1).encodeStr(String.base62, 8)}`);
-      return this.nextUid++;
+      let uid = this.nextUid++;
+      this.keep.access([ 'meta', 'next' ]).setData(uid.encodeStr(), 'utf8');
+      this.sc.note('nextUid', { uid });
+      return uid;
       
     },
     makeHot(rec) {
@@ -100,7 +103,8 @@ global.rooms['record.bank.KeepBank'] = async () => {
     },
     async syncRec(rec) {
       
-      this.sc(`Holding ${rec.desc()}...`);
+      let syncSc = this.sc.kid('sync');
+      syncSc.note({ rec });
       
       // Immediately hold this `rec` reference. If `rec` is truly volatile we'll only drop this
       // reference when `rec` ends, but if it's non-volatile we'll wait for it to be stored in the
@@ -125,13 +129,13 @@ global.rooms['record.bank.KeepBank'] = async () => {
           // TODO: All notions here need to be voided for the Therapy Loft!!! (Otherwise circular)
           let val = await recKeep.access('v').getData('json');
           
-          this.sc(`${rec.desc()} has a preexisting value`, val);
+          syncSc.note('preexisting', { val });
           
           rec.setValue(val);
           
         } else {
           
-          this.sc(`${rec.desc()} is being synced from scratch...`);
+          syncSc.note('fromScratch', {});
           
           // Store metadata
           await recKeep.access('m').setData({
@@ -148,12 +152,12 @@ global.rooms['record.bank.KeepBank'] = async () => {
       rec.valueSrc.route(delta => {
         let value = rec.getValue();
         this.keep.access([ 'rec', uid, 'v' ]).setData(value, 'json');
-        this.sc(`Synced ${rec.desc()}.getValue():`, value);
+        syncSc.note('value', { value });
       }, 'prm');
       
       rec.endWith(() => {
         rec.endedPrm = this.keep.access([ 'rec', uid ]).rem();
-        this.sc(`Removed ${rec.desc()}`);
+        syncSc.note('end', {});
       }, 'prm');
       
     },

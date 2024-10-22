@@ -1,6 +1,7 @@
 global.rooms['chess2'] = async (roomName, chess2Keep) => {
   
-  let sc = subcon('loft.chess2');
+  // TODO: `sc` should come from Experience
+  let sc = global.subcon.kid('loft.chess2');
   
   let rooms = await getRooms([
     
@@ -180,7 +181,7 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
     let pieceMoves = { white: [], black: [] };
     let dangerTiles = { white: [], black: [] };
     
-    sc(() => ({
+    sc.say(() => ({
       
       match: match.getValue('desc'),
       moves: lofterMoves.map(move => {
@@ -567,11 +568,11 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
             
             let match = addRecord('match', [ chess2 ], { ms, desc: `white:${pw.getValue('term')} vs black:${pb.getValue('term')}` });
             
-            sc(`MATCH OPEN (${match.getValue('desc')})`);
-            match.endWith(() => { sc(`MATCH SHUT (${match.getValue('desc')})`); });
+            sc.say(`MATCH OPEN (${match.getValue('desc')})`);
+            match.endWith(() => { sc.say(`MATCH SHUT (${match.getValue('desc')})`); });
             
             // RelHandle Dep Ends when Match Ends
-            match.rh('outcome').route(({ rec: outcome }) => sc(`MATCH OTCM (${match.getValue('desc')})`, outcome.getValue()));
+            match.rh('outcome').route(({ rec: outcome }) => sc.say(`MATCH OTCM (${match.getValue('desc')})`, outcome.getValue()));
             
             // Initial Round of Match
             addRecord('round', [ match ], { ms: getMs() });
@@ -585,7 +586,7 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
             let mpw = addRecord('matchLofter', [ match, pw.status ], { colour: 'white' });
             let mpb = addRecord('matchLofter', [ match, pb.status ], { colour: 'black' });
             mpw.endWith(async () => {
-              sc(`WHITE ENDED (${pw.getValue('term')})`);
+              sc.say(`WHITE ENDED (${pw.getValue('term')})`);
               let round = await match.withRh('round', 'one');
               if (round) {
                 round.end();
@@ -593,7 +594,7 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
               }
             });
             mpb.endWith(async () => {
-              sc(`BLACK ENDED (${pb.getValue('term')})`);
+              sc.say(`BLACK ENDED (${pb.getValue('term')})`);
               let round = await match.withRh('round', 'one');
               if (round) { round.end(); addRecord('outcome', [ match ], { winner: 'white', reason: 'cowardice' }); }
             });
@@ -1179,7 +1180,7 @@ global.rooms['chess2'] = async (roomName, chess2Keep) => {
           if (![ 'chill', 'learn', 'queue' ].has(status)) throw Error('Invalid status!');
           if (status === lofter.getValue('status')) return;
           
-          sc(`Lofter "${lofter.getValue('term')}" status: "${lofter.getValue('status')}" -> "${status}"`);
+          sc.say(`Lofter "${lofter.getValue('term')}" status: "${lofter.getValue('status')}" -> "${status}"`);
           
           lofter.setValue({ status });
           /// =ABOVE}

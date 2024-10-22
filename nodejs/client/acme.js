@@ -154,7 +154,7 @@ module.exports = form({ name: 'AcmeHttpClient', props: (forms, Form) => ({
         && res.body.type === 'urn:ietf:params:acme:error:badNonce'
         && res.headers.has('replay-nonce')
         && (countRetries++ < 5);
-      if (tryRefreshNonce) { gsc('REFRESH NONCE:', nonce, '...'); continue; } // Try again with the new nonce
+      if (tryRefreshNonce) { gsc.say('REFRESH NONCE:', nonce, '...'); continue; } // Try again with the new nonce
       
       return res;
       

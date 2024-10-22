@@ -20,7 +20,9 @@ let modMapping = {
   reset:     '\u001b[0m'
   
 };
-let ansi = (str, modName) => `${modMapping[modName]}${str}${modMapping.reset}`;
+let ansi = (str, modName) => {
+  return str.split('\n').map(ln => `${modMapping[modName]}${ln}${modMapping.reset}`).join('\n')
+};
 let remAnsi = (str) => str.replace(/\u{1b}\[[^a-zA-Z]+[a-zA-Z]/ug, '');
 let bolded = Map();
 let bold = (str, b = bolded.get(str)) => b || (bolded.set(str, b = ansi(str, 'bold')), b);
@@ -38,7 +40,7 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
   // `pfx` is the string which will precede the first line of any output from this `format`
   // call; it should be considered in order to break excessively long lines
   
-  let { ansiFn=ansi } = opts;
+  let { ansiFn=ansi, indentSize=2, stringFormat='inline' } = opts;
   let pfxLen = pfx.length;
   
   if (val === undefined) return ansiFn('undefined', 'green');
@@ -51,14 +53,32 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
   if (isForm(val, String)) {
     
     // TODO: Copy-pasted from function formatted lower down
-    let maxW = Math.max(8, opts.w - pfxLen - d * 4 - 1); // Subtract 1 for the trailing ","
+    let maxW = Math.max(8, opts.w - pfxLen - d * indentSize - 1); // Subtract 1 for the trailing ","
     
-    // The ascii range 0x0007 - 0x000f are nasty control characters which don't appear in most
-    // terminals as exactly 1 inline character
-    let formatted = val.replaceAll(/[\u0007-\u000f]/g, '').replaceAll('\n', '\\n');
-    if (formatted.length > maxW) formatted = formatted.slice(0, maxW - 1) + '\u2026';
+    let formatted = (() => {
+      
+      if (stringFormat === 'inline' || !val.has('\n')) {
+        
+        // The ascii range 0x0007 - 0x000f are nasty control characters which don't appear in most
+        // terminals as exactly 1 inline character
+        let inline = val.replaceAll('\n', '\\n').replaceAll(/[\u0007-\u000f]/g, '');
+        if (inline.length > maxW) inline = inline.slice(0, maxW - 1) + '\u2026';
+        return `'${inline}'`;
+        
+      } else if (stringFormat === 'multiline') {
+        
+        // Remove all nasty control chars, except "\n" (whose hex value, '\u000a', is the only gap
+        // in the range defined by the following regex)
+        let lines = val.replaceAll(/[\u0007-\u0009\u000b-\u000f]/g, '')
+          .split('\n')
+          .map(ln => ln.length <= maxW ? ln : (ln.slice(0, maxW - 1) + '\u2026'));
+        return `"""\n${lines.join('\n')}\n"""`;
+        
+      }
+      
+    })();
     
-    return ansiFn(`'${formatted}'`, 'green');
+    return ansiFn(formatted, 'green');
     
   }
   
@@ -83,7 +103,7 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
       return str;
     //} catch (err) {
       // TODO: Ignore errors here? Or output them separately? Or allow them to propagate?
-      //gsc(err.mod(msg => `Failed to format value with "desc" fn: ${msg}`));
+      //gsc.say(err.mod(msg => `Failed to format value with "desc" fn: ${msg}`));
       // Ignore any errors from calling `val.desc`
     //}
     
@@ -93,7 +113,7 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
     
     let str = 'Fn: ' + val.toString().split('\n').map(ln => ln.trim() ?? skip).join(' ').replace(/[ ]+/g, ' ');
     
-    let maxW = Math.max(8, opts.w - pfxLen - d * 4 - 1); // Subtract 1 for the trailing ","
+    let maxW = Math.max(8, opts.w - pfxLen - d * indentSize - 1); // Subtract 1 for the trailing ","
     if (str.length > maxW) str = str.slice(0, maxW - 1) + '\u2026';
     
     str = ansiFn(str, 'blue');
@@ -127,7 +147,7 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
     
     seen.set(val, '<cyc> { ... }');
     let keyLen = Math.max(...val.toArr((v, k) => k.length));
-    let maxOneLineValueLen = opts.w - (d * 4) - (keyLen + 2); // Remove space from indentation and key; `+ 2` is for ": "
+    let maxOneLineValueLen = opts.w - (d * indentSize) - (keyLen + 2); // Remove space from indentation and key; `+ 2` is for ": "
     
     let str = (() => {
       
@@ -152,6 +172,7 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
       });
       
       // Using `Math.max` means there's no sorting preference for items less than 10 chars long
+      let indentStr = ansiFn('\u00a6', 'subtle') + ' '.repeat(indentSize - 1);
       let multiLine = multiLineItems.valSort(v => {
         
         let noAnsi = remAnsi(v);
@@ -163,7 +184,7 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
         
         return numChars * 1 + numLines * 7;
       })
-        .map(v => v.indent(ansiFn('\u00a6', 'subtle') + '   '))
+        .map(v => v.indent(indentStr))
         .join(bold(',') + '\n')
       
       return `${bold('{')}\n${multiLine}\n${bold('}')}`;
@@ -188,10 +209,11 @@ let format = module.exports = (val, opts={}, d=0, pfx='', seen=Map()) => {
       let oneLine = `${bold('[')} ${formatted.join(bold(',') + ' ')} ${bold(']')}`;
       let canOneLine = true
         && !oneLine.has('\n')
-        && remAnsi(oneLine).length < (opts.w - d * 4);
+        && remAnsi(oneLine).length < (opts.w - d * indentSize);
       if (canOneLine) return oneLine;
       
-      let multiLine = formatted.map(v => v.indent(ansiFn('\u00a6', 'subtle') + '   ')).join(bold(',') + '\n');
+      let indentStr = ansiFn('\u00a6', 'subtle') + ' '.repeat(indentSize - 1);
+      let multiLine = formatted.map(v => v.indent(indentStr)).join(bold(',') + '\n');
       return `${bold('[')}\n${multiLine}\n${bold(']')}`;
       
     })();

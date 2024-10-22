@@ -9,14 +9,14 @@ global.rooms['setup.hut.hinterland.RoadAuthority'] = async () => form({ name: 'R
   // TODO: Define this in clearing.js? Or maybe even delete it, and work with duck-typing instead?
   // (Or don't delete it but just never reference it??) If so may want to simplify some
   // functionality e.g. parsing netAddr and port from netProc...
-  init({ aboveHut, secure, protocol, netProc, compression=[], sc=subcon(`road.${protocol}`) }) {
+  init({ aboveHut, secure, protocol, netProc, compression=[], sc }) {
     
     /// {DEBUG=
     if (!aboveHut)                throw Error('Api: must provide "aboveHut"');
     if (!protocol)                throw Error('Api: must provide "protocol"');
     if (!netProc)                 throw Error('Api: must provide "netProc"');
     if (!isForm(secure, Boolean)) throw Error('Api: must provide "secure" as Boolean').mod({ secure });
-    if (!sc) throw Error('Api: must provide "sc"');
+    if (!sc)                      throw Error('Api: must provide "sc"');
     /// =DEBUG}
     
     let [ netAddr, port ] = netProc.split(':');

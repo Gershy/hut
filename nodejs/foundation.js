@@ -32,27 +32,26 @@ let captureInlineBlockCommentRegex = Regex.readable('g', String.baseline(`
   |         [^'"] ['][^']*['] ["][^"]*["] #[^#]*#       [/][*](?:            )*[*][/]
 `).replace(/#/g, '`')); // Simple way to include literal "`" in regex
 
-module.exports = async ({ hutFp, conf: rawConf }) => {
+module.exports = async ({ hutFp, argv, sc }) => {
   
-  // Make `global.subconOutput` immediately available (but any log
-  // invocations will only show up after configuration is complete)
+  // Make subcon output immediately available, but any logs will be buffered until after
+  // configuration is complete
   let bufferedSc = [];
-  let subconOutput = global.subconOutput = (...args) => bufferedSc.push(args); // Buffer everything
-  let subconSilenced = true;
-  let finalizeSubconOutput = (unsilencedSubconOutputFn, { panic=false }={}) => {
-    global.subconOutput = unsilencedSubconOutputFn;
-    subconSilenced = false;
+  let subconOutput = null;
+  sc.rules.output = (...args) => bufferedSc.push(args); // Buffer everything
+  let finalizeSubconOutput = outputFn => {
+    sc.rules.output = outputFn;
     
     let bsc = bufferedSc;
-    bufferedSc = Array.stub;
+    bufferedSc = null;
     
-    if (panic) global.subconOutput(gsc, 'Error during initialization; panic! Dumping logs...');
-    for (let args of bsc) global.subconOutput(...args);
+    for (let args of bsc) outputFn(...args);
   };
   
+  sc.note('initialize', { utc: getMs(), pid: process.pid });
+  
   // Initial subcon log...
-  let setupSc = global.subcon('setup');
-  setupSc(`utc: ${getMs()}\npid: ${process.pid}`);
+  let setupSc = sc.kid('setup');
   
   // The whole long Foundation logic may fail before the subcon is unsilenced; this `try` / `catch`
   // ensures the subcon is unsilenced before any Error propagates, so that subcon can be used to
@@ -70,6 +69,63 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
     // Setup `global.formatAnyValue`
     global.formatAnyValue = require('./util/formatAnyValue.js'); // (val, { colours, w, d }) => formattedStr;
     global.getMs = require('./util/getCalibratedUtcMillis.js')(/* involves a brief busy-wait */);
+    
+    // Parse command-line argv
+    let commandLineConf = (() => {
+      
+      try {
+        
+        let looksLikeEval = /^[{['"]/;
+        
+        let conf = {};
+        for (let arg of argv.slice(2)) {
+          
+          if (looksLikeEval.test(arg))
+            try { arg = eval(`(${arg})`); } catch (err) { err.propagate({ evalArg: arg }); }
+          
+          if (!arg) continue;
+          
+          if (isForm(arg, String)) {
+            
+            // String values without "=" are the single hoist room name; those with "=" represent
+            // key-value pairs; those with ":=" represent key-value pairs with eval'd values
+            // For example supplying "arr=[1]" will result in `{ arr: '[1]' }`, but "arr:=[1]" gets
+            // eval'd and resolves to the actual expected javascript value: `{ arr: [ 1 ] }`
+            let isEval = arg.has(':=');
+            let [k, v = null] = arg.cut(isEval ? ':=' : '=').map(v => v.trim());
+            if (v === null) [k, v] = ['deploy.0.loft.name', k];
+            
+            try { arg = { [k]: isEval ? eval(`(${v})`) : v }; } catch (err) { err.propagate({ evalArg: v }) }
+            
+          }
+          
+          if (!isForm(arg, Object)) throw Error(`Failed to process argument "${arg}"`);
+          
+          conf.merge(arg);
+          
+        }
+        
+        return conf;
+        
+      } catch (err) {
+        
+        let feedback = String.baseline(`
+          | A shell argument could not be processed.
+          | Args beginning with "{" or quotes must represent valid javascript values.
+          | One of the received values is invalid:
+          ${argv.slice(2).map((arg, n) => `${n + 1}: ${arg}`).join('\n').indent('| ')}
+          | 
+          | A more specific error description:
+          |   |
+          ${err.message.trim().indent('|   | ')}
+          |   |
+        `);
+        throw Error('Failed parsing command-line args').mod({ cause: err, feedback });
+        
+      }
+      
+    })();
+    setupSc.tail('parseCommandLineConf', { commandLineConf });
     
     { // Setup `global.keep`
       
@@ -101,8 +157,9 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       global.keep = Object.assign(dt => rootKeep.dive(dt), { rootKeep });
       
     };
+    setupSc.tail('initializeKeep', { globalKeep: global.keep });
     
-    { // Resolve configuration and get subcon output working
+    { // Resolve configuration
       
       // Is there no good choice as to whether subcon or conf should be initialized first?
       // 1. Resolve conf first, then set subconOutput:
@@ -123,15 +180,23 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       };
       
       let resolveConf = require('./util/resolveConf.js');
-      let t = getMs();
-      
       globalConf = await resolveConf({
-        rawConf,                        // We pass in command-line args
+        rawConf: commandLineConf,                        // We pass in command-line args
         rootKeep: global.keep.rootKeep, // `resolveConf` checks any additionally configured ConfKeeps
         confUpdateCb: updatedConf => globalConf = updatedConf
       });
       
-      // Overwrite `global.subconOutput` with a legit outputter
+      setupSc.kid('conf').tail('resolve', global.conf([])); // [ ...global.conf([]).linearize() ].toObj(v => v));
+      
+    };
+    setupSc.tail('resolveConf'); // It's tempting to use `global.conf([]).linearize()`, but the keys get very long
+    
+    // Get subcon output working
+    {
+      
+      sc.rules.rootParams = global.conf('global.subcon');
+      
+      // Overwrite `subconOutput` with a legit outputter
       // The index in the stack trace which is the callsite that invoked the subcon call (gets
       // overwritten later when therapy requires calling subcons from deeper stack depths)
       let leftColW = 28;
@@ -142,17 +207,14 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         rightColW: Math.max(global.conf('global.terminal.width') - leftColW - 2, 30) // `- 2` considers the "| " divide between L/R cols
       });
       
-      // If there's no therapy, finalize using the stdout-only `subconOutput` function; if therapy
-      // is enabled, the subcon will be finalized later when the `subconOutput` function is
-      // enhanced to do therapy persistence
+      // If there's no therapy, finalize using the stdout-only sc output function; if therapy is
+      // enabled, the subcon will be finalized later when the sc output function is enhanced to do
+      // therapy persistence
       const isTherapyEnabled = conf('global.therapy');
       if (!isTherapyEnabled) finalizeSubconOutput(subconOutput);
       
-      // It's tempting to show "linearized" conf, but the keys get very long and difficult to view
-      //let showConf = [ ...global.conf([]).linearize() ].toObj(a => a);
-      setupSc.kid('conf')(`Configuration processed after ${(getMs() - t).toFixed(2)}ms`, global.conf([]));
-      
-    };
+    }
+    setupSc.tail('initializeStdoutSubcon');
     
     { // Set up any configured profiling
       
@@ -183,7 +245,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
               .valSort(([ k, v ]) => -Math.abs(v))
               .slice(0, maxMetrics);
             
-            gsc(`Heap: ${consumed.toFixed(2)}mb\n` + (
+            gsc.say(`Heap: ${consumed.toFixed(2)}mb\n` + (
               relevantMetrics.count()
               ? relevantMetrics.map(([ k, v ]) => `  METRIC - ${k.padTail(20)}${v}`).join('\n')
               : '(No metrics)'
@@ -196,6 +258,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       }
       
     };
+    setupSc.tail('initializeProfiling');
     
     { // Enable `global.getCmpKeep`, `global.mapCmpToSrc`, `global.getRooms`
       
@@ -218,6 +281,8 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         // compiled codepoints; note nothing is persisted to a Keep! (that's done by `getCmpKeep`)
         
         let t = getMs();
+        let compileSc = sc.kid('compile');
+        compileSc.head('compile', { keep });
         
         // TODO: Why lowercase the value??
         features = Set({ ...defaultFeatures, ...features }.toArr((v, k) => v ? k.lower() : skip));
@@ -364,13 +429,12 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
           
         }
         
-        /// {DEBUG=
-        subcon('compile.result')(() => {
-          let srcCnt = srcLines.count();
-          let trgCnt = filteredLines.count();
-          return `Compiled ${keep.desc()}\nLine difference: ${srcCnt} -> ${trgCnt} (-${srcCnt - trgCnt})\nTook ${ (getMs() - t).toFixed(2) }ms`;
+        compileSc.tail('compile', {
+          srcLineCount: srcLines.count(),
+          cmpLineCount: filteredLines.count(),
+          delta: filteredLines.count() - srcLines.count(),
+          durationMs: getMs() - t
         });
-        /// =DEBUG}
         
         return { lines: filteredLines, offsets };
         
@@ -552,14 +616,15 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       };
       
     };
+    setupSc.tail('initializeRoomLoader');
     
     { // Run tests
       
       let t = getMs();
       await require('./test.js')();
-      subcon('setup.test')(`Tests completed after ${(getMs() - t).toFixed(2)}ms`);
       
     };
+    setupSc.tail('runTests');
     
     { // Enable `global.real`
       
@@ -600,6 +665,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
       }});
       
     };
+    setupSc.tail('initializeReal');
     
     { // RUN DAT
       
@@ -666,7 +732,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         
         // Subcon for Deployment depends on whether it's Therapy - the Therapy room *must* use the
         // stub subcon - otherwise there would be horrific circular logging implications!
-        let deploySc = loft.name === 'therapy' ? global.subconStub : global.subcon([]); // Tempting to put a uid here, but makes it hard to configure via Conf (no single term to configure chatter for "deploy subcon")
+        let deploySc = loft.name === 'therapy' ? global.Subcon.stub : sc; // Tempting to put a uid here, but makes it hard to configure via Conf (no single term to configure chatter for "deploy subcon")
         
         // The same NetIden can be used across multiple deployments
         // TODO: Is using the json-stringified conf as the key reliable??
@@ -674,7 +740,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         let netIdenDeployConf = netIdenMap.get(key);
         if (!netIdenDeployConf) netIdenMap.set(key, netIdenDeployConf = {
           // This non-stub subcon won't cause therapy loops!
-          netIden: NetworkIdentity({ ...netIdenConf, sc: subcon([]) }),
+          netIden: NetworkIdentity({ ...netIdenConf, sc: deploySc }),
           deployConfs: []
         });
         netIdenDeployConf.deployConfs.push(deployConf);
@@ -683,12 +749,12 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         
         // Initialize a Bank based on `keep`
         let bank = keep
-          ? KeepBank({ sc: deploySc.kid('bank'), keep: global.keep(keep).kid({ mode: 'strong' }) })
-          : WeakBank({ sc: deploySc.kid('bank') });
+          ? KeepBank({ sc: deploySc, keep: global.keep(keep).kid({ mode: 'strong' }) })
+          : WeakBank({ sc: deploySc });
         
         // Get an AboveHut with the appropriate config
         let recMan = record.Manager({ bank, sc: deploySc.kid('manager') });
-        let aboveHut = hut.AboveHut({ hid: uid, isHere: true, recMan, heartbeatMs, deployConf, sc: deploySc.kid('hut') });
+        let aboveHut = hut.AboveHut({ hid: uid, isHere: true, recMan, heartbeatMs, deployConf, sc: deploySc });
         activeTmp.endWith(aboveHut);
         
         // Server management...
@@ -707,7 +773,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
             netProc: `${netAddr}:${port}`,
             compression,
             aboveHut,
-            sc: deploySc.kid([ `road.${protocol}` ]),
+            sc: deploySc.kid(`traffic.${protocol}`),
             ...opts
           });
           
@@ -771,57 +837,34 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
               
               // Note that this function may never write via `sc` (would be an infinite loop!)
               
-              try {
-                
-                // TODO: What exactly are our constraints on `uid` values? KeepBank will stick uids
-                // into filenames so it's important to be certain (see realessay encoding solution)
-                // Consumers NEED to be agnostic of filename encoding requirements!!!!!! BAD!!
-                let ms = getMs();
-                let streamUid = `!stream@${sc.term}`;
-                
-                (async () => {
-                  
-                  // TODO: Use `normalizeAnyValue`???
-                  // TODO: Revisit this; don't call the value "args"; avoid sending, e.g.,
-                  //   Buffers as { length: 1000, data:[100,101,102, ... ] }
-                  let a = args[0];
-                  try { valToJson(args); } catch (err) {
-                    let { $, $r, ...props } = a;
-                    a = { $, $r, val: formatAnyValue(props, { ansiFn: v => v }) };
-                  }
-                  
-                  let streamRec = await recMan.addRecord({
-                    uid: streamUid,
-                    type: `${pfx}.stream`,
-                    group: [ therapyRec ],
-                    value: { ms, term: sc.term }
-                  });
-                  let notionRec = await recMan.addRecord({
-                    type: `${pfx}.notion`,
-                    group: [ streamRec ],
-                    value: { ms, args: a } // TODO: only `args[0]`? Not all `args`??
-                  });
-                  
-                })();
-                
-              } catch (err) {
-                
-                // TODO: How to deal with the error? Just want to log it with subcon, but if the
-                // error applies to all therapy logs then the log related to the error could also
-                // fail, leading to a nasty loop; the hack for now is to use a new instance of
-                // the "warn" subcon, and overwrite "cachedParams" (which should be a private
-                // property) with params disabling therapy - this is brittle; it breaks if:
-                // - `global.subcon` is refactored so it can reuses pre-existing subcons
-                // - therapy subcon uses `global.subconParams(sc)` rather than `sc.params()` to
-                //   access params
-                // - maybe other ways too??
-                
-                let errSc = global.subcon('error');
-                errSc.cachedParams = { ...errSc.params(), therapy: false };
-                errSc(err.mod(msg => `Error recording therapy: ${msg}`), ...args);
-                
-              }
+              let ms = getMs();
+              let streamUid = `!stream@${sc.term}`;
               
+              (async () => {
+                
+                // TODO: Use `normalizeAnyValue`???
+                // TODO: Revisit this; don't call the value "args"; avoid sending, e.g.,
+                //   Buffers as { length: 1000, data:[100,101,102, ... ] }
+                let a = args[0];
+                try { valToJson(args); } catch (err) {
+                let { $props, props } = a.categorize((v, k) => k[0] === '$' ? '$props' : 'props');
+                  a = { ...$props, val: formatAnyValue(props, { ansiFn: v => v }) };
+                }
+                
+                let streamRec = await recMan.addRecord({
+                  uid: streamUid,
+                  type: `${pfx}.stream`,
+                  group: [ therapyRec ],
+                  value: { ms, term: sc.term }
+                });
+                let notionRec = await recMan.addRecord({
+                  type: `${pfx}.notion`,
+                  group: [ streamRec ],
+                  value: { ms, args: a } // TODO: only `args[0]`? Not all `args`??
+                });
+                
+              })();
+                
             })();
             
           }));
@@ -843,7 +886,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
             netIden: netIdenDeployConf.netIden,
             instancesKeep: global.keep('/[file:mill]/loadtest'),
             getServerSessionKey: getSessionKey,
-            sc: global.subcon('loadtest')
+            sc: deploySc
           });
           roadAuths.push(loadtest.roadAuth);
           
@@ -893,7 +936,7 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
         activeTmp.endWith(runOnNetworkTmp);
         await runOnNetworkTmp.prm;
         
-        setupSc.kid('deploy')(() => {
+        setupSc.head('deploy', () => {
           
           let str = String.baseline(`
             | Hut with identity "${netIden.name}" exposed to network
@@ -917,25 +960,28 @@ module.exports = async ({ hutFp, conf: rawConf }) => {
           
         });
         
-        runOnNetworkTmp.endWith(() => setupSc.kid('deploy')(`Hut with identity "${netIden.name}" removed from network `));
+        runOnNetworkTmp.endWith(() => setupSc.tail('deploy', `Hut with identity "${netIden.name}" removed from network `));
         
       }
       
     };
-    
-    setupSc('Hut configured and deployed');
+    setupSc.tail('deploy');
     
   } catch (err) {
     
     // Make sure a visible subcon is applied before `err` propagates! If no subcon is already
     // applied, the subcon used is considered the "panic" subcon
-    if (subconSilenced) finalizeSubconOutput((sc, ...args) => {
+    if (bufferedSc) finalizeSubconOutput((sc, ...args) => {
       
       // `formatArgs` won't return a Promise if we ensure non of the args are Promises, or
       // Functions returning Promises
-      let pargs = args.map(a => [ Promise, Function ].some(F => hasForm(a, F)) ? `<${getFormName(a)}>` : a);
-      let fargs = getStdoutSubcon.formatArgs(sc, pargs);
-      console.log(`SUBCON: ${sc.term}\n${fargs.join('\n')}`.indent('[panic] ') + '\n');
+      let outputVal = args.find(arg => !isForm(arg, Object) || arg.count() !== 1 || arg.toArr((v, k) => k)[0][0] !== '$');
+      let outputOpts = {
+        w: 100,
+        indentSize: 2,
+        stringFormat: 'multiline'
+      };
+      console.log(global.formatAnyValue(outputVal, outputOpts).indent('[panic] ') + '\n');
       
     });
     

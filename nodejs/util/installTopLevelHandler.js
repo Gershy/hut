@@ -17,7 +17,7 @@ module.exports = () => {
     
     if (!process.exitSig) {
       let err = Error(`Process explicitly exited (${code})`);
-      processExitSrc.route(() => gsc(err));
+      processExitSrc.route(() => gsc.say(err));
     }
     
     return process.exitNow(code);
@@ -30,7 +30,7 @@ module.exports = () => {
   let haltEvts = Set('int,term,quit'.split(','));
   for (let evt of evts) process.on(`sig${evt}`.upper(), (term, code) => {
     let expectedCode = isForm(code, Number);
-    gsc(`Process received event "${term.lower()}" (code: ${code}${expectedCode ? '' : '??'})`);
+    gsc.say(`Process received event "${term.lower()}" (code: ${code}${expectedCode ? '' : '??'})`);
     if (haltEvts.has(evt)) {
       process.exitSig = evt;
       process.exit(expectedCode ? code : -1);
@@ -41,16 +41,16 @@ module.exports = () => {
     if (err['~suppressed']) return; // Ignore suppressed errors
     
     // TODO: This should be removed eventually!!
-    if (err?.code === 'ECONNRESET') { gsc('Top-level ignore for ECONNRESET', { err });  return; }
+    if (err?.code === 'ECONNRESET') { gsc.say('Top-level ignore for ECONNRESET', { err });  return; }
     
-    gsc(`Uncaught ${getFormName(err)}: ${err.desc()}`);
+    gsc.say(`Uncaught ${getFormName(err)}: ${err.desc()}`);
     process.exitNow(1);
   };
   process.on('uncaughtException', onErr);
   process.on('unhandledRejection', onErr);
   process.on('exit', code => processExitSrc.send(code));
 
-  processExitSrc.route(code => process.explicitExit || gsc(`Hut terminated (code: ${code})`));
+  processExitSrc.route(code => process.explicitExit || gsc.say(`Hut terminated (code: ${code})`));
 
   return { processExitSrc };
   

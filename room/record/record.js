@@ -12,12 +12,11 @@ global.rooms['record'] = async () => {
     // "Manager" -> "Librarian" ("Record" -> "Book"??)
     // "Manager" -> "Curator"
     
-    init({ sc=subcon('manager'), bank }) {
+    init({ sc, bank }) {
       
       Object.assign(this, {
         
-        sc,
-        recordSc: sc.kid('record'),
+        sc: sc.kid('record'),
         
         recSearches: Set(/* functions which return either `Record(...)` or `null` */),
         bank,
@@ -687,7 +686,8 @@ global.rooms['record'] = async () => {
     handleRec(rec) {
       
       /// {ASSERT=
-      if (this.hrecs.has(rec.uid) && this.hrecs.get(rec.uid).rec !== rec) throw Error('OWWWWWWW FRICKKKK');
+      if (this.hrecs.has(rec.uid) && this.hrecs.get(rec.uid).rec !== rec)
+        throw Error('OWWWWWWW FRICKKKK').mod({ incoming: rec, preexisting: this.hrecs.get(rec.uid) });
       /// =ASSERT}
       
       // Ignore any Records that are Ended or already handled
@@ -850,7 +850,7 @@ global.rooms['record'] = async () => {
       mmm('record', +1);
       this.endWith(() => mmm('record', -1));
       
-      this.type.manager.recordSc(() => `INIT ${this.desc()}`);
+      this.type.manager.sc.note('init', { record: this });
       
       // Apply Banking; `this.bankedPrm` resolves when `this` is fully persisted in its Bank
       let err = Error('');
@@ -905,20 +905,19 @@ global.rooms['record'] = async () => {
             rh.handleRec(this);
             
           }
+          this.type.manager.sc.tail('notify', { record: this }); // Notify all Holders of their new Hold...
           
-          this.type.manager.recordSc(() => `PROP ${this.desc()}`); // "propagate" to all Holders...
           await syncPrm;
-          this.type.manager.recordSc(() => `SYNC ${this.desc()}`); // The Record was valid for every Holder!
+          this.type.manager.sc.tail('sync', { record: this }); // The Record was valid for every Holder!
           
         } catch (cause) {
           
           // Any Errors upon Banking / informing Holders result in the
           // Record Ending immediately
           
-          this.type.manager.recordSc(() => `FAIL ${this.desc()}`, err);
+          esc.say('error', { record: this, err: cause });
           
-          try { this.end(); }
-          catch (endCause) {
+          try { this.end(); } catch (endCause) {
             err.propagate({
               msg: `Failed banking Record, and failed ending it`,
               cause: [ cause, endCause ], // TODO: Would be nice to provide this as { bank: cause, end: endcause }
@@ -1256,7 +1255,7 @@ global.rooms['record'] = async () => {
     end() { forms.Tmp.end.call(this); return this.endedPrm; },
     cleanup() {
       
-      this.type.manager.recordSc(() => `FINI ${this.desc()}`);
+      this.type.manager.sc.note('remove', { record: this });
       
       for (let endWithMemRoute of this.endWithMemRoutes) endWithMemRoute.end();
       

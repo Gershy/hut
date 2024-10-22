@@ -16,15 +16,14 @@ Error.prepareStackTrace = (err, callSites) => {
     // Option 1; check eval origin (note that we'll want to overwrite `row` and `col`, as their
     // un-overwritten values will be their index within the `eval`'d String, whereas the index of
     // where `eval` was called is *much* more useful for debugging!
-    if (!rawFileName) {
+    if (!rawFileName && cs.isEval()) {
       let evalOrig = cs.getEvalOrigin();
-      let [ , /*rawFileName*/, row, col ] = (evalOrig ?? '').match(/(https?:[/][/].+):([0-9]+):([0-9]+)/) ?? [];
-      row = parseInt(row, 10); col = parseInt(col, 10);
+      [ , rawFileName, row, col ] = (evalOrig.match(/(https?:[/][/].*):([0-9]+):([0-9]+)/) ?? []).map(v => parseInt(v, 10) || v);
     }
     
     // We'll get to option 2 if `rawFileName` still (potentially even after having checked for an
     // eval origin) doesn't indicate a room; in that case, `keepTerm` takes on a nullish value!
-    let keepTerm = rawFileName?.match(/\broom=([^?&/]*)/)?.[1] ?? null;
+    let [ , keepTerm ] = rawFileName?.match(/[?&]room=([a-zA-Z0-9.]+)/) ?? [];
     return keepTerm
       ? { type: 'line', fnName: cs.getFunctionName(), keepTerm, row, col }
       : { type: 'info', info: cs.toString() };
@@ -43,6 +42,56 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   // event (obvs we can't reference this Room with `getRoom`, as the logic for doing so only gets
   // defined after this Room has been initialized!)
   
+  let processArg = (arg, seen=Map()) => {
+    if (arg == null) return `<${getFormName(arg)}>`;
+    if (seen.has(arg)) return seen.get(arg);
+    
+    if (isForm(arg?.desc, Function)) {
+      let result = arg.desc();
+      seen.set(arg, result);
+      return result;
+    }
+    if (isForm(arg, Array)) {
+      let result = [];
+      seen.set(arg, result);
+      return result.gain(arg.map(a => processArg(a, seen)));
+    }
+    if (isForm(arg, Object)) {
+      let result = {};
+      seen.set(arg, result);
+      return result.gain(arg.map(a => processArg(a, seen)));
+    }
+    
+    return arg;
+  };
+  
+  global.subcon.rules.rootParams = global.rawConf.global.subcon;
+  global.subcon.rules.output = (sc, ...args) => {
+    
+    let { chatter } = sc.params();
+    if (!chatter && ![ 'gsc', 'error' ].has(sc.term)) return;
+    
+    let rawArgs = args.map(arg => isForm(arg, Function) ? arg() : arg).filter(Boolean);
+    if (!rawArgs.length) return;
+    
+    // Merge leading sequence of Strings, then leading sequence of Objects
+    let strs = [];
+    let obj = {};
+    let ind = 0;
+    while (isForm(rawArgs[ind], String)) strs.push(rawArgs[ind++]);
+    while (isForm(rawArgs[ind], Object)) obj.merge(rawArgs[ind++]);
+    
+    // Accumulate all leading Strings, then all leading Objects
+    args = [ ...(strs.length ? [ strs.join(' ') ] : []), ...(obj.empty() ? [] : [ obj ]), ...rawArgs.slice(ind) ];
+    
+    console.log(
+      `%c${getDate().padTail(60, ' ')}\n${('[' + sc.term + ']').padTail(60, ' ')}`,
+      'background-color: #dadada;font-weight: bold;',
+    );
+    for (let arg of args) console.log(processArg(arg));
+    
+  };
+  
   let onErr = evt => {
     
     let err = evt.error ?? evt.reason;
@@ -51,7 +100,7 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
     // stack information when they're logged natively
     if (isForm(err, SyntaxError)) return;
     
-    gsc(`Uncaught ${getFormName(err)}`, err);
+    gsc.say(`Uncaught ${getFormName(err)}`, err);
     
     // TODO: Refresh!! Or better yet - reset foundation (more complex)
     evt.preventDefault();
@@ -89,45 +138,6 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
     return keep;
   });
   global.conf = (diveToken, def=null) => token.diveOn(diveToken, global.rawConf, def).val;
-  global.subconOutput = (sc, ...args) => {
-    
-    let { chatter } = global.subconParams(sc).chatter;
-    if (!chatter && ![ 'gsc', 'error' ].has(sc.term)) return;
-    
-    args = args.map(arg => isForm(arg, Function) ? arg() : arg).filter(Boolean);
-    if (!args.length) return;
-    
-    let processArg = (arg, seen=Map()) => {
-      if (arg == null) return getFormName(arg);
-      
-      if (seen.has(arg)) return seen.get(arg);
-      
-      if (isForm(arg?.desc, Function)) {
-        let result = arg.desc();
-        seen.set(arg, result);
-        return result;
-      }
-      if (isForm(arg, Array)) {
-        let result = [];
-        seen.set(arg, result);
-        return result.gain(arg.map(a => processArg(a, seen)));
-      }
-      if (isForm(arg, Object)) {
-        let result = {};
-        seen.set(arg, result);
-        return result.gain(arg.map(a => processArg(a, seen)));
-      }
-      
-      return arg;
-    };
-    
-    console.log(
-      `%c${getDate().padTail(60, ' ')}\n${('[' + sc.term + ']').padTail(60, ' ')}`,
-      'background-color: #dadada;font-weight: bold;',
-    );
-    console.log(...processArg(args));
-    
-  };
   global.getRooms = (names, { shorten=true, ...opts }={}) => {
     
     let err = Error('trace');
@@ -184,6 +194,8 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
     }));
     
   };
+  
+  let sc = global.subcon.kid([]);
   
   /// {DEBUG=
   global.mapCmpToSrc = (file, row, col) => {
@@ -309,7 +321,7 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   let foundationTmp = Tmp();
   (() => {
     
-    let sc = global.subcon('ensureSingleTab');
+    let singleTabSc = sc.kid('singleTab');
     
     // TODO: Support multiple tabs! (Probably with a SharedWorker)
     let { localStorage: storage } = window;
@@ -326,7 +338,7 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
       if (evt.key !== hutKey) return;
       
       // Any other event means another tab took control
-      sc(`Lost view priority (hut: ${belowHid}, view: ${viewId})`, evt);
+      singleTabSc.note('lostPriority', { belowHid, viewId, evt });
       
       let val = window.localStorage.getItem(`view/${belowHid}`);
       if (val.hasHead(`${viewId}/`)) window.localStorage.removeItem(`view/${belowHid}`);
@@ -360,7 +372,7 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
       
     }));
     
-    sc(`Took view priority (hut: ${belowHid}, view: ${viewId})`);
+    singleTabSc.note('tookPriority', { belowHid, viewId });
     
   })();
   
@@ -377,8 +389,8 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
     ...pcls.map(p => `${hutifyPath}.protocol.${p.name}`)
   ]);
   
-  let bank = WeakBank({ sc: global.subcon('bank') });
-  let recMan = record.Manager({ bank });
+  let bank = WeakBank({ sc });
+  let recMan = record.Manager({ bank, sc });
   
   // Note that `netIden` is just a stub - the nodejs foundation uses a
   // real NetworkIdentity instance to run serve all protocols together,
@@ -390,12 +402,12 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   // for development (e.g. Above restarting should refresh Below)
   let netIden = { ...netIdenConf };
   let secure = netIden.secureBits > 0;
-  let aboveHut = hut.AboveHut({ hid: aboveHid, isHere: false, recMan, heartbeatMs });
+  let aboveHut = hut.AboveHut({ hid: aboveHid, isHere: false, recMan, heartbeatMs, sc });
   foundationTmp.endWith(() => aboveHut.end());
   
   let roadAuths = pcls.map(({ name, port, ...opts }) => {
     let RoadAuthForm = pclServers[name];
-    return RoadAuthForm({ aboveHut, secure, netProc: `${netAddr}:${port}`, ...opts });
+    return RoadAuthForm({ aboveHut, secure, netProc: `${netAddr}:${port}`, sc, ...opts });
   });
   let activePrms = roadAuths.map(ra => ra.activate({ security: ra.secure ? {} : null }));
   foundationTmp.endWith(() => activePrms.each(p => p.end()));
@@ -431,12 +443,12 @@ global.rooms[`${hutifyPath}.foundation`] = () => ({ init: async evt => {
   if (initComm) belowHut.processCommand({ src: aboveHut, msg: initComm });
   
   await loft.open({
-    sc: global.subcon('loft'),
+    sc,
     prefix: conf('deploy.loft.prefix'),
     hereHut: belowHut,
     rec: aboveHut
   });
   
-  gsc(`Loft opened after ${(getMs() - performance.timeOrigin).toFixed(2)}ms`);
+  gsc.say(`Loft opened after ${(getMs() - performance.timeOrigin).toFixed(2)}ms`);
   
 }});

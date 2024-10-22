@@ -21,20 +21,20 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       // Note that "adjacent" implies all servers running on the same port
       
       let existingHttpRoadAuthority = await adjacentServerPrms.at('http', null);
+      this.sc.note('activate', { existingHttpRoadAuthority });
+      
       let httpRoadAuthority = existingHttpRoadAuthority ?? await (async () => {
-        
-        this.sc('No adjacent http server - creating a sokt-specific http server');
         
         let HttpRoadAuthority = await require('./http.js');
         let httpRoadAuthority = HttpRoadAuthority({
           secure: this.secure,     // Forward this to the http server
           aboveHut: this.aboveHut, // Forward this - it won't be used (http server only processes upgrades)
           netProc: this.netProc,   // Forward this to the http server
-          sc: subconStub           // Prevent http sc - we'll provide sc content at sokt-level
+          sc: Subcon.stub          // Prevent http sc - we'll provide sc content at sokt-level
         });
         
         // This http server only processes upgrades and refuses to do anything else!
-        httpRoadAuthority.intercepts = [ (req, res) => { gsc('SOKT INTERCEPT HTTP', req.url); res.socket.destroy(); return true; } ];
+        httpRoadAuthority.intercepts = [ (req, res) => { gsc.say('SOKT INTERCEPT HTTP', req.url); res.socket.destroy(); return true; } ];
         
         let activateTmp = httpRoadAuthority.activate({ security, adjacentServerPrms });
         tmp.endWith(activateTmp);
@@ -87,7 +87,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       tmp.endWith(() => httpRoadAuthority.server.off('upgrade', upgradeFn));
       
     },
-    makeRoad(belowHut, params /* { socket } */) { return (0, Form.SoktRoad)({ roadAuth: this, belowHut, ...params }); },
+    makeRoad(belowHut, params /* { socket } */) { return (0, Form.SoktRoad)({ roadAuth: this, belowHut, sc: this.sc, ...params }); },
     getProtocol() { return this.secure ? 'sokts' : 'sokt'; },
     
     $SoktRoad: form({ name: 'SoktRoad', has: { Road: RoadAuthority.Road }, props: (forms, Form) => ({
@@ -205,7 +205,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         
       },
       
-      init({ socket, initialMs, initialBuff=Buffer.alloc(0), ...args }) {
+      init({ socket, initialMs, initialBuff=Buffer.alloc(0), sc, ...args }) {
         
         /// {DEBUG=
         if (!socket) throw Error('Api: missing "socket"');
@@ -213,9 +213,10 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         /// =DEBUG}
         
         forms.Road.init.call(this, args);
+        
+        sc = sc.kid('road');
         Object.assign(this, {
-          sc: this.roadAuth.sc,
-          id: String.id(10),
+          sc,
           socket,
           frames: [],
           size: 0,
@@ -224,8 +225,8 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         });
         denumerate(this, 'socket');
         
-        this.sc(() => ({ event: 'init', id: this.id, belowHut: this.belowHut, netAddr: this.socket.remoteAddress }));
-        this.endWith(() => this.sc(() => ({ event: 'fini', id: this.id })));
+        this.sc.head('life', { belowHut: this.belowHut, netAddr: this.socket.remoteAddress });
+        this.endWith(() => this.sc.tail('life', {}));
         
         this.wsIncoming(initialMs, initialBuff);
         
@@ -242,7 +243,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         socket.on('close', closeFn = () => this.end());
         socket.on('error', errorFn = err => {
           
-          global.subcon('error')(err.mod(msg => `Socket error: ${msg}`));
+          esc.say(err.suppress());
           this.end();
           
         });
@@ -267,14 +268,16 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         // 
         // This method queues socket writes, preventing writes from becoming interleaved
         
+        if ((opts.buff || opts.text) === '{}') throw Error('WHYYYY');
+        
         let err = Error('');
         return this.writeQueue = this.writeQueue.then(() => Promise(rsv => {
           
-          this.sc(() => ({ event: 'tell', id: this.id, op: opts.op, msg: jsonToVal(opts.buff || opts.text) }));
           
+          this.sc.note('tell', { op: opts.op, msg: jsonToVal(opts.buff || opts.text) });
           this.socket.write(Form.wsEncode(opts), cause => {
             if (cause) {
-              global.subcon('error')(err.mod( msg => ({ cause, msg: `Error writing to websocket: ${msg}` }) ).suppress());
+              this.sc.note('tell.error', err.mod({ cause }).suppress());
               this.end();
             }
             rsv();
@@ -319,7 +322,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
             try         { msg = jsonToVal(msg); }
             catch (err) { msg = { command: msg.toString('utf8') }; }
             
-            this.sc(() => ({ event: 'hear', id: this.id, op, msg }));
+            this.sc.note('hear', { op, msg });
             
             // Here's where to consider opcodes other than 1 and 2
             // Note that 1 and 2 ("text" and "binary") are pretty both
@@ -331,7 +334,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
             else if (op === 0x8) this.sayGoodbye();
             else if (op === 0x9) this.wsWrite({ op: 0xa, text: 'Pong!' });
             else if (op === 0xa) this.wsWrite({ op: 0x9, text: 'Ping!' });
-            else                 { errSubcon(`Received unexpected opcode: 0x${op.toString(16)}`); this.end(); }
+            else                 { this.sc.note(`Received unexpected opcode: 0x${op.toString(16)}`); this.end(); }
             
           };
           

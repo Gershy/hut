@@ -752,7 +752,7 @@ let tests = [
 // Run tests
 (async () => {
   
-  gsc('Filesys tests\u2026');
+  gsc.say('Filesys tests\u2026');
   
   if (0) {
     
@@ -786,7 +786,7 @@ let tests = [
     await Promise.all([ reads, writes ]);
     await fs.unlink(fp);
     
-    gsc({ total: gud + bad, gud, bad, percent: ((100 * gud) / (gud + bad)).toFixed(2) });
+    gsc.say({ total: gud + bad, gud, bad, percent: ((100 * gud) / (gud + bad)).toFixed(2) });
     
   }
   
@@ -809,12 +809,12 @@ let tests = [
           uses: [ 'encrypt', 'decrypt' ]
         };
         let key = await subtle.importKey(opts.type, opts.value, opts.encryptionMode, opts.extractable, opts.uses);
-        gsc(`ATTEMPT LEN ${cnt}:`, { key });
+        gsc.say(`ATTEMPT LEN ${cnt}:`, { key });
         //break;
         
       } catch (err) {
         
-        //gsc(`ATTEMPT LEN ${cnt}: ${err.message}`);
+        //gsc.say(`ATTEMPT LEN ${cnt}: ${err.message}`);
         
       }
       
@@ -852,9 +852,9 @@ let tests = [
     for (let r of results) r.ms = Math.round(r.ms).toString(10);
     let maxMsDigits = Math.max(...results.map(r => r.ms.length));
 
-    gsc(results.map(r => `[${r.success ? 'pass' : 'FAIL'}] (${Math.round(r.ms).toString(10).padHead(maxMsDigits, ' ')}ms) ${r.desc}`).join('\n'));
-    for (let r of results.filter(r => !r.success)) gsc(r.err.mod(msg => `Test failed:\n${msg}`));
-    gsc(`Tests complete after ${durMs.toFixed(0)}ms; passed ${results.filter(r => r.success).count()} / ${results.count()}`);
+    gsc.say(results.map(r => `[${r.success ? 'pass' : 'FAIL'}] (${Math.round(r.ms).toString(10).padHead(maxMsDigits, ' ')}ms) ${r.desc}`).join('\n'));
+    for (let r of results.filter(r => !r.success)) gsc.say(r.err.mod(msg => `Test failed:\n${msg}`));
+    gsc.say(`Tests complete after ${durMs.toFixed(0)}ms; passed ${results.filter(r => r.success).count()} / ${results.count()}`);
     
   };
   
@@ -871,12 +871,12 @@ let tests = [
     };
     
     for (let i = 0; i < numParallelBatches; i++) {
-      gsc('Start parallel batch...');
+      gsc.say('Start parallel batch...');
       await Promise.all(parallelBatchSize.toArr(runTest));
     }
     
-    gsc(`Ran ${numParallelBatches} x size-${parallelBatchSize} parallel batches`);
-    if (!hadFailure) gsc('Full success');
+    gsc.say(`Ran ${numParallelBatches} x size-${parallelBatchSize} parallel batches`);
+    if (!hadFailure) gsc.say('Full success');
     
   }
   
@@ -886,5 +886,5 @@ let tests = [
   }
   
 })()
-  .catch(err => gsc('FATAL', err.desc()))
+  .catch(err => gsc.say('FATAL', err.desc()))
   .then(() => process.exitNow());

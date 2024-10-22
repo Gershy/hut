@@ -375,8 +375,8 @@ global.rooms['fly'] = async foundation => {
               // End the lobby when no players remain
               lobbyPlayersSrc.route(lobbyPlayers => lobbyPlayers.count() || lobby.end());
               
-              gsc(`++Lobby @ ${lobby.getValue('code')}`);
-              lobby.endWith(() => gsc(`--Lobby @ ${lobby.getValue('code')}`));
+              gsc.say(`++Lobby @ ${lobby.getValue('code')}`);
+              lobby.endWith(() => gsc.say(`--Lobby @ ${lobby.getValue('code')}`));
               
             }
             /// =ABOVE}

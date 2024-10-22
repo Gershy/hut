@@ -175,7 +175,7 @@ let nestedRepeaterExperiments = () => {
       ];
       
       if (true || opts.some(v => str.has(v)))
-        gsc(`[${a}:${b}] x [${c}:${d}]`, { visual });
+        gsc.say(`[${a}:${b}] x [${c}:${d}]`, { visual });
       
     } else if (type === 'compare') {
       
@@ -184,7 +184,7 @@ let nestedRepeaterExperiments = () => {
       
       if (v1 !== v2) {
         
-        gsc(String.baseline(`
+        gsc.say(String.baseline(`
           | OWWWW
           | [${a}:${b}] x [${c}:${d}]
           | ??: ${v1}\n!!: ${v2}\n\n
@@ -677,7 +677,7 @@ let lib = (() => {
           let allInd = lrChain.indexOf(allToNormalize);
           let req = lrChain[(allInd + 1) % lrChain.length];
           
-          gsc('LR', lrChain);
+          gsc.say('LR', lrChain);
           
           return mut;
           
@@ -1332,7 +1332,7 @@ let lib = (() => {
       
     }
     
-    gsc('Simplification tests passed');
+    gsc.say('Simplification tests passed');
     
   })();
   
@@ -1348,7 +1348,7 @@ let lib = (() => {
     
     let rep1 = rep('rep1', { minReps: 2, maxReps: 4, kid: main });
     let rep2 = rep('rep2', { minReps: 1, maxReps: 5, kid: rep1 });
-    gsc('PARSE', rep2.parse('ab-ab-ab-ab-'));
+    gsc.say('PARSE', rep2.parse('ab-ab-ab-ab-'));
     
   };
   
@@ -1376,12 +1376,12 @@ let lib = (() => {
     any2.addOpt(tok('y'));
     any3.addOpt(tok('z'));
     
-    gsc('BEFORE', any1.visualize());
+    gsc.say('BEFORE', any1.visualize());
     
     let norm = any1.normalize();
-    gsc('NORM:', norm.visualize());
+    gsc.say('NORM:', norm.visualize());
     
-    gsc(norm.parse('xzyz'));
+    gsc.say(norm.parse('xzyz'));
     
   };
   
@@ -1398,13 +1398,13 @@ let lib = (() => {
     
     return num;
     
-    //gsc('ORIG', num.visualize());
+    //gsc.say('ORIG', num.visualize());
     
     //num = num.normalize();
     
-    //gsc('NORM', num.visualize());
+    //gsc.say('NORM', num.visualize());
     
-    //gsc('PARSE', num.normalize().parse('1+10+12'));
+    //gsc.say('PARSE', num.normalize().parse('1+10+12'));
     
   };
   
@@ -1424,8 +1424,8 @@ let lib = (() => {
     normLoop.addOpt(all('sub', [ /* first value NORMALIZED AWAY */ tok('-'), norm ]));
     
     let parsed = norm.parse('1-1-1-1-1');
-    gsc('STRUCTURE', parsed);
-    gsc(`Parsed: "${parsed.str}"`);
+    gsc.say('STRUCTURE', parsed);
+    gsc.say(`Parsed: "${parsed.str}"`);
     
   };
   
@@ -1644,7 +1644,7 @@ let lib = (() => {
     value.addOpt(binaryOp);
     
     let valueNorm = value.normalize();
-    gsc('NORM', valueNorm);
+    gsc.say('NORM', valueNorm);
     
     process.exit(0);
     
@@ -1791,4 +1791,4 @@ let lib = (() => {
   */ }
   
 })()
-  .catch(err => gsc('FATAL', err));
+  .catch(err => gsc.say('FATAL', err));

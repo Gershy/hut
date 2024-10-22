@@ -17,7 +17,7 @@ global.rooms[roomName] = () => then(getRoom('setup.hut.hinterland.RoadAuthority'
     makeRoad(belowHut, params) {
       
       if (!this.active) throw Error('Api: inactive; unable to create road');
-      let road = (0, Form.SoktRoad)({ roadAuth: this, belowHut, ...params });
+      let road = (0, Form.SoktRoad)({ roadAuth: this, belowHut, sc: this.sc, ...params });
       return road;
       
     },
@@ -30,7 +30,9 @@ global.rooms[roomName] = () => then(getRoom('setup.hut.hinterland.RoadAuthority'
         
         forms.Road.init.call(this, args);
         
-        let { secure, netProc } = this.roadAuth;
+        let { secure, netProc, sc } = this.roadAuth;
+        sc = sc.kid('road');
+        
         let socket = new WebSocket(`${secure ? 'wss' : 'ws'}://${netProc}/?hid=${this.belowHut.hid}`)
         
         forms.Road.init.call(this, args);
@@ -59,7 +61,7 @@ global.rooms[roomName] = () => then(getRoom('setup.hut.hinterland.RoadAuthority'
           //    previously active tab; new tab doesn't init servers until
           //    old tab confirms it's disconnected
           // 3. Just implement a SharedWorker to handle networking
-          global.subcon('error')('Socket error event', err);
+          esc.say(err);
           
           // TODO: This interim solution is the WORST (and could create huge congestion)
           window.location.reload();

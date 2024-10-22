@@ -48,7 +48,7 @@ global.rooms[`${hutifyPath}.workerFoundation`] = () => ({ init: async evt => {
   let onErr = evt => {
     // TODO: How does SharedWorker handle this?
     let err = evt.error ?? evt.reason;
-    gsc(`Uncaught ${getFormName(err)}`, err);
+    gsc.say(`Uncaught ${getFormName(err)}`, err);
   };
   self.evt('unhandledrejection', onErr);
   self.evt('error', onErr);
@@ -73,7 +73,7 @@ global.rooms[`${hutifyPath}.workerFoundation`] = () => ({ init: async evt => {
   global.getRooms = (names, { shorten=true, ...opts }={}) => {
     
     let unseenNames = names.filter(name => !global.rooms[name]);
-    gsc('Loading rooms', { names, unseenNames });
+    gsc.say('Loading rooms', { names, unseenNames });
     
     // Serially import all rooms! Note that we don't need to worry about descendent dependencies
     // here (i.e. where a descendent depends on a room that's already been loaded, and we want to
@@ -101,9 +101,9 @@ global.rooms[`${hutifyPath}.workerFoundation`] = () => ({ init: async evt => {
   };
   
   /// {DEBUG=
-  global.subconOutput = (sc, ...args) => {
+  global.subcon.rules.output = (sc, ...args) => {
     
-    if (!global.subconParams(sc).chatter) return;
+    if (!sc.params().chatter) return;
     
     args = args.map(arg => isForm(arg, Function) ? arg() : arg).filter(Boolean);
     if (!args.length) return;
@@ -219,21 +219,21 @@ global.rooms[`${hutifyPath}.workerFoundation`] = () => ({ init: async evt => {
     ...pcls.map(p => `${hutifyPath}.protocol.${p.name}`)
   ]);
   
-  gsc('Waiting for conf + rooms...');
-  confPrm.then(conf => gsc('GOT CONF', { conf }));
-  roomsPrm.then(rooms => gsc('GOT ROOMS', { rooms }));
+  gsc.say('Waiting for conf + rooms...');
+  confPrm.then(conf => gsc.say('GOT CONF', { conf }));
+  roomsPrm.then(rooms => gsc.say('GOT ROOMS', { rooms }));
   let [ conf, rooms ] = await Promise.all([ confPrm, roomsPrm ]);
   
-  gsc('OMG, GOT CONF + ROOMS!');
+  gsc.say('OMG, GOT CONF + ROOMS!');
   
   {
     
     let WorkerRoadAuthority = form({ name: 'WorkerRoadAuthority', props: (forms, Form) => ({
       
-      init({ aboveHut, sc=subcon(`road.sw`) }) {
+      init({ aboveHut, sc }) {
         Object.assign(this, { aboveHut, sc });
       },
-      desc() { return `sw://localhost`; },
+      desc() { return `sw://localhost`; }, // "shared worker"??
       activate() {
         
         let { worker } = global;
@@ -310,14 +310,14 @@ global.rooms[`${hutifyPath}.workerFoundation`] = () => ({ init: async evt => {
       
     })});
     let roadAuth = WorkerRoadAuthority({ aboveHut });
-    gsc({ roadAuth });
+    gsc.say({ roadAuth });
     
   }
   
   return;
   
   let { hut, record, WeakBank, [loftName.split('.').at(-1)]: loft, ...pclServers } = rooms;
-  let bank = WeakBank({ sc: global.subcon('bank') });
+  let bank = WeakBank({ sc });
   let recMan = record.Manager({ bank });
   
   foundationTmp.endWith(() => aboveHut.end());
@@ -370,8 +370,8 @@ global.rooms[`${hutifyPath}.workerFoundation`] = () => ({ init: async evt => {
   let initComm = conf('initComm');
   if (initComm) belowHut.processCommand({ src: aboveHut, msg: initComm });
   
-  await loft.open({ sc: global.subcon('loft'), prefix: conf('deploy.loft.prefix'), hereHut: belowHut, rec: aboveHut });
+  await loft.open({ sc, prefix: conf('deploy.loft.prefix'), hereHut: belowHut, rec: aboveHut });
   
-  gsc(`Loft opened after ${(getMs() - performance.timeOrigin).toFixed(2)}ms`);
+  gsc.say(`Loft opened after ${(getMs() - performance.timeOrigin).toFixed(2)}ms`);
   
 }});

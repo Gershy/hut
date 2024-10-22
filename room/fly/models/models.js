@@ -1512,7 +1512,7 @@ global.rooms['fly.models'] = async foundation => {
       initSyncs() { return []; },
       
       getCollideResult(ud, ent) {
-        gsc(`${getFormName(this)} -> ${getFormName(ent)}`);
+        gsc.say(`${getFormName(this)} -> ${getFormName(ent)}`);
         if (hasForm(ent, Mortal)) ent.takeDamage(ud, this, 1);
       },
       getRot(ud) { return 0; },
@@ -1582,7 +1582,7 @@ global.rooms['fly.models'] = async foundation => {
     initProps: utils.fa(forms, 'initProps', (i, arr) => ({}).gain(...arr, { scoreDamage: 0 })),
     initSyncs: utils.fa(forms, 'initSyncs', (i, arr) => [].gain(...arr)),
     getCollideResult(ud, ent) {
-      gsc(`${getFormName(this)} -> ${getFormName(ent)}`);
+      gsc.say(`${getFormName(this)} -> ${getFormName(ent)}`);
       if (hasForm(ent, Mortal)) ent.takeDamage(ud, this, 1);
     },
     getState(ud) { return { tangibility: {
@@ -2241,7 +2241,7 @@ global.rooms['fly.models'] = async foundation => {
       
       let initMoment = (ud, prevMoment, def) => {
         
-        gsc(`Beginning new moment: ${def.name} (${def.type})`);
+        gsc.say(`Beginning new moment: ${def.name} (${def.type})`);
         let moment = ud.spawnEntity({ ...def, prevMoment })
         
         // Apply global effects and update bounds
@@ -2316,7 +2316,7 @@ global.rooms['fly.models'] = async foundation => {
         try {
           visible = isBounded && geom.doCollideRect(ud.bounds.total, geom.containingRect(bound));
         } catch (err) {
-          gsc('Bad bound:', { type: ent.getValue('type'), bound, ent });
+          gsc.say('Bad bound:', { type: ent.getValue('type'), bound, ent });
         }
         
         if (visible && !ent.sprite) {
@@ -2329,13 +2329,13 @@ global.rooms['fly.models'] = async foundation => {
       }
       
       if (ud.random.genQ() < (0.1 * spf)) {
-        gsc(`Processed ${entities.length} entities in ${Math.round(foundation.getMs() - timingMs)}ms:`);
+        gsc.say(`Processed ${entities.length} entities in ${Math.round(foundation.getMs() - timingMs)}ms:`);
         let types = Map();
         for (let entity of entities) {
           let t = getFormName(entity);
           types.set(t, (types.get(t) || 0) + 1);
         }
-        for (let [ t, n ] of types) gsc(`    ${n.toString().padHead(3, ' ')} x ${t}`);
+        for (let [ t, n ] of types) gsc.say(`    ${n.toString().padHead(3, ' ')} x ${t}`);
       }
       
       /// =ABOVE}

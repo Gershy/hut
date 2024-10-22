@@ -13,15 +13,19 @@ let randInt = (min, max) => min + Math.floor(randFlt() * (max - min));
 
 let InsulatedInstance = form({ name: 'InsulatedInstance', has: { Tmp }, props: (forms, Form) => ({
   
-  init({ name, conf, server, sc=subcon(`loadtest.kid.${name}`) }) {
+  init({ name, conf, server, sc }) {
     
     forms.Tmp.init.call(this);
     
+    sc = sc.kid('loadtest');
     Object.assign(this, {
       name, conf, server, sc, proc: null,
       initialized: Promise.later(), ready: Promise.later()
     });
     
+    this.sc.note('running', { name, conf, server });
+    
+    let procSc = this.sc.kid('ipc');
     this.proc = cp.fork(path.join(__dirname, 'foundationBelow.js'), [ name, valToJson(conf) ], {});
     this.proc.on('message', async m => {
       
@@ -30,14 +34,15 @@ let InsulatedInstance = form({ name: 'InsulatedInstance', has: { Tmp }, props: (
       if (msg === 'init') return this.initialized.resolve();
       if (msg === 'ready') return this.ready.resolve();
       
-      if (msg?.type === 'subcon')
-        return this.sc(`${this.desc()} -> Subcon(${msg.subconArgs[0]})`, ...msg.subconArgs.slice(1));
+      if (msg?.type === 'subcon') return procSc.note(...msg.subconArgs);
       
       if (msg?.type === 'room') {
+        this.sc.head('roomRequest', { request });
         let room = token.dive(msg?.room);
         let cmpKeep = await getCmpKeep('below', room);
         let content = await cmpKeep.getData('utf8');
         this.proc.send({ scope: 'foundation', msg: { type: 'room', room: room.join('.'), content } });
+        this.sc.tail('roomRequest', { room, contentLength: content.count() });
       }
       
     });
@@ -102,7 +107,7 @@ let makeRoadAuth = ({ getSessionKey }) => {
       insulatedInstance.proc.send({ scope: 'road', msg: outgoingComm }, err => {
         if (!err) return;
         err.suppress();
-        gsc(`Error doing IPC; ending ${insulatedInstance.desc()} (${err.message})`);
+        gsc.say(`Error doing IPC; ending ${insulatedInstance.desc()} (${err.message})`);
         insulatedInstance.end();
       });
       
@@ -133,6 +138,8 @@ module.exports = async ({ aboveHut, netIden, instancesKeep, getServerSessionKey,
   // When run, we'll manage a series of child processes which pretend to
   // be BelowHuts performing random actions
   
+  sc = sc.kid('loadTest');
+  
   let TimerSrc = await getRoom('logic.TimerSrc');
   
   let { durationMs=5*60*1000, maxInstances=300 } = loadtest;
@@ -150,7 +157,7 @@ module.exports = async ({ aboveHut, netIden, instancesKeep, getServerSessionKey,
       let instances = Set();
       let spawnInstance = () => {
         
-        let lifetimeSc = sc.kid('subproc.lifetime');
+        let lifetimeSc = sc.kid('life');
         let name = String.id(8);
         let belowKeep = instancesKeep.access(name);
         let inst = InsulatedInstance({
@@ -172,12 +179,12 @@ module.exports = async ({ aboveHut, netIden, instancesKeep, getServerSessionKey,
         timerSrc.route(() => inst.end());
         
         instances.add(inst);
-        lifetimeSc(`ADD ${inst.desc()} (${instances.size} total)`);
+        lifetimeSc.head({ instance: inst, totalInstances: instances.size });
         
         inst.endWith(() => {
-          lifetimeSc(`REM ${inst.desc()} (${instances.size} remaining)`);
           instances.rem(inst);
           belowKeep.rem();
+          lifetimeSc.tail({ totalInstances: instances.size });
         });
         
       };

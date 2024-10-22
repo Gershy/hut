@@ -1171,7 +1171,7 @@ module.exports = async () => {
     } catch (err) {
       
       let name = test.toString().match(/[/][/](.*)\n/)?.[1]?.trim() ?? '<unnamed>';
-      gsc(`Test FAIL (${name})`, err.desc());
+      gsc.say(`Test FAIL (${name})`, err.desc());
       process.exit(1);
       
     }

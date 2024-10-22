@@ -214,7 +214,7 @@ global.rooms['collabowrite'] = async foundation => {
               
             }
             
-            gsc('DONE VOTING', { reason, text: winningIdea.getValue() });
+            gsc.say('DONE VOTING', { reason, text: winningIdea.getValue() });
             
             // Add an Entry to the story!
             let entry = hut.addRecord('entry', [ room, winningIdea.m('roomAccount').m('account') ], winningIdea.getValue());

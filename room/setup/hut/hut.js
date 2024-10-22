@@ -45,9 +45,9 @@ global.rooms['setup.hut'] = async () => {
         `));
       /// =DEBUG}
       
-      let { command } = msg;
-      if (!command) src.sc.kid('comm')({ src, trg, note: 'missing "command"', msg });
-      else          src.sc.kid('comm')({ src, trg, command, msg });
+      let { command=null } = msg;
+      src.sc.note('tell', { trg, command, msg });
+      trg.sc.note('hear', { src, command, msg });
       
       if (!src && trg.isAfar) throw Error(`Can't tell TrgAfarHut when SrcHut is null`);
       if (!src) return trg.processCommand({ src: null, road: null, reply: null, ms, msg });
@@ -102,10 +102,11 @@ global.rooms['setup.hut'] = async () => {
       
     },
     
-    init({ isHere=false, hid, uid, heartbeatMs, sc=subcon('hut'), ...recordProps }) {
+    init({ isHere=false, hid, uid, heartbeatMs, sc, ...recordProps }) {
       
       /// {DEBUG=
-      if (!hid && !uid) throw Error(`Api: supply either "hid" or "uid" (they're synonyms)`);
+      if (!sc)                          throw Error('Api: supply "sc"');
+      if (!hid && !uid)                 throw Error(`Api: supply either "hid" or "uid" (they're synonyms)`);
       if (!isForm(heartbeatMs, Number)) throw Error('Api: "heartbeatMs" must be Number');
       /// =DEBUG}
       
@@ -119,13 +120,12 @@ global.rooms['setup.hut'] = async () => {
       /// =DEBUG}
       
       Object.assign(this, {
+        sc,
         hid,
         isHere, isAfar: !isHere,
         commandHandlers: Map(/* commandString -> Tmp({ desc, fn }) */),
-        heartbeatMs,
-        sc
+        heartbeatMs
       });
-      
       denumerate(this, 'commandHandlers');
       
       forms.Record.init.call(this, { uid, ...recordProps, volatile: true });
@@ -133,6 +133,8 @@ global.rooms['setup.hut'] = async () => {
       // TODO: "bp" is taking on new meaning - really it's just a "dummy" Comm - in the context of
       // http, "dummy" can conveniently be used to denote "bank poll"
       this.makeCommandHandler('hut:bp', comm => { /* do nothing */ });
+      
+      sc.note('initialize', { hut: this });
       
     },
     desc() { return `${this.isHere ? 'Here' : 'Afar'}${forms.Record.desc.call(this)}`; },
@@ -184,7 +186,7 @@ global.rooms['setup.hut'] = async () => {
       // the error, log the error to sc); note a Promise may be returned (if the handler is async)
       
       /// {DEBUG=
-      if (!isForm(comm?.msg?.command, String)) throw Error(`Api: given Comm without "command"`).mod({ hut: this.desc(), comm });
+      if (!isForm(comm?.msg?.command, String)) throw Error(`Api: given Comm without "command"`).mod({ hut: this, comm });
       /// =DEBUG}
       
       let run = () => {
@@ -196,11 +198,11 @@ global.rooms['setup.hut'] = async () => {
       return safe(run, err => {
         
         // Errors can occur when processing Comms from other Huts; when this happens we ideally
-        // inform the other Hut of the Error, and if this isn't possible we send the Error to subcon
-        global.subcon('error')('run-command-handler-failure', err);
+        // inform the other Hut of the Error; if this isn't possible we send the Error to subcon
+        esc.say(err);
         
         /// {ABOVE=
-        // Above should inform Below of the Error
+        // Above should inform Below of the Error; never the other way around
         comm.reply?.({ command: 'error', msg: {
           detail: err.message.startsWith('Api: ') ? err.message : 'Api: sorry - experiencing issues',
           echo: comm.msg
@@ -233,7 +235,7 @@ global.rooms['setup.hut'] = async () => {
     // to their AboveHut (which would be globally accessible for any
     // BelowHut)
     
-    init({ recMan, deployConf=null, ...args }) {
+    init({ recMan, deployConf=null, sc, ...args }) {
       
       /// {DEBUG=
       if (!recMan) recMan = args?.type?.manager;
@@ -241,6 +243,7 @@ global.rooms['setup.hut'] = async () => {
       /// =DEBUG}
       
       forms.Hut.init.call(this, {
+        sc: sc.kid('hut'),
         type: recMan.getType('hut.above'),
         group: recMan.getGroup([]),
         value: { ms: getMs() },
@@ -254,6 +257,7 @@ global.rooms['setup.hut'] = async () => {
       
       Object.assign(this, {
         
+        rootSc: sc,
         deployConf,
         belowHuts: Map(/* belowHutHid => BelowHut(...) */),
         
@@ -269,6 +273,7 @@ global.rooms['setup.hut'] = async () => {
         allFollows: Object.plain(/* uid -> { hutId -> FollowTmp } */)
         
       });
+      denumerate(this, 'rootSc');
       denumerate(this, 'deployConf');
       denumerate(this, 'belowHuts');
       denumerate(this, 'allFollows');
@@ -377,18 +382,21 @@ global.rooms['setup.hut'] = async () => {
           tellAfar: msg => { throw Error('OWwwowoaowoasss'); },
           desc: () => `AnonRoad(${roadAuth.desc()} <-> ${belowNetAddr} / !anon)`
         };
+        
         let anonBelowHut = {
           aboveHut: this,
           hid: '!anon', isHere: false, isAfar: true,
           desc: () => `AnonHut(${belowNetAddr})`, // TODO: Include NetworkAddress in desc (from roadAuth)
           roads: Map([ [ roadAuth,  anonRoad ] ]),
           consumePendingSync: () => Error('Api: invalid anon operation').propagate(),
-          sc: this.sc.kid('anonBelow'),
+          sc: this.rootSc.kid('hut'),
           
           // AnonBelowHuts can only trigger AboveHut handlers
           runCommandHandler: comm => this.runCommandHandler(comm),
           processCommand: comm => this.runCommandHandler(comm)
         };
+        anonBelowHut.sc.note('initialize', { hut: this });
+        denumerate(anonBelowHut, 'sc');
         denumerate(anonBelowHut, 'roads');
         
         return { belowHut: anonBelowHut, road: anonRoad };
@@ -433,7 +441,7 @@ global.rooms['setup.hut'] = async () => {
           hid,
           group,
           heartbeatMs: this.heartbeatMs,
-          sc: this.sc.kid('below') // TODO: Fix `sc` style
+          sc: this.rootSc.kid('hut') // TODO: Fix `sc` style
         });
         manager.addRecord({
           type: 'hut.owned',
@@ -558,7 +566,7 @@ global.rooms['setup.hut'] = async () => {
       /// =BELOW}
       
       this.resetHeartbeatTimeout();
-      this.makeCommandHandler('error', comm => gsc(`${this.desc()} was informed of Error`, comm.msg));
+      this.makeCommandHandler('error', comm => gsc.say(`${this.desc()} was informed of Error`, comm.msg));
       this.makeCommandHandler('multi', ({ src, msg: { list=null }, reply }) => {
         
         if (!isForm(list, Array)) throw Error(`Api: invalid multi list`);
@@ -569,7 +577,7 @@ global.rooms['setup.hut'] = async () => {
         
         // TODO: Or generate a multipart response??? That's cool too...
         if (multiReply.length) {
-          gsc('OOAAahhahahwwhwwaaa');
+          gsc.say('OOAAahhahahwwhwwaaa');
           reply({ command: 'multi', list: replies });
         }
         
@@ -701,8 +709,18 @@ global.rooms['setup.hut'] = async () => {
         if (tmp.off()) throw Error(`${tmp.desc()} has been ended`);
         
         // `result` is either response data or resulting Error
-        try         { await fn(msg, { ms, src, trg }); }
-        catch (err) { return reply(err); }
+        
+        let sc = this.sc.kid('comm');
+        
+        sc.head({ msg });
+        try {
+          await fn(msg, { ms, src, trg });
+          sc.tail({ latencyMs: getMs() - ms });
+        } catch (err) {
+          reply({ command: 'error', msg: { errMsg: err.message } });
+          sc.tail({ latencyMs: getMs() - ms, err });
+        }
+        
         
       }));
       tmp.act = msg => this.tell({ trg: this.aboveHut, msg: { ...msg, command } });
@@ -825,7 +843,7 @@ global.rooms['setup.hut'] = async () => {
         // UNCHANGINGRECWTF
         // let { schema } = rec.type;
         // let unchanging = !schema.mod && !schema.rem; // We can make several optimizations to "unchanging" Records
-        // if (unchanging) return; // TODO: How dare you! This doesn't seem safe AT ALL!!! TEST THISSS!!!!!!!
+        // if (unchanging) return;
         
         // Ref a pre-existing Follow again; Note Records can be followed via multiple independent
         // Scope chains - just because a single Scope chain ends and `end` is called on its Follow
@@ -884,7 +902,7 @@ global.rooms['setup.hut'] = async () => {
       if (fromScratch) {
         
         /// {DEBUG=
-        subcon('hut.comm.below')({ belowHut: this, status: 'syncing from scratch' });
+        this.sc.note('syncFromScratch', {});
         /// =DEBUG}
         
         // Reset version and clear the current sync-delta, refreshing it to indicate an "add" for
@@ -941,7 +959,7 @@ global.rooms['setup.hut'] = async () => {
       
     },
     strike() {
-      gsc(`${this.desc()} got strike`);
+      gsc.say(`${this.desc()} got strike`);
     },
     
     /// =ABOVE}

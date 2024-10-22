@@ -1,7 +1,9 @@
 global.rooms['record.bank.WeakBank'] = () => form({ name: 'WeakBank', has: { Endable }, props: (forms, Form) => ({
   
-  init({ sc=global.subcon('bank.keep') }) {
+  init({ sc }) {
     forms.Endable.init.call(this);
+    
+    sc = sc.kid('weakBank');
     Object.assign(this, { recs: Map(), nextUid: 0, sc });
   },
   desc() { return `${getFormName(this)}()`; },
@@ -83,8 +85,7 @@ global.rooms['record.bank.WeakBank'] = () => form({ name: 'WeakBank', has: { End
         /// {ASSERT=
         if (!this.recs.has(newRec.uid)) throw Error('Indexing did not occur synchronously/immediately').mod({ uid: newRec.uid, newRec, recs: this.recs });
         if (this.recs.get(newRec.uid) !== newRec) {
-          this.sc(newRec, this.recs.get(newRec.uid));
-          throw Error('Indexing occurred incorrectly').mod({ newRec });
+          throw Error('Indexing occurred incorrectly').mod({ newRec, preexisting: this.recs.get(newRec.uid) });
         }
         /// =ASSERT}
         

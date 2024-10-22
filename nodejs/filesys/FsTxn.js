@@ -381,7 +381,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
         
       })().catch(err => {
         
-        gsc('Api: error maintaining ownership file (this is probably fatal!)');
+        gsc.say('Api: error maintaining ownership file (this is probably fatal!)');
         throw err;
         
       });
@@ -763,13 +763,13 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
   
   getContent(...args) { // DEPRECATED
     
-    subcon('error')(Error('Deprecated "getContent" method (use "getData" instead)'));
+    esc.say(Error('Deprecated "getContent" method (use "getData" instead)'));
     return this.getData(...args);
     
   },
   setContent(...args) { // DEPRECATED
     
-    subcon('error')(Error('Deprecated "setContent" method (use "setData" instead)'));
+    esc.say(Error('Deprecated "setContent" method (use "setData" instead)'));
     return this.setData(...args);
     
   },
@@ -938,7 +938,7 @@ let FsTxn = form({ name: 'FsTxn', has: { Endable }, props: (forms, Form) => ({
     //    | let headStream = await FsTxn(...).getDataHeadStream(streamToMeFk);
     //    | someStream.pipe(headStream); // Writes to `headStream` with automatic txn cleanup
     //    | await headStream.prm;
-    //    | gsc(`Finished streaming value to ${streamToMeFk.desc()}`);
+    //    | gsc.say(`Finished streaming value to ${streamToMeFk.desc()}`);
     return streamPrm.then(stream => Object.assign(stream, { prm }));
     
   },

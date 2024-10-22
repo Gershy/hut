@@ -1703,7 +1703,7 @@ let simplifyParsed = parsed => {
   input = input.split('%%%')[0].trim();
   
   let { now } = require('perf_hooks').performance;
-  gsc(`Parsing ${input.length} chars...`);
+  gsc.say(`Parsing ${input.length} chars...`);
   
   let parser = genParser();
   

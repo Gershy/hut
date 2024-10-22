@@ -946,7 +946,8 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   mapCmpToSrc: (file, row, col) => ({ file, row, col, context: null }),
   
   // Subcon debug
-  subcon: (diveToken, pfx=[]) => {
+  /*
+  subcon: (dt, pfx=[]) => {
     
     // TODO: temporarily cache subcon indexes, mapped by `diveToken`?
     
@@ -954,27 +955,28 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     return Object.assign(sc, {
       // The sc "pfx" includes props to always log with every call (e.g. correlation ids)
       pfx,
-      term: isForm(diveToken, String) ? diveToken : diveToken.join('.'),
-      kid: (dt2, ...pfx2) => global.subcon([ ...token.dive(diveToken), ...token.dive(dt2) ], [ ...pfx, ...pfx2 ]),
+      term: isForm(dt, String) ? dt : dt.join('.'),
+      kid: (dt2, ...pfx2) => global.subcon([ ...token.dive(dt), ...token.dive(dt2) ], [ ...pfx, ...pfx2 ]),
       
-      focus: (dive, ids=[]) => {
-        dive = token.dive(dive);
+      focus: (dt2) => {
+        dt2 = token.dive(dt2);
         
-        if (!isForm(ids, Array))               throw Error('Api: invalid ids').mod({ ids });
-        if (ids.some(v => !isForm(v, String))) throw Error('Api: invalid ids').mod({ ids });
-        if (dive.length !== 1)                 throw Error('Api: dive must be a single component').mod({ dive });
-        return global.subcon([ ...token.dive(diveToken), dive ], [ ...pfx, { $: [ dive[0], ...ids ].toObj(v => [ v, String.id(6) ]) } ]);
+        if (dt2.length !== 1)                  throw Error('Api: dive must be a single component').mod({ dive: dt2 });
+        return global.subcon(
+          [ ...token.dive(dt), dt2 ],
+          [ ...pfx, { $: { [dt2[0]]: String.id(6) } } ]
+        );
       },
       head: (region, ...vals) => {
-        if (!/^[a-z0-9-]+$/.test(region)) throw Error('Api: invalid region').mod({ region });
+        if (!/^[a-zA-Z0-9]+$/.test(region)) throw Error('Api: invalid region').mod({ region });
         sc({ $r: `${region}/head` }, ...vals);
       },
       tail: (region, ...vals) => {
-        if (!/^[a-z0-9-]+$/.test(region)) throw Error('Api: invalid region').mod({ region });
+        if (!/^[a-zA-Z0-9]+$/.test(region)) throw Error('Api: invalid region').mod({ region });
         sc({ $r: `${region}/tail` }, ...vals);
       },
       note: (region, ...vals) => {
-        if (!/^[a-z0-9-]+$/.test(region)) throw Error('Api: invalid region').mod({ region });
+        if (!/^[a-zA-Z0-9]+$/.test(region)) throw Error('Api: invalid region').mod({ region });
         sc({ $r: `${region}/note` }, ...vals);
       },
       
@@ -1009,8 +1011,15 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     return { ...params, active: params.chatter || params.therapy };
     
   },
-  subconOutput: (sc, ...args) => console['l' + 'og'](`\nSubcon "${sc.term}": ${global.formatAnyValue(args)}`),
-  subconStub: Object.assign(() => {}, { term: 'stub', kid: () => global.subconStub, params: () => ({}) }),
+  subconOutput: (sc, ...args) => console.log(`\nSubcon "${sc.term}": ${global.formatAnyValue(args)}`),
+  subconStub: Object.assign(() => {}, {
+    term: 'stub',
+    kid: () => global.subconStub,
+    focus: () => global.subconStub,
+    params: () => ({}),
+    ...[ 'head', 'tail', 'note' ].toObj(t => [ t, Function.stub ])
+  }),
+  */
   
   // Urls
   uriRaw: ({ path='', cacheBust, query }) => {
@@ -1092,7 +1101,7 @@ Object.assign(global, global.rooms['setup.clearing'] = {
     
   },
   denumerate: (obj, prop) => C.def(obj, prop, obj[prop], { enumerable: false }),
-  formatAnyValue: val => { try { return valToJson(val); } catch (err) { return `Unformattable(${getFormName(val)})`; } },
+  formatAnyValue: val => { try { return isForm(val, String) ? val : valToJson(val); } catch (err) { return `Unformattable(${getFormName(val)})`; } },
   valToJson: JSON.stringify,
   jsonToVal: JSON.parse,
   valToSer: JSON.stringify,
@@ -1100,10 +1109,69 @@ Object.assign(global, global.rooms['setup.clearing'] = {
   
 });
 
-if (!global.gsc)      global.gsc = subcon('gsc'); // "global subcon"
-if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
-
 { // Define global Forms: Endable, Src, Tmp, etc.
+  
+  let Subcon = form({ name: 'Subcon', props: (forms, Form) => ({
+    
+    $regionCmpRegex: /^[a-zA-Z0-9]+$/,
+    $stub: {
+      say: Function.stub,
+      kid: () => Subcon.stub,
+      params: () => ({ chatter: false, therapy: false }),
+      ...[ 'say', 'head', 'tail', 'note' ].toObj(t => [ t, Function.stub ])
+    },
+    
+    init({ dt=[], ctx=[], rules={} }={}) {
+      if (!rules.has('output')) throw Error('Invalid rules');
+      
+      dt = global.token.dive(dt);
+      Object.assign(this, { dt, term: dt.join('.'), ctx, rules });
+      denumerate(this, 'rules');
+    },
+    params() {
+      
+      // Returns configuration for specific subcon instance; some significant properties:
+      // - "chatter": indicates this sc is writing to stdout
+      // - "therapy": indicates this sc is writing to therapy
+      // - "active": indicates this sc is at least writing to somewhere
+      
+      let ptr = { root: this.rules.rootParams };
+      let state = { chatter: false, therapy: false };
+      
+      for (let d of [ 'root', ...this.dt ]) {
+        ptr = ptr.at(d, null);
+        if (!ptr) break;
+        state.merge(ptr.at('params', {}));
+      }
+      
+      return { ...state, active: state.chatter || state.therapy };
+      
+    },
+    say(...args) {
+      return void this.rules.output(this, ...this.ctx, ...args);
+    },
+    kid(dt, ...ctx) {
+      dt = global.token.dive(dt);
+      if (dt.some(d => !Form.regionCmpRegex.test(d)))
+        throw Error('Invalid subcon region').mod({ dt });
+      
+      let ids = dt.toObj(d => [ d, String.id(6) ]);
+      return Subcon({ dt: [ ...this.dt, ...dt ], ctx: [ ...this.ctx, { $: ids }, ...ctx ], rules: this.rules });
+    },
+    head(...args) {
+      let dt = isForm(args[0], String) ? args.shift() : null;
+      return (dt ? this.kid(dt) : this).say({ $: { p: 'head' } }, ...args);
+    },
+    tail(...args) {
+      let dt = isForm(args[0], String) ? args.shift() : null;
+      return (dt ? this.kid(dt) : this).say({ $: { p: 'tail' } }, ...args);
+    },
+    note(...args) {
+      let dt = isForm(args[0], String) ? args.shift() : null;
+      return (dt ? this.kid(dt) : this).say({ $: { p: 'note' } }, ...args);
+    }
+    
+  })});
   
   let Endable = form({ name: 'Endable', props: (forms, Form) => ({
     
@@ -1398,14 +1466,14 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
     },
     init() {},
     access: C.noFn('access', arg => {}),
-    dive(diveToken, noSecondArg) {
+    dive(dt, noSecondArg) {
       
       /// {DEPRECATED=
       if (noSecondArg) throw Error(`Api: provide 1 arg to seek (use an array?)`);
       /// =DEPRECATED}
       
       let val = this;
-      for (let d of token.dive(diveToken)) {
+      for (let d of token.dive(dt)) {
         if (!val) { val = null; break; }
         val = (val.constructor === Promise.Native)
           ? val.then(v => Form.tryAccess(v, d))
@@ -1415,7 +1483,7 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
       
     },
     seek(...args) {
-      gsc(Error('Deprecated "seek" method (use "dive" instead)'));
+      gsc.say(Error('Deprecated "seek" method (use "dive" instead)'));
       return this.dive(...args);
     }
     
@@ -1443,12 +1511,24 @@ if (mustDefaultRooms) gsc(`Notice: defaulted global.rooms`);
     
   })});
   
-  let Potential = form({ name: 'Potential', props: (forms, Form) => ({
-    
-    init({}) { Object.assign(this, { par: null }); }
-    
-  })});
-  
-  Object.assign(global, { Endable, Src, Tmp, Slots, Keep });
+  Object.assign(global, { Subcon, Endable, Src, Tmp, Slots, Keep });
   
 }
+
+global.subcon = global.Subcon({
+  rules: {
+    // TODO: HEEERE moving to new sc style!
+    output: (sc, ...args) => console.log(`\nSubcon "${sc.term}": ${global.formatAnyValue(args)}`),
+    
+    // The "root switching config" provides "chatter" and "therapy" switches (simple booleans) for
+    // the entire possible tree of Subcons. It looks like:
+    //    | type SubconRootParams = {}
+    //    |   & { params: { chatter: boolean, therapy: boolean } }
+    //    |   & { [key: string]: SubconRootParams }
+    rootParams: { chatter: true, therapy: false }
+  }
+});
+
+if (!global.gsc) global.gsc = global.subcon.kid('gsc');   // "global subcon"
+if (!global.esc) global.esc = global.subcon.kid('error'); // "error subcon"
+if (mustDefaultRooms) gsc.say(`Notice: defaulted global.rooms`);

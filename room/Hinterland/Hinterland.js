@@ -157,6 +157,7 @@ global.rooms['Hinterland'] = async () => {
       // Hinterland basically sets up the Experience, and wires things up so that the
       // "above" and "below" functions of the consumer get called appropriately
       
+      sc = sc.kid('loft');
       let tmp = Tmp();
       
       let recMan = rec.type.manager;
@@ -195,18 +196,17 @@ global.rooms['Hinterland'] = async () => {
             
             let ts = getMs();
             let results = [ ...rec.iterateAll() ]
-              .sort((a, b) => (rank(a) - rank(b)) || rankType(a, b) || rankUid(a, b))
-              .map(rec => `- ${rec.uid.padTail(24, ' ')} -> ${rec.type.name.padTail(24, ' ')} ${JSON.stringify(rec.getValue())}`);
+              .sort((a, b) => (rank(a) - rank(b)) || rankType(a, b) || rankUid(a, b));
             
-            sampleSc([
-              `Sampled ${results.count()} Record(s) (took ${((getMs() - ts) / 1000).toFixed(2)}ms)`,
-              ...results
-            ].join('\n'));
+            sampleSc.note({
+              durationMs: getMs() - ts,
+              recs: results.map(rec => ({ uid: rec.uid, type: rec.type.name, value: rec.getValue() }))
+            });
             
           }),
           
           // TODO: Warning vs fatal err should depend on stability config?
-          err => subcon('error')(err.mod(msg => `Failed to setup record sampling: ${msg}`))
+          err => esc.say(err)
           
         );
           

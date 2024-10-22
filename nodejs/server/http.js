@@ -80,7 +80,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       
       let ms = getMs();
       
-      let comm = (0, Form.Comm)({ roadAuth: this, ms, req, res });
+      let comm = (0, Form.Comm)({ roadAuth: this, sc: this.sc, ms, req, res });
       try         { await comm.resultPrm; }
       catch (err) { comm.kill({ err }); return; }
       
@@ -128,7 +128,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       
       // STRIKE: `msg.command` doesn't look like `/^[a-z]+[:][a-zA-Z0-9]+$/`
       
-      this.sc.kid('incoming')({
+      this.sc.note('incoming', {
         netGate: this.getNetGate(),
         belowNetAddr, path, hutCookie, query, body,
         command: msg
@@ -158,7 +158,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         // TODO: Errors due to client socket disconnection should not block the `reply` callback
         // from being called
         let syncTimeout = setTimeout(() => {
-          global.subcon('error')(`Reply timed out... that's not good!`, { msg, roadAuth: this });
+          esc.say(`Reply timed out... that's not good!`, { msg, roadAuth: this });
           comm.kill({ code: 500, msg: 'Api: sorry - experiencing issues' });
         }, 15 * 1000);
         /// =DEBUG}
@@ -212,8 +212,10 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
       init({ roadAuth, sc, ms, req, res }) {
         
         forms.Tmp.init.call(this);
+        
+        sc = sc.kid('comm');
         Object.assign(this, {
-          roadAuth, sc: roadAuth.sc, ms, req, res,
+          roadAuth, sc, ms, req, res,
           belowNetAddr: req.connection.remoteAddress,
           context: {
             id: String.id(10),
@@ -234,9 +236,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         // Note that the `return` value from `Promise(...).finally` is ignored; the return value
         // can't be intercepted using `finally` - that's what we desire here!
         this.resultPrm = this.processAndPopulate()
-          // `finally` is useful as `this.context` is gradually built, and we're certain to log it
-          // even if `this.processAndPopulate` unexpectedly errors
-          .finally(() => this.sc({ event: 'hear', ...this.context }));
+          .finally(() => this.sc.note('resolve', this.context));
         
       },
       
@@ -250,8 +250,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         try { this.res.writeHead(code, headers); } catch (err) { err.suppress(); errs.push(err); }
         try { this.res.end(msg ?? skip);         } catch (err) { err.suppress(); errs.push(err); }
         
-        this.sc(() => ({ event: 'kill', id: this.context.id, err, res: { code, headers, msg } }));
-        
+        this.sc.note('kill', { err, res: { code, headers, msg } });
         if (errs.empty()) return;
         this.sc.kid('err')('Errors while killing response', {
           id: this.context.id,
@@ -269,7 +268,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         
       },
       destroy(detail=null) {
-        this.sc(() => ({ event: 'destroy', id: this.context.id, detail }));
+        this.sc.note('destroy', { detail });
         this.res.socket.destroy();
       },
       async send(msg) {
@@ -370,7 +369,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
         };
         
         let timeout = setTimeout(() => {
-          global.subcon('error')('Stream timed out before reply');
+          esc.say('Stream timed out before reply');
           this.kill({ code: 500, msg: 'Api: sorry - experiencing issues' });
         }, 5000); // Stream needs to complete in 5000ms
         
@@ -397,7 +396,7 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
               
             }
             
-            this.sc(() => ({ event: 'tell', id: this.context.id, res: { code: 200, headers: keepHeaders, encode, body: keep.desc() } }));
+            this.sc.note('tell', { code: 200, headers: keepHeaders, encode, body: keep.desc() });
             
           } else {
             
@@ -411,12 +410,13 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
             this.res.writeHead(200, replyHeaders);
             this.res.end(msg);
             
-            this.sc(() => ({ event: 'tell', id: this.context.id, res: { code: 200, headers: resHeaders, encode, body: origMsg } }));
+            this.sc.note('tell', { code: 200, headers: resHeaders, encode, body: origMsg });
+            
           }
           
         } catch (err) {
           
-          gsc({ desc: 'Error ending http response', err });
+          esc.say(err);
           err.suppress();
           
           this.kill({ err, code: 400, msg: 'Api: network misbehaviour' });
@@ -500,9 +500,9 @@ module.exports = getRoom('setup.hut.hinterland.RoadAuthority').then(RoadAuthorit
     })}),
     
     $HttpRoad: form({ name: 'HttpRoad', has: { Road: RoadAuthority.Road }, props: (forms, Form) => ({
-      init(args) {
+      init({ sc, ...args }) {
         forms.Road.init.call(this, args);
-        Object.assign(this, { queueRes: [], queueMsg: [] });
+        Object.assign(this, { sc, queueRes: [], queueMsg: [] });
         denumerate(this, 'queueRes');
         
         this.endWith(() => {

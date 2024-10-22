@@ -90,7 +90,7 @@ let setupFoundation = async (name, conf) => {
     if (msg.type !== 'room') return;
     
     let { room, content } = msg;
-    if (!roomPrms[room]) gsc(`OOAOSDASDMMMmmSMNagghh: ${room}`);
+    if (!roomPrms[room]) gsc.say(`OOAOSDASDMMMmmSMNagghh: ${room}`);
     
     await unscopedEval(content);
     let result = global.rooms[room];
@@ -212,7 +212,9 @@ let makeIpcServer = ({ aboveHut, belowHut, procConnectedToAbove }) => {
   let { hid: belowHid, aboveHid, deploy: { uid, host } } = global.conf();
   let { heartbeatMs } = host;
   
-  let bank = WeakBank({ sc: global.subcon('bank') });
+  let sc = global.subcon.kid([]);
+  
+  let bank = WeakBank({ sc });
   let recMan = record.Manager({ bank });
   
   let aboveHut = hut.AboveHut({ hid: aboveHid, isHere: false, recMan, heartbeatMs });
@@ -229,7 +231,7 @@ let makeIpcServer = ({ aboveHut, belowHut, procConnectedToAbove }) => {
   });
   
   let loft = loftObj.toArr(v => v)[0];
-  await loft.open({ sc: global.subcon('loft'), hereHut: belowHut, rec: aboveHut });
+  await loft.open({ sc: deploySc, hereHut: belowHut, rec: aboveHut });
   
   process.send({ scope: 'foundation', msg: 'ready' });
   
